@@ -6,6 +6,7 @@ import {
   listarContactos,
   obterCliente,
   obterIntake,
+  ONBOARDING,
   ORIGENS,
   REDES,
 } from "@/lib/db/clientes";
@@ -23,6 +24,7 @@ import {
   atualizarCliente,
   concluirFollowup,
   editarContacto,
+  guardarOnboarding,
 } from "../acoes";
 import { criarDiagnostico } from "@/app/(app)/diagnosticos/acoes";
 import { criarProposta } from "@/app/(app)/propostas/acoes";
@@ -75,7 +77,9 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
       .order("mes", { ascending: false }),
     supabase
       .from("clientes")
-      .select("metricool_blog_id, empresa_fiscal, nif, morada, codigo_postal, localidade")
+      .select(
+        "metricool_blog_id, empresa_fiscal, nif, morada, codigo_postal, localidade, kit_logo, kit_cores, kit_fontes, kit_notas, onboarding",
+      )
       .eq("id", id)
       .maybeSingle(),
   ]);
@@ -107,7 +111,13 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
     morada?: string | null;
     codigo_postal?: string | null;
     localidade?: string | null;
+    kit_logo?: string | null;
+    kit_cores?: string | null;
+    kit_fontes?: string | null;
+    kit_notas?: string | null;
   };
+  const onboarding = (metricoolRes.data?.onboarding ?? {}) as Record<string, boolean>;
+  const obFeitos = ONBOARDING.filter(([k]) => onboarding[k]).length;
   const diagnosticos = (diagRes.data ?? []) as {
     id: string;
     versao: number;
@@ -362,6 +372,40 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
         )}
       </section>
 
+      {/* Onboarding */}
+      <section className="rounded-xl border border-line bg-white p-5">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="font-display text-lg font-extrabold">Onboarding</h2>
+          <span
+            className={`text-sm font-bold ${obFeitos === ONBOARDING.length ? "text-good" : "text-grey"}`}
+          >
+            {obFeitos}/{ONBOARDING.length}
+          </span>
+        </div>
+        <form action={guardarOnboarding}>
+          <input type="hidden" name="id" value={cliente.id} />
+          <div className="space-y-1.5">
+            {ONBOARDING.map(([k, label]) => (
+              <label
+                key={k}
+                className="flex items-center gap-2.5 rounded-lg border border-line px-3 py-2 text-sm"
+              >
+                <input
+                  type="checkbox"
+                  name={`ob_${k}`}
+                  defaultChecked={!!onboarding[k]}
+                  className="size-4 accent-[#E8A13C]"
+                />
+                <span className={onboarding[k] ? "text-soft line-through" : ""}>{label}</span>
+              </label>
+            ))}
+          </div>
+          <button className="mt-3 rounded-full bg-gold px-5 py-2 text-sm font-bold text-ink">
+            Guardar checklist
+          </button>
+        </form>
+      </section>
+
       {/* Dados */}
       <section className="rounded-xl border border-line bg-white p-5">
         <h2 className="mb-3 font-display text-lg font-extrabold">Dados</h2>
@@ -445,6 +489,39 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
               <div className="grid grid-cols-2 gap-3">
                 <Campo id="codigo_postal" label="Código postal" defaultValue={fat.codigo_postal ?? ""} />
                 <Campo id="localidade" label="Localidade" defaultValue={fat.localidade ?? ""} />
+              </div>
+            </div>
+          </div>
+
+          {/* Marca & acessos */}
+          <div className="border-t border-line/60 pt-4">
+            <p className="mb-2 text-xs font-bold text-grey">Marca &amp; acessos</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Campo
+                id="kit_logo"
+                label="Logótipo / ativos (link)"
+                defaultValue={fat.kit_logo ?? ""}
+                placeholder="link Drive/Dropbox…"
+              />
+              <Campo
+                id="kit_cores"
+                label="Cores"
+                defaultValue={fat.kit_cores ?? ""}
+                placeholder="ex.: #E8A13C, #15181D"
+              />
+              <Campo id="kit_fontes" label="Tipografia" defaultValue={fat.kit_fontes ?? ""} />
+              <div className="sm:col-span-2">
+                <label htmlFor="kit_notas" className="mb-1.5 block text-xs font-bold text-grey">
+                  Notas de marca / acessos{" "}
+                  <span className="font-normal text-soft">(nunca passwords)</span>
+                </label>
+                <textarea
+                  id="kit_notas"
+                  name="kit_notas"
+                  rows={2}
+                  defaultValue={fat.kit_notas ?? ""}
+                  className="w-full rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-gold"
+                />
               </div>
             </div>
           </div>

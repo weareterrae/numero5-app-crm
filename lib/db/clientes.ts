@@ -117,6 +117,16 @@ export const REDES = [
   ["outro", "Outro"],
 ] as const;
 
+/** Passos de arranque quando um lead vira cliente. */
+export const ONBOARDING = [
+  ["acessos", "Recebi acessos às redes / plataformas"],
+  ["marca", "Recebi logótipo e manual de marca"],
+  ["tom", "Aliniei o tom de voz com o cliente"],
+  ["metricool", "Liguei a marca no Metricool"],
+  ["primeiro_plano", "Enviei o primeiro plano mensal"],
+  ["faturacao", "Dados de faturação e avença tratados"],
+] as const;
+
 export const ORIGENS = [
   ["referencia", "Referência"],
   ["redes", "Redes sociais"],

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { ESTADOS, exigeMotivo, type Estado } from "@/lib/dominio/funil";
+import { ONBOARDING } from "@/lib/db/clientes";
 
 function texto(v: FormDataEntryValue | null): string | null {
   const s = (v ?? "").toString().trim();
@@ -90,11 +91,26 @@ export async function atualizarCliente(formData: FormData) {
       morada: texto(formData.get("morada")),
       codigo_postal: texto(formData.get("codigo_postal")),
       localidade: texto(formData.get("localidade")),
+      kit_logo: texto(formData.get("kit_logo")),
+      kit_cores: texto(formData.get("kit_cores")),
+      kit_fontes: texto(formData.get("kit_fontes")),
+      kit_notas: texto(formData.get("kit_notas")),
     })
     .eq("id", id);
 
   revalidatePath(`/clientes/${id}`);
   revalidatePath("/clientes");
+}
+
+/** Guarda o checklist de onboarding (jsonb chave→bool). */
+export async function guardarOnboarding(formData: FormData) {
+  const id = texto(formData.get("id"));
+  if (!id) return;
+  const supabase = await criarClienteServidor();
+  const estado: Record<string, boolean> = {};
+  for (const [chave] of ONBOARDING) estado[chave] = formData.get(`ob_${chave}`) === "on";
+  await supabase.from("clientes").update({ onboarding: estado }).eq("id", id);
+  revalidatePath(`/clientes/${id}`);
 }
 
 /** Muda o estado no funil. Ao dar como perdido, o motivo é obrigatório. */
