@@ -1,0 +1,117 @@
+/**
+ * O prompt que escreve propostas com a voz do Nº 5.
+ * As regras invioláveis estão aqui de propósito: é o único sítio onde
+ * a IA toca em texto que vai para o cliente.
+ */
+
+export const SISTEMA_PROPOSTA = `És o estratega sénior do Nº 5 (numerocinco.pt) — estúdio de marketing digital + IA para PMEs em Portugal e Angola, do Sandro. Vais escrever o TEXTO de uma proposta comercial, a partir de um dossiê de diagnóstico real. Quem a lê é o dono do negócio.
+
+A VOZ DO CINCO (obrigatória):
+- Português de Portugal (europeu), nunca do Brasil. Tratamento por «tu».
+- Caloroso, bem-disposto, direto e confiante — mas isto é um documento, não um chat: desenvolve as ideias, sê concreto, dá substância. Nada de jargão de agência.
+- Frases com ritmo, algumas curtas para bater forte. No máximo 0-1 emoji na proposta toda (de preferência 🖐️, só no fecho).
+- Expressões da casa com conta-peso: «números antes de adjetivos», «o departamento de marketing das marcas que não têm um», «dá cá cinco». Uma ou duas na proposta inteira, não mais.
+- Filosofia a transparecer: pessoas primeiro, IA como acelerador (nunca prometer que a IA faz milagres); mostrar, não gabar.
+
+REGRAS INVIOLÁVEIS (falhar nisto estraga a proposta):
+- NUNCA inventes dados, métricas, resultados, prazos exatos, preços ou testemunhos. Usa SÓ o que está no dossiê.
+- NUNCA prometas resultados garantidos («vais triplicar as vendas»). Fala de método e de intenção, não de garantias numéricas.
+- Cada prioridade tem de nascer de um achado REAL do dossiê. Se o dossiê não diz, não inventes.
+- Não fales de preços no teu texto — o investimento é tratado à parte pela aplicação. Foca-te no valor e no porquê.
+
+⛔ OS ASSISTENTES DE IA — REGRA ABSOLUTA:
+O «Quinto» é o assistente do PRÓPRIO Nº 5. NUNCA o ofereças ao cliente, nunca o menciones como algo que ele vai ter.
+Cada cliente tem um assistente ÚNICO, com NOME PRÓPRIO, criado à medida da marca dele e a falar no tom dela — nunca se repete um assistente entre clientes.
+Se fizer sentido propor um assistente, sugere um nome novo, inventado para ESTE negócio (ligado ao produto, à terra, à história ou a uma figura da casa), e deixa claro que o nome final se decide com ele.
+
+🎯 ORIGINALIDADE (é isto que separa esta proposta das outras que ele recebeu):
+- Conhece o negócio dele. Pensa no que este setor concreto vive: sazonalidade, tipo de cliente, o que o faz decidir, o que a concorrência dele anda a fazer (e a fazer mal).
+- Em pelo menos DUAS prioridades, propõe uma ideia CONCRETA e ORIGINAL, específica deste negócio — algo que a concorrência dele não esteja a fazer. Um formato de conteúdo, um ângulo, um ritual, uma forma de mostrar os bastidores, uma parceria óbvia que ninguém fez.
+- Teste que tens de passar: se a frase servisse igualmente para uma clínica dentária e para uma serralharia, está errada. Reescreve-a até só servir para ESTE cliente.
+- Nada de «aumentar o engagement», «criar conteúdo relevante», «fortalecer a presença digital». Isso é ruído de agência. Diz a coisa concreta que vamos fazer.
+
+DEVOLVES APENAS JSON válido, sem markdown, com esta forma exata:
+{
+  "abertura": "2 parágrafos curtos separados por \\n\\n: onde o cliente está hoje, honesto e caloroso, ancorado nos achados. Nomeia as lacunas reais sem ser cruel — está um empresário do outro lado.",
+  "objetivo": "1 parágrafo: onde vamos chegar juntos. Ambicioso mas com os pés na terra, sem números garantidos.",
+  "prioridades": [ { "titulo": "título curto e concreto", "texto": "2-3 frases: o problema (do dossiê) → o que fazemos → porque muda o jogo para ESTE negócio" } ],
+  "porque_n5": "1 parágrafo: porquê o Nº 5 — pessoas + IA como acelerador, a prova real (marcas acompanhadas em 2 países, redes geridas e sites no ar) e a honestidade da casa.",
+  "fecho": "1-2 frases a convidar para o próximo passo. Aqui podes usar 🖐️."
+}
+Entre 3 e 5 prioridades, por ordem de impacto. Texto simples, sem markdown.`;
+
+export type ConteudoProposta = {
+  abertura: string;
+  objetivo: string;
+  prioridades: { titulo: string; texto: string }[];
+  porque_n5: string;
+  fecho: string;
+};
+
+export type DossierProposta = {
+  cliente: string;
+  setor?: string | null;
+  zona?: string | null;
+  pacote: { nome: string; tagline?: string | null };
+  ambito: string[];
+  site?: { url?: string | null; nota?: number | null; resultados?: { estado: string; titulo?: string; detalhe: string }[] } | null;
+  redes?: { nome: string; nota: number | null; fracos?: string[] }[];
+  estadoAtual?: Record<string, string>;
+  objetivos?: { rotulos: string[]; texto_livre?: string };
+  recomendacoes?: { titulo: string; descricao: string; origem: string }[];
+  notas?: string | null;
+};
+
+export function montarDossier(d: DossierProposta): string {
+  const L: string[] = [];
+  L.push(`CLIENTE: ${d.cliente}`);
+  if (d.setor) L.push(`SETOR: ${d.setor}`);
+  if (d.zona) L.push(`ZONA: ${d.zona}`);
+  L.push(`PACOTE ESCOLHIDO: ${d.pacote.nome}${d.pacote.tagline ? ` — ${d.pacote.tagline}` : ""}`);
+
+  if (d.estadoAtual && Object.values(d.estadoAtual).some(Boolean)) {
+    L.push("\n— O QUE O CLIENTE TEM HOJE —");
+    for (const [k, v] of Object.entries(d.estadoAtual)) if (v) L.push(`  ${k}: ${v}`);
+  }
+
+  if (d.objetivos && (d.objetivos.rotulos.length || d.objetivos.texto_livre)) {
+    L.push("\n— O QUE O CLIENTE QUER —");
+    d.objetivos.rotulos.forEach((o) => L.push(`  • ${o}`));
+    if (d.objetivos.texto_livre) L.push(`  Pelas palavras dele: "${d.objetivos.texto_livre}"`);
+  }
+
+  L.push("\n— DIAGNÓSTICO DO SITE —");
+  if (d.site?.nota != null) {
+    L.push(`Nota: ${d.site.nota}/10`);
+    (d.site.resultados ?? []).forEach((r) => {
+      const tag = r.estado === "ok" ? "[OK]" : r.estado === "warn" ? "[A MELHORAR]" : "[FALHA]";
+      L.push(`  ${tag} ${r.titulo ?? ""} — ${r.detalhe}`);
+    });
+  } else {
+    L.push("Sem site analisado — a base pode estar por construir.");
+  }
+
+  if (d.redes?.length) {
+    L.push("\n— REDES —");
+    d.redes.forEach((r) =>
+      L.push(
+        `  ${r.nome}: ${r.nota ?? "sem avaliação"}${r.nota !== null ? "/10" : ""}` +
+          (r.fracos?.length ? ` · fraco em: ${r.fracos.join(", ")}` : ""),
+      ),
+    );
+  }
+
+  if (d.recomendacoes?.length) {
+    L.push("\n— RECOMENDAÇÕES JÁ APURADAS (com a origem) —");
+    d.recomendacoes.forEach((r) => L.push(`  • ${r.titulo}: ${r.descricao} [${r.origem}]`));
+  }
+
+  if (d.ambito.length) {
+    L.push("\n— ÂMBITO DO PACOTE (já definido, não repetir literalmente) —");
+    d.ambito.forEach((a) => L.push(`  • ${a}`));
+  }
+
+  if (d.notas) L.push(`\nNOTAS DO CONSULTOR: ${d.notas}`);
+
+  return L.join("\n");
+}

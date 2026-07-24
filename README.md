@@ -1,36 +1,107 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Nº 5 · App de negócio
 
-## Getting Started
+CRM, diagnóstico e propostas do **Nº 5** — «o departamento de marketing das marcas que não têm um».
 
-First, run the development server:
+> **Fronteira:** esta aplicação é **só negócio**.
+> A marca, o site público e o plano de comunicação vivem em `numerocinco.pt` (repo `numero5-site`).
+
+## Stack
+
+- **Next.js 16** (App Router) + **TypeScript** + **Tailwind CSS 4**
+- **Supabase** — Postgres + Auth (magic link) + RLS
+- Deploy: **Netlify**, em `app.numerocinco.pt`
+
+> ⚠️ Next 16 mudou convenções: o antigo `middleware.ts` chama-se agora **`proxy.ts`**,
+> e `cookies()` e `params` são **assíncronos**. A documentação da versão exata está
+> em `node_modules/next/dist/docs/` — consultar antes de escrever código novo.
+
+## Correr localmente
 
 ```bash
+npm install
+cp .env.example .env.local   # e preencher
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Abre http://localhost:3000. Sem sessão, és encaminhado para `/login`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Variáveis de ambiente
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Variável | Onde encontrar | Para quê |
+|---|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase → Settings → Data API → Project URL | ligar à base de dados |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase → Settings → API Keys → publishable/anon | acesso do browser (limitado por RLS) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API Keys → Legacy → `service_role` | **só servidor**; páginas públicas de partilha |
+| `IA_PROVIDER` | — | `gemini` \| `openai` \| `anthropic` |
+| `IA_MODELO` | — | ex.: `gemini-flash-latest` |
+| `IA_API_KEY` | painel do fornecedor | redigir diagnósticos e propostas |
 
-## Learn More
+🔒 A `service_role` ignora o RLS. Nunca a expor no browser nem a commitar.
 
-To learn more about Next.js, take a look at the following resources:
+## Base de dados
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+As migrations estão em `supabase/migrations/`. Correr no **SQL Editor** do Supabase
+(ou via Supabase CLI) pela ordem numérica:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+0001_init.sql   # clientes, contactos, atividades, estado_historico,
+                # diagnosticos, propostas, pacotes, avencas,
+                # verificacoes_catalogo, profiles + triggers + RLS
+```
 
-## Deploy on Vercel
+Automatismos incluídos: proposta `enviada` → cliente em **Proposta**;
+`aceite` → **Cliente** + cria a avença; `recusada` → **Perdido** com motivo.
+Cada mudança de estado fica registada em `estado_historico` (é o que permite
+calcular a taxa de conversão real).
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Organização
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```
+app/
+  (app)/            área privada (exige sessão)
+    page.tsx        Cockpit — funil, MRR, conversão, follow-ups
+  login/            entrada por magic link
+  auth/             callback e saída
+  r/                páginas PÚBLICAS de partilha (relatório e proposta por token)
+components/
+  marca/Simbolo.tsx ⛔ o símbolo oficial — fonte ÚNICA, nunca redesenhar
+lib/
+  dominio/          lógica de negócio pura e testável (sem UI, sem BD)
+    funil.ts        estados, transições, taxa de conversão
+    metricas.ts     MRR, pipeline, formatação
+  supabase/         clientes de browser e de servidor
+proxy.ts            renovação de sessão + proteção de rotas (ex-middleware)
+supabase/migrations/
+```
+
+**Princípio:** a lógica de negócio vive em `lib/dominio/` e não sabe que a UI existe.
+As páginas leem dados e desenham; as regras estão fora delas.
+
+## Marca
+
+| Cor | Hex | Uso |
+|---|---|---|
+| Dourado | `#E8A13C` | cor de marca, realces, CTAs |
+| Dourado escuro | `#B4761A` | links e rótulos sobre fundo claro |
+| Tinta | `#15181D` | texto e fundos escuros |
+| Creme | `#F5F4F0` | fundo |
+| Cobalto | `#2B44E7` | **apenas números e dados** (classe `.numero`) |
+
+⛔ **Regra dura:** o símbolo (4 traços + o 5.º na diagonal) é sempre o mesmo SVG,
+servido por `<Simbolo/>`. Nunca redesenhar com CSS.
+
+Tom: português de Portugal, tratamento por **tu**, divertido q.b., profissional sempre.
+Nunca inventar dados, métricas, preços ou testemunhos.
+
+## Estado
+
+- [x] Fase A — schema, marca, autenticação, cockpit
+- [x] Fase B — CRM (lista com filtros, funil kanban, ficha, contactos, atividades, follow-ups, avenças)
+- [x] Fase C — Diagnóstico (11 verificações, scorecard, estado atual vs. pretendido, recomendações, relatório partilhável)
+- [x] Fase D — Propostas (herda do diagnóstico, IA agnóstica ao fornecedor, páginas partilháveis, automatismos do funil)
+
+## Por fazer
+
+- Ligar a app a `app.numerocinco.pt` (site Netlify próprio) e desligar as ferramentas antigas
+- SMTP próprio (Resend) no Supabase, para o magic link deixar de ter limite de envios
+- Faturação/recibos (ficou deliberadamente de fora desta versão)

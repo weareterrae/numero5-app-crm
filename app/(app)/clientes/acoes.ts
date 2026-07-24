@@ -1,0 +1,185 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { criarClienteServidor } from "@/lib/supabase/server";
+import { ESTADOS, exigeMotivo, type Estado } from "@/lib/dominio/funil";
+
+function texto(v: FormDataEntryValue | null): string | null {
+  const s = (v ?? "").toString().trim();
+  return s === "" ? null : s;
+}
+
+function numero(v: FormDataEntryValue | null): number | null {
+  const s = (v ?? "").toString().trim().replace(",", ".");
+  if (s === "") return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+function lerRedes(formData: FormData): Record<string, string> {
+  const redes: Record<string, string> = {};
+  for (const [chave, valor] of formData.entries()) {
+    if (chave.startsWith("rede_")) {
+      const v = valor.toString().trim();
+      if (v) redes[chave.slice(5)] = v;
+    }
+  }
+  return redes;
+}
+
+export async function criarCliente(formData: FormData) {
+  const nome = texto(formData.get("nome_marca"));
+  if (!nome) return;
+
+  const supabase = await criarClienteServidor();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { data, error } = await supabase
+    .from("clientes")
+    .insert({
+      nome_marca: nome,
+      setor: texto(formData.get("setor")),
+      website: texto(formData.get("website")),
+      origem: texto(formData.get("origem")),
+      estado: (texto(formData.get("estado")) ?? "lead") as Estado,
+      valor_estimado: numero(formData.get("valor_estimado")),
+      notas_gerais: texto(formData.get("notas_gerais")),
+      redes: lerRedes(formData),
+      owner_id: user?.id ?? null,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) return;
+  revalidatePath("/clientes");
+  revalidatePath("/");
+  redirect(`/clientes/${data.id}`);
+}
+
+export async function atualizarCliente(formData: FormData) {
+  const id = texto(formData.get("id"));
+  const nome = texto(formData.get("nome_marca"));
+  if (!id || !nome) return;
+
+  const supabase = await criarClienteServidor();
+  await supabase
+    .from("clientes")
+    .update({
+      nome_marca: nome,
+      setor: texto(formData.get("setor")),
+      website: texto(formData.get("website")),
+      origem: texto(formData.get("origem")),
+      valor_estimado: numero(formData.get("valor_estimado")),
+      notas_gerais: texto(formData.get("notas_gerais")),
+      redes: lerRedes(formData),
+    })
+    .eq("id", id);
+
+  revalidatePath(`/clientes/${id}`);
+  revalidatePath("/clientes");
+}
+
+/** Muda o estado no funil. Ao dar como perdido, o motivo é obrigatório. */
+export async function mudarEstado(formData: FormData) {
+  const id = texto(formData.get("id"));
+  const novo = texto(formData.get("estado")) as Estado | null;
+  if (!id || !novo || !ESTADOS.includes(novo)) return;
+
+  const motivo = texto(formData.get("motivo_perda"));
+  if (exigeMotivo(novo) && !motivo) return;
+
+  const supabase = await criarClienteServidor();
+  await supabase
+    .from("clientes")
+    .update({ estado: novo, ...(exigeMotivo(novo) ? { motivo_perda: motivo } : {}) })
+    .eq("id", id);
+
+  revalidatePath(`/clientes/${id}`);
+  revalidatePath("/clientes");
+  revalidatePath("/clientes/funil");
+  revalidatePath("/");
+}
+
+export async function adicionarAtividade(formData: FormData) {
+  const clienteId = texto(formData.get("cliente_id"));
+  const descricao = texto(formData.get("descricao"));
+  if (!clienteId || !descricao) return;
+
+  const supabase = await criarClienteServidor();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  await supabase.from("atividades").insert({
+    cliente_id: clienteId,
+    autor_id: user?.id ?? null,
+    tipo: (texto(formData.get("tipo")) ?? "nota") as string,
+    descricao,
+    followup_em: texto(formData.get("followup_em")),
+    followup_nota: texto(formData.get("followup_nota")),
+  });
+
+  revalidatePath(`/clientes/${clienteId}`);
+  revalidatePath("/");
+}
+
+export async function concluirFollowup(formData: FormData) {
+  const id = texto(formData.get("atividade_id"));
+  const clienteId = texto(formData.get("cliente_id"));
+  if (!id) return;
+
+  const supabase = await criarClienteServidor();
+  await supabase.from("atividades").update({ concluido: true }).eq("id", id);
+
+  if (clienteId) revalidatePath(`/clientes/${clienteId}`);
+  revalidatePath("/");
+}
+
+/** Apaga o cliente e tudo o que lhe está ligado (diagnósticos, propostas,
+ *  avenças, produção, atividades, conversas — via ON DELETE CASCADE). */
+export async function apagarCliente(formData: FormData) {
+  const id = texto(formData.get("id"));
+  if (!id) return;
+  const supabase = await criarClienteServidor();
+  await supabase.from("clientes").delete().eq("id", id);
+  revalidatePath("/clientes");
+  revalidatePath("/");
+  redirect("/clientes");
+}
+
+export async function adicionarContacto(formData: FormData) {
+  const clienteId = texto(formData.get("cliente_id"));
+  const nome = texto(formData.get("nome"));
+  if (!clienteId || !nome) return;
+
+  const supabase = await criarClienteServidor();
+  const novoContacto: Record<string, unknown> = {
+    cliente_id: clienteId,
+    nome,
+    cargo: texto(formData.get("cargo")),
+    email: texto(formData.get("email")),
+    telefone: texto(formData.get("telefone")),
+    principal: formData.get("principal") === "on",
+  };
+  // departamento vem da migração 0013 — só se inclui se preenchido, para não
+  // partir a criação de contactos antes de a migração correr.
+  const dep = texto(formData.get("departamento"));
+  if (dep) novoContacto.departamento = dep;
+
+  await supabase.from("contactos").insert(novoContacto);
+
+  revalidatePath(`/clientes/${clienteId}`);
+}
+
+export async function apagarContacto(formData: FormData) {
+  const id = texto(formData.get("contacto_id"));
+  const clienteId = texto(formData.get("cliente_id"));
+  if (!id) return;
+
+  const supabase = await criarClienteServidor();
+  await supabase.from("contactos").delete().eq("id", id);
+  if (clienteId) revalidatePath(`/clientes/${clienteId}`);
+}

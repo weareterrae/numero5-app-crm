@@ -4,11 +4,14 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "_nota_build": "--webpack: o Turbopack (padrão no Next 16) gera chunks que o empacotador de edge functions da Netlify não consegue carregar ao construir o proxy.ts. Manter Webpack até o suporte estabilizar.",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.12.3",
+    "@supabase/supabase-js": "^2.110.8",
     "next": "16.2.11",
     "react": "19.2.4",
     "react-dom": "19.2.4"

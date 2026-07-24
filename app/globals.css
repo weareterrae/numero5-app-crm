@@ -1,26 +1,52 @@
+/* Fontes reais da marca — SÓ as @font-face (ver fontes.css).
+   ⚠️ Nunca importar o n5.css completo do site: traz estilos globais de
+   elementos (h2 { font-size: clamp(1.8rem,4.6vw,2.7rem) }, body, ...) que,
+   por ficarem FORA de @layer, ganham às utilidades do Tailwind e partem
+   o layout da app. Já aconteceu uma vez. */
+@import "./fontes.css";
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@theme {
+  /* ---- Paleta Nº 5 ----
+     Dourado = cor de marca. Cobalto = SÓ números e dados. */
+  --color-gold: #e8a13c;
+  --color-gold-dark: #b4761a;
+  --color-ink: #15181d;
+  --color-cream: #f5f4f0;
+  --color-line: #e4e1d8;
+  --color-grey: #5a5f68;
+  --color-soft: #9aa0ab;
+  --color-cobalt: #2b44e7;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+  /* estados (semânticos, distintos da cor de marca) */
+  --color-good: #1e7a43;
+  --color-warn: #b4761a;
+  --color-bad: #c0392b;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-display: "N5 Display", "Archivo", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Courier New", ui-monospace, monospace;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+/* Números e dados em cobalto — a regra da casa, disponível como classe. */
+.numero {
+  font-family: var(--font-display);
+  font-weight: 800;
+  color: var(--color-cobalt);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Rótulos monospace ("NÚMEROS ANTES DE ADJETIVOS") */
+.rotulo {
+  font-family: var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  color: var(--color-gold-dark);
 }

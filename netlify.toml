@@ -1,0 +1,9 @@
+# Build na nuvem do Netlify (Linux) — sem depender do portátil nem do OneDrive.
+# O plugin @netlify/plugin-nextjs é aplicado automaticamente a projetos Next.js.
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  # Evita que avisos de dependências parem o build.
+  NODE_VERSION = "22"
