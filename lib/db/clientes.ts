@@ -118,7 +118,6 @@ export const REDES = [
 ] as const;
 
 export const ORIGENS = [
-  ["site", "Site (diagnóstico)"],
   ["referencia", "Referência"],
   ["redes", "Redes sociais"],
   ["organico", "Orgânico"],

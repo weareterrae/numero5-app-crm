@@ -54,7 +54,6 @@ export async function criarLeadPublico(dados: SubmissaoComecar) {
       nome_marca: marca,
       setor: dados.setor?.trim() || null,
       estado: "lead",
-      origem: "site",
       notas_gerais: resumo || null,
     })
     .select("id, intake_token")

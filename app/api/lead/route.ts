@@ -55,7 +55,6 @@ export async function POST(req: NextRequest) {
       setor: s(d.setor) || null,
       website: s(d.site) || null,
       estado: "lead",
-      origem: "site",
       notas_gerais: s(d.notas) || null,
     })
     .select("id")
