@@ -187,7 +187,16 @@ export function FormularioComecar() {
           {estado === "a-enviar" ? "A enviar…" : "Quero o meu diagnóstico 🖐️"}
         </button>
         <p className="text-center text-xs text-soft">
-          Os teus dados servem só para falarmos contigo. Sem spam, prometido.
+          Os teus dados servem só para falarmos contigo, sem spam. Ver a{" "}
+          <a
+            href="https://numerocinco.pt/politica-de-privacidade/"
+            target="_blank"
+            rel="noopener"
+            className="underline"
+          >
+            política de privacidade
+          </a>
+          .
         </p>
       </form>
     </main>

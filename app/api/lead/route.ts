@@ -48,6 +48,32 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: false, erro: "dados insuficientes" }, { status: 200, headers });
 
   const supabase = criarClienteServico();
+
+  // Anti-flood: demasiados leads públicos (sem dono) no último minuto = provável bot.
+  const desde = new Date(Date.now() - 60_000).toISOString();
+  const { count } = await supabase
+    .from("clientes")
+    .select("id", { count: "exact", head: true })
+    .is("owner_id", null)
+    .gte("created_at", desde);
+  if ((count ?? 0) >= 8) return NextResponse.json({ ok: true }, { headers }); // finge sucesso
+
+  // Dedup: se já há um contacto com este email, não duplica o cliente.
+  const { data: existente } = await supabase
+    .from("contactos")
+    .select("cliente_id")
+    .ilike("email", email)
+    .limit(1)
+    .maybeSingle();
+  if (existente) {
+    await supabase.from("atividades").insert({
+      cliente_id: existente.cliente_id,
+      tipo: "nota",
+      descricao: "🌐 Voltou a preencher o formulário do site.",
+    });
+    return NextResponse.json({ ok: true }, { headers });
+  }
+
   const { data: cliente, error } = await supabase
     .from("clientes")
     .insert({

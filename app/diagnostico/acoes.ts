@@ -48,6 +48,27 @@ export async function criarLeadPublico(dados: SubmissaoComecar) {
     .filter(Boolean)
     .join(" ");
 
+  // Dedup: se já existe um contacto com este email, não duplica o cliente.
+  const { data: existente } = await supabase
+    .from("contactos")
+    .select("cliente_id")
+    .ilike("email", email)
+    .limit(1)
+    .maybeSingle();
+  if (existente) {
+    await supabase.from("atividades").insert({
+      cliente_id: existente.cliente_id,
+      tipo: "nota",
+      descricao: "🌐 Voltou a preencher o diagnóstico do site.",
+    });
+    const { data: cli } = await supabase
+      .from("clientes")
+      .select("intake_token")
+      .eq("id", existente.cliente_id)
+      .maybeSingle();
+    return { ok: true as const, token: (cli?.intake_token as string) ?? null };
+  }
+
   const { data: cliente, error } = await supabase
     .from("clientes")
     .insert({

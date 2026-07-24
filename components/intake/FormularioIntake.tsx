@@ -469,7 +469,16 @@ export function FormularioIntake({
       </div>
 
       <p className="mt-4 text-center text-xs text-soft">
-        {setor ? `${setor} · ` : ""}Os teus dados servem só para prepararmos a tua proposta.
+        {setor ? `${setor} · ` : ""}Os teus dados servem só para prepararmos a tua proposta. Ver a{" "}
+        <a
+          href="https://numerocinco.pt/politica-de-privacidade/"
+          target="_blank"
+          rel="noopener"
+          className="underline"
+        >
+          política de privacidade
+        </a>
+        .
       </p>
     </main>
   );
