@@ -8,6 +8,9 @@ const VAZIO: ConteudoProposta = {
   abertura: "",
   objetivo: "",
   prioridades: [],
+  construir: [],
+  assistente: null,
+  roadmap: [],
   porque_n5: "",
   fecho: "",
 };
@@ -21,7 +24,7 @@ export function EditorTexto({
   inicial: ConteudoProposta | null;
   dossier: DossierProposta;
 }) {
-  const [c, setC] = useState<ConteudoProposta>(inicial ?? VAZIO);
+  const [c, setC] = useState<ConteudoProposta>({ ...VAZIO, ...(inicial ?? {}) });
   const [aEscrever, setAEscrever] = useState(false);
   const [estado, setEstado] = useState("");
 
@@ -140,6 +143,137 @@ export function EditorTexto({
                 ...c,
                 prioridades: c.prioridades.map((x, j) => (j === i ? { ...x, texto: e.target.value } : x)),
               })
+            }
+            className="mt-1.5 w-full rounded border border-line px-2 py-1.5 text-sm"
+          />
+        </div>
+      ))}
+
+      {/* O que vamos construir */}
+      <div className="mt-4 mb-1 flex items-center justify-between">
+        <label className="text-xs font-bold text-grey">O que vamos construir para ti</label>
+        <button
+          type="button"
+          onClick={() => setC({ ...c, construir: [...c.construir, { titulo: "", texto: "" }] })}
+          className="text-xs font-bold text-gold-dark"
+        >
+          + juntar
+        </button>
+      </div>
+      {c.construir.length === 0 && (
+        <p className="text-xs text-soft">A IA gera a partir do brief — site, automações, motor de conteúdo…</p>
+      )}
+      {c.construir.map((x, i) => (
+        <div key={i} className="mb-2 rounded-lg border border-line p-2.5">
+          <div className="flex gap-2">
+            <input
+              value={x.titulo}
+              onChange={(e) =>
+                setC({ ...c, construir: c.construir.map((y, j) => (j === i ? { ...y, titulo: e.target.value } : y)) })
+              }
+              placeholder="Ex.: Site montra com marcações"
+              className="flex-1 rounded border border-line px-2 py-1.5 text-sm font-bold"
+            />
+            <button
+              type="button"
+              onClick={() => setC({ ...c, construir: c.construir.filter((_, j) => j !== i) })}
+              className="text-xs text-bad"
+            >
+              remover
+            </button>
+          </div>
+          <textarea
+            rows={2}
+            value={x.texto}
+            onChange={(e) =>
+              setC({ ...c, construir: c.construir.map((y, j) => (j === i ? { ...y, texto: e.target.value } : y)) })
+            }
+            className="mt-1.5 w-full rounded border border-line px-2 py-1.5 text-sm"
+          />
+        </div>
+      ))}
+
+      {/* Assistente à medida */}
+      <div className="mt-4 mb-1 flex items-center justify-between">
+        <label className="text-xs font-bold text-grey">Assistente à medida</label>
+        {c.assistente ? (
+          <button type="button" onClick={() => setC({ ...c, assistente: null })} className="text-xs text-bad">
+            remover
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setC({ ...c, assistente: { nome: "", descricao: "" } })}
+            className="text-xs font-bold text-gold-dark"
+          >
+            + adicionar
+          </button>
+        )}
+      </div>
+      {c.assistente && (
+        <div className="mb-2 rounded-lg border border-line p-2.5">
+          <input
+            value={c.assistente.nome}
+            onChange={(e) => setC({ ...c, assistente: { ...c.assistente!, nome: e.target.value } })}
+            placeholder="Nome do assistente (à medida desta marca)"
+            className="w-full rounded border border-line px-2 py-1.5 text-sm font-bold"
+          />
+          <textarea
+            rows={2}
+            value={c.assistente.descricao}
+            onChange={(e) => setC({ ...c, assistente: { ...c.assistente!, descricao: e.target.value } })}
+            placeholder="O que faz no dia-a-dia, na voz da marca."
+            className="mt-1.5 w-full rounded border border-line px-2 py-1.5 text-sm"
+          />
+        </div>
+      )}
+
+      {/* Primeiros 90 dias */}
+      <div className="mt-4 mb-1 flex items-center justify-between">
+        <label className="text-xs font-bold text-grey">Os primeiros 90 dias</label>
+        <button
+          type="button"
+          onClick={() => setC({ ...c, roadmap: [...c.roadmap, { fase: "", titulo: "", texto: "" }] })}
+          className="text-xs font-bold text-gold-dark"
+        >
+          + juntar
+        </button>
+      </div>
+      {c.roadmap.length === 0 && (
+        <p className="text-xs text-soft">A IA gera 3 fases (30 / 60 / 90 dias).</p>
+      )}
+      {c.roadmap.map((x, i) => (
+        <div key={i} className="mb-2 rounded-lg border border-line p-2.5">
+          <div className="flex gap-2">
+            <input
+              value={x.fase}
+              onChange={(e) =>
+                setC({ ...c, roadmap: c.roadmap.map((y, j) => (j === i ? { ...y, fase: e.target.value } : y)) })
+              }
+              placeholder="Fase (ex.: Primeiros 30 dias)"
+              className="w-40 rounded border border-line px-2 py-1.5 text-sm font-bold text-cobalt"
+            />
+            <input
+              value={x.titulo}
+              onChange={(e) =>
+                setC({ ...c, roadmap: c.roadmap.map((y, j) => (j === i ? { ...y, titulo: e.target.value } : y)) })
+              }
+              placeholder="Título"
+              className="flex-1 rounded border border-line px-2 py-1.5 text-sm font-bold"
+            />
+            <button
+              type="button"
+              onClick={() => setC({ ...c, roadmap: c.roadmap.filter((_, j) => j !== i) })}
+              className="text-xs text-bad"
+            >
+              remover
+            </button>
+          </div>
+          <textarea
+            rows={2}
+            value={x.texto}
+            onChange={(e) =>
+              setC({ ...c, roadmap: c.roadmap.map((y, j) => (j === i ? { ...y, texto: e.target.value } : y)) })
             }
             className="mt-1.5 w-full rounded border border-line px-2 py-1.5 text-sm"
           />

@@ -126,6 +126,44 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
           </section>
         )}
 
+        {!!c.construir?.length && (
+          <section className="mb-8">
+            <p className="rotulo">o que vamos construir para ti</p>
+            <h2 className="mt-1 mb-3 font-display text-2xl font-extrabold">
+              Não é conversa. É o que vais ter.
+            </h2>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {c.construir.map((x, i) => (
+                <div key={i} className="rounded-xl border border-line bg-white p-4">
+                  <div className="mb-1 flex items-center gap-2">
+                    <span className="grid size-7 shrink-0 place-items-center rounded-full bg-gold/20 font-display text-sm font-extrabold text-gold-dark">
+                      {i + 1}
+                    </span>
+                    <b className="text-[15px]">{x.titulo}</b>
+                  </div>
+                  <p className="text-sm text-grey">{x.texto}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {c.assistente?.nome && (
+          <section className="mb-8">
+            <div className="rounded-2xl bg-ink px-7 py-8 text-cream">
+              <p className="rotulo !text-gold">o teu assistente, só teu</p>
+              <h2 className="mt-1 font-display text-3xl font-extrabold text-gold">
+                Conhece o {c.assistente.nome}
+              </h2>
+              <p className="mt-3 text-[15px] leading-relaxed text-soft">{c.assistente.descricao}</p>
+              <p className="mt-3 text-xs text-soft">
+                O nome é a nossa sugestão — o definitivo escolhemo-lo contigo. Feito à medida da tua
+                marca, nunca repetido noutra. 🖐️
+              </p>
+            </div>
+          </section>
+        )}
+
         {ambito.length > 0 && (
           <section className="mb-8">
             <p className="rotulo">o que vamos fazer</p>
@@ -159,6 +197,24 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
             </div>
           ))}
         </section>
+
+        {!!c.roadmap?.length && (
+          <section className="mb-8">
+            <p className="rotulo">o caminho</p>
+            <h2 className="mt-1 mb-3 font-display text-2xl font-extrabold">Os primeiros 90 dias</h2>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {c.roadmap.map((x, i) => (
+                <div key={i} className="rounded-xl border border-line bg-white p-4">
+                  <p className="font-mono text-xs font-bold uppercase tracking-wide text-cobalt">
+                    {x.fase}
+                  </p>
+                  <b className="mt-1 block text-[15px]">{x.titulo}</b>
+                  <p className="mt-1 text-sm text-grey">{x.texto}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         {c.porque_n5 && (
           <section className="mb-8">

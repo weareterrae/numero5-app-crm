@@ -40,20 +40,38 @@ Se fizer sentido propor um assistente, sugere um nome novo, inventado para ESTE 
 - AUTOMAÇÃO: se ele quer assistente virtual / chatbot / WhatsApp / marcações, propõe-o a sério, com um nome inventado para o assistente (regra dos assistentes acima) e o que ele faria no dia-a-dia.
 - Uma das prioridades deve pegar no que ele mais SONHA (a ambição, a tarefa chata que quer largar) e transformá-lo em algo que vamos construir.
 
+🏗️ O QUE VAMOS CONSTRUIR (torna a proposta tangível — é isto que faz o cliente VER o que vai receber):
+- Lista 2 a 5 coisas CONCRETAS que vamos construir/entregar para ESTE cliente, ancoradas no brief e no diagnóstico. Coisas que ele vai poder ver e tocar, não conceitos.
+- Se o brief pede site novo, um item É o site (diz o tipo e o que ele faz). Se pede automações (WhatsApp, marcações, chatbot), um item por automação relevante. Se há avença, inclui o motor de conteúdo (o ritmo de peças na voz da marca). Se pede renovar imagem, inclui isso.
+- Cada item: um título de produto (como se tivesse nome) + 1-2 frases do que é e do que muda no dia-a-dia dele. NÃO inventes entregáveis que não fazem sentido para o negócio nem que não estão no dossiê.
+
+🤖 O ASSISTENTE À MEDIDA (o momento "uau" — respeita a regra dos assistentes acima):
+- Se o brief mostra vontade de assistente virtual / chatbot / responder no WhatsApp / atendimento — ou se faz claramente sentido para este negócio — propõe UM assistente com NOME PRÓPRIO inventado para ESTA marca (ligado ao produto, à terra, à história ou a uma figura da casa). Descreve o que ele faz no dia-a-dia, na voz da marca. Deixa implícito que o nome final se decide com ele.
+- Se não encaixar, devolve null. Nunca ofereças o "Quinto".
+
+🗺️ OS PRIMEIROS 90 DIAS (dá confiança e mostra o caminho):
+- 3 fases concretas do arranque, para o cliente ver que há um plano. Sem números garantidos.
+
 DEVOLVES APENAS JSON válido, sem markdown, com esta forma exata:
 {
   "abertura": "2 parágrafos curtos separados por \\n\\n: onde o cliente está hoje, honesto e caloroso, ancorado nos achados. Nomeia as lacunas reais sem ser cruel — está um empresário do outro lado.",
   "objetivo": "1 parágrafo: onde vamos chegar juntos. Ambicioso mas com os pés na terra, sem números garantidos.",
   "prioridades": [ { "titulo": "título curto e concreto", "texto": "2-3 frases: o problema (do dossiê) → o que fazemos → porque muda o jogo para ESTE negócio" } ],
+  "construir": [ { "titulo": "nome do entregável (ex.: 'Site montra com marcações', 'Motor de conteúdo mensal')", "texto": "1-2 frases: o que é e o que muda para ele" } ],
+  "assistente": { "nome": "nome inventado para esta marca", "descricao": "2-3 frases: o que faz no dia-a-dia, na voz da marca" },
+  "roadmap": [ { "fase": "Primeiros 30 dias", "titulo": "título da fase", "texto": "1-2 frases do que acontece" } ],
   "porque_n5": "1 parágrafo: porquê o Nº 5 — pessoas + IA como acelerador, a prova real (marcas acompanhadas em 2 países, redes geridas e sites no ar) e a honestidade da casa.",
   "fecho": "1-2 frases a convidar para o próximo passo. Aqui podes usar 🖐️."
 }
-Entre 3 e 5 prioridades, por ordem de impacto. Texto simples, sem markdown.`;
+Entre 3 e 5 prioridades. "construir" com 2-5 itens. "roadmap" com exatamente 3 fases (30 / 60 / 90 dias). "assistente" pode ser null se não encaixar. Texto simples, sem markdown.`;
 
 export type ConteudoProposta = {
   abertura: string;
   objetivo: string;
   prioridades: { titulo: string; texto: string }[];
+  construir: { titulo: string; texto: string }[];
+  assistente: { nome: string; descricao: string } | null;
+  roadmap: { fase: string; titulo: string; texto: string }[];
   porque_n5: string;
   fecho: string;
 };
