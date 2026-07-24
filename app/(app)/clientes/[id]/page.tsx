@@ -112,12 +112,20 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
           )}
         </div>
         <div className="flex flex-col items-end gap-2">
-          <Link
-            href={`/clientes/${cliente.id}/producao`}
-            className="rounded-full bg-ink px-4 py-2 text-sm font-bold text-cream"
-          >
-            📋 Folha de produção
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              href={`/clientes/${cliente.id}/conteudo`}
+              className="rounded-full bg-gold px-4 py-2 text-sm font-bold text-ink"
+            >
+              ✍️ Conteúdo do mês
+            </Link>
+            <Link
+              href={`/clientes/${cliente.id}/producao`}
+              className="rounded-full bg-ink px-4 py-2 text-sm font-bold text-cream"
+            >
+              📋 Produção
+            </Link>
+          </div>
           <MudarEstado
             clienteId={cliente.id}
             estadoAtual={cliente.estado}
