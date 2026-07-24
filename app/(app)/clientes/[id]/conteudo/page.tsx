@@ -5,6 +5,7 @@ import { deslocarMes, mesISO, mesLegivel } from "@/lib/dominio/producao";
 import { CANAIS, canaisAtivos, normalizarEscopo } from "@/lib/dominio/orcamento";
 import { OBJETIVOS } from "@/lib/dominio/diagnostico/recomendacoes";
 import { CopiarPeca } from "@/components/conteudo/CopiarPeca";
+import { criarPlano } from "@/app/(app)/clientes/[id]/planos/acoes";
 
 export const dynamic = "force-dynamic";
 
@@ -82,7 +83,7 @@ export default async function BriefPage({
     .maybeSingle();
   if (!cliente) notFound();
 
-  const [diagRes, propRes] = await Promise.all([
+  const [diagRes, propRes, planosRes] = await Promise.all([
     supabase
       .from("diagnosticos")
       .select("objetivos")
@@ -98,7 +99,18 @@ export default async function BriefPage({
       .order("versao", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase
+      .from("planos")
+      .select("id, titulo, estado")
+      .eq("cliente_id", id)
+      .eq("mes", mes)
+      .order("created_at", { ascending: false }),
   ]);
+  const planos = (planosRes.data ?? []) as {
+    id: string;
+    titulo: string | null;
+    estado: string;
+  }[];
 
   const objetivos: string[] = (diagRes.data?.objetivos?.selecionados ?? []).map(
     (o: string) => OBJETIVOS.find(([k]) => k === o)?.[1] ?? o,
@@ -188,20 +200,49 @@ export default async function BriefPage({
         )}
       </section>
 
-      {/* Onde o resultado volta */}
+      {/* O resultado volta aqui — o plano do mês */}
       <section className="rounded-xl border border-line bg-white p-5">
-        <h2 className="mb-1 font-display text-lg font-extrabold">Depois de produzir</h2>
+        <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-display text-lg font-extrabold">Plano deste mês</h2>
+          <form action={criarPlano}>
+            <input type="hidden" name="cliente_id" value={id} />
+            <input type="hidden" name="mes" value={mes} />
+            <button className="rounded-full bg-gold px-4 py-1.5 text-sm font-bold text-ink">
+              + Colar plano produzido
+            </button>
+          </form>
+        </div>
         <p className="text-sm text-grey">
-          O plano do mês entra pela ficha, em <b>Planos mensais</b> — colas o HTML feito no Claude
-          Code, partilhas com o cliente por WhatsApp/email, e ele aprova ou pede alterações. Fica tudo
-          registado.
+          Depois de produzir o mês no Claude Code, colas aqui o HTML com tudo, partilhas por
+          WhatsApp/email, e o cliente aprova ou pede alterações. Fica tudo registado.
         </p>
-        <Link
-          href={`/clientes/${id}`}
-          className="mt-3 inline-block rounded-full bg-ink px-4 py-2 text-sm font-bold text-cream"
-        >
-          ← Voltar à ficha
-        </Link>
+
+        {planos.length > 0 && (
+          <div className="mt-3 overflow-hidden rounded-lg border border-line">
+            {planos.map((pl) => (
+              <Link
+                key={pl.id}
+                href={`/clientes/${id}/planos/${pl.id}`}
+                className="flex items-center justify-between gap-3 border-b border-line/60 px-3 py-2.5 text-sm last:border-0 hover:bg-cream"
+              >
+                <span className="font-bold">{pl.titulo || `Plano de ${mesLegivel(mes)}`}</span>
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                    pl.estado === "aprovado"
+                      ? "bg-good/15 text-good"
+                      : pl.estado === "recusado"
+                        ? "bg-bad/10 text-bad"
+                        : pl.estado === "alteracoes"
+                          ? "bg-gold/20 text-gold-dark"
+                          : "bg-line/70 text-grey"
+                  }`}
+                >
+                  {pl.estado}
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );

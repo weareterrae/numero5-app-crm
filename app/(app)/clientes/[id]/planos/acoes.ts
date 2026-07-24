@@ -21,7 +21,7 @@ export async function criarPlano(formData: FormData) {
 
   const { data, error } = await supabase
     .from("planos")
-    .insert({ cliente_id: clienteId, mes: mesISO(), criado_por: user?.id ?? null })
+    .insert({ cliente_id: clienteId, mes: t(formData.get("mes")) ?? mesISO(), criado_por: user?.id ?? null })
     .select("id")
     .single();
   if (error || !data) return;
