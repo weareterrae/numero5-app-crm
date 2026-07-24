@@ -78,7 +78,7 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
     supabase
       .from("clientes")
       .select(
-        "metricool_blog_id, empresa_fiscal, nif, morada, codigo_postal, localidade, kit_logo, kit_cores, kit_fontes, kit_notas, onboarding",
+        "idioma, metricool_blog_id, empresa_fiscal, nif, morada, codigo_postal, localidade, kit_logo, kit_cores, kit_fontes, kit_notas, onboarding",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -116,6 +116,7 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
     kit_fontes?: string | null;
     kit_notas?: string | null;
   };
+  const idiomaCliente = (metricoolRes.data?.idioma ?? "pt") as string;
   const onboarding = (metricoolRes.data?.onboarding ?? {}) as Record<string, boolean>;
   const obFeitos = ONBOARDING.filter(([k]) => onboarding[k]).length;
   const diagnosticos = (diagRes.data ?? []) as {
@@ -444,6 +445,23 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
                   </option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label htmlFor="idioma" className="mb-1.5 block text-xs font-bold text-grey">
+                Idioma do cliente
+              </label>
+              <select
+                id="idioma"
+                name="idioma"
+                defaultValue={idiomaCliente}
+                className="w-full rounded-lg border border-line bg-white px-3 py-2 text-sm"
+              >
+                <option value="pt">Português</option>
+                <option value="en">English</option>
+              </select>
+              <p className="mt-1 text-[11px] text-soft">
+                Tudo o que o cliente recebe (diagnóstico, proposta, mensagens) fica neste idioma.
+              </p>
             </div>
           </div>
 

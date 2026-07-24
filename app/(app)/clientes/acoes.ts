@@ -85,6 +85,7 @@ export async function atualizarCliente(formData: FormData) {
   await supabase
     .from("clientes")
     .update({
+      idioma: formData.get("idioma") === "en" ? "en" : "pt",
       metricool_blog_id: texto(formData.get("metricool_blog_id")),
       empresa_fiscal: texto(formData.get("empresa_fiscal")),
       nif: texto(formData.get("nif")),

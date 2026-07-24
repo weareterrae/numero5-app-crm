@@ -87,6 +87,11 @@ export async function POST(req: NextRequest) {
     .single();
   if (error || !cliente) return NextResponse.json({ ok: false }, { status: 200, headers });
 
+  // Idioma (coluna 0021). Update à parte: se a migração não correu, falha em
+  // silêncio sem partir a criação do lead.
+  if (s(d.idioma).toLowerCase() === "en")
+    await supabase.from("clientes").update({ idioma: "en" }).eq("id", cliente.id);
+
   await supabase.from("contactos").insert({
     cliente_id: cliente.id,
     nome: s(d.nome) || marca,
