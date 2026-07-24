@@ -26,6 +26,7 @@ import {
 import { criarDiagnostico } from "@/app/(app)/diagnosticos/acoes";
 import { criarProposta } from "@/app/(app)/propostas/acoes";
 import { criarPlano } from "@/app/(app)/clientes/[id]/planos/acoes";
+import { criarRelatorio } from "@/app/(app)/clientes/[id]/relatorios/acoes";
 import { mesLegivel } from "@/lib/dominio/producao";
 import { criarClienteServidor } from "@/lib/supabase/server";
 
@@ -45,7 +46,8 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
   if (!cliente) notFound();
 
   const supabase = await criarClienteServidor();
-  const [atividades, contactos, intake, diagRes, propRes, planosRes] = await Promise.all([
+  const [atividades, contactos, intake, diagRes, propRes, planosRes, relatoriosRes, metricoolRes] =
+    await Promise.all([
     listarAtividades(id),
     listarContactos(id),
     obterIntake(id),
@@ -64,6 +66,13 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
       .select("id, mes, titulo, estado")
       .eq("cliente_id", id)
       .order("mes", { ascending: false }),
+    // Tolerante: se a migração 0016 ainda não correu, vem vazio em vez de partir.
+    supabase
+      .from("relatorios")
+      .select("id, mes, titulo, estado, visto_em")
+      .eq("cliente_id", id)
+      .order("mes", { ascending: false }),
+    supabase.from("clientes").select("metricool_blog_id").eq("id", id).maybeSingle(),
   ]);
   const propostas = (propRes.data ?? []) as {
     id: string;
@@ -79,6 +88,14 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
     titulo: string | null;
     estado: string;
   }[];
+  const relatorios = (relatoriosRes.data ?? []) as {
+    id: string;
+    mes: string;
+    titulo: string | null;
+    estado: string;
+    visto_em: string | null;
+  }[];
+  const metricoolBlogId = (metricoolRes.data?.metricool_blog_id ?? "") as string;
   const diagnosticos = (diagRes.data ?? []) as {
     id: string;
     versao: number;
@@ -294,6 +311,45 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
         )}
       </section>
 
+      {/* Relatórios mensais */}
+      <section className="rounded-xl border border-line bg-white p-5">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="font-display text-lg font-extrabold">Relatórios mensais</h2>
+          <form action={criarRelatorio}>
+            <input type="hidden" name="cliente_id" value={cliente.id} />
+            <button className="rounded-full bg-gold px-4 py-1.5 text-sm font-bold text-ink">
+              + Novo relatório
+            </button>
+          </form>
+        </div>
+        {relatorios.length === 0 ? (
+          <p className="text-sm text-soft">
+            Ainda sem relatórios. No fim do mês, produz um no Claude Code (métricas do Metricool na
+            tua voz) e partilha com o cliente.
+          </p>
+        ) : (
+          relatorios.map((rl) => (
+            <Link
+              key={rl.id}
+              href={`/clientes/${cliente.id}/relatorios/${rl.id}`}
+              className="flex items-center justify-between gap-3 border-b border-line/60 py-2.5 last:border-0 hover:text-gold-dark"
+            >
+              <div>
+                <p className="text-sm font-bold">{mesLegivel(rl.mes)}</p>
+                {rl.titulo && <p className="text-xs text-grey">{rl.titulo}</p>}
+              </div>
+              <span
+                className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                  rl.estado === "enviado" ? "bg-good/15 text-good" : "bg-line/70 text-grey"
+                }`}
+              >
+                {rl.estado === "enviado" ? (rl.visto_em ? "visto ✓" : "enviado") : "rascunho"}
+              </span>
+            </Link>
+          ))
+        )}
+      </section>
+
       {/* Dados */}
       <section className="rounded-xl border border-line bg-white p-5">
         <h2 className="mb-3 font-display text-lg font-extrabold">Dados</h2>
@@ -303,6 +359,12 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
             <Campo id="nome_marca" label="Nome da marca *" defaultValue={cliente.nome_marca} required />
             <Campo id="setor" label="Setor" defaultValue={cliente.setor ?? ""} />
             <Campo id="website" label="Website" defaultValue={cliente.website ?? ""} />
+            <Campo
+              id="metricool_blog_id"
+              label="Metricool (blogId)"
+              defaultValue={metricoolBlogId}
+              placeholder="ex.: 6591324"
+            />
             <Campo
               id="valor_estimado"
               label="Valor estimado (€)"

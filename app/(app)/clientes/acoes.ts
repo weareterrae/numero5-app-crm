@@ -74,6 +74,7 @@ export async function atualizarCliente(formData: FormData) {
       origem: texto(formData.get("origem")),
       valor_estimado: numero(formData.get("valor_estimado")),
       notas_gerais: texto(formData.get("notas_gerais")),
+      metricool_blog_id: texto(formData.get("metricool_blog_id")),
       redes: lerRedes(formData),
     })
     .eq("id", id);
