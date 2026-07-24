@@ -22,6 +22,7 @@ import {
   apagarContacto,
   atualizarCliente,
   concluirFollowup,
+  editarContacto,
 } from "../acoes";
 import { criarDiagnostico } from "@/app/(app)/diagnosticos/acoes";
 import { criarProposta } from "@/app/(app)/propostas/acoes";
@@ -432,30 +433,87 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
         ) : (
           <div className="mb-3">
             {contactos.map((c) => (
-              <div
-                key={c.id}
-                className="flex items-center justify-between gap-3 border-b border-line/60 py-2 text-sm last:border-0"
-              >
-                <div className="min-w-0">
-                  <p className="font-bold">
-                    {c.nome}
-                    {c.departamento && (
-                      <span className="ml-2 rounded-full bg-cobalt/10 px-2 py-0.5 text-[11px] font-bold text-cobalt">
-                        {DEPARTAMENTOS.find(([k]) => k === c.departamento)?.[1] ?? c.departamento}
-                      </span>
-                    )}
-                    {c.principal && <span className="ml-2 text-xs text-gold-dark">· principal</span>}
-                  </p>
-                  <p className="truncate text-xs text-grey">
-                    {[c.cargo, c.email, c.telefone].filter(Boolean).join(" · ") || "—"}
-                  </p>
-                </div>
-                <form action={apagarContacto}>
+              <details key={c.id} className="group border-b border-line/60 last:border-0">
+                <summary className="flex cursor-pointer list-none items-center gap-3 py-2.5 text-sm">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold">
+                      {c.nome}
+                      {c.departamento && (
+                        <span className="ml-2 rounded-full bg-cobalt/10 px-2 py-0.5 text-[11px] font-bold text-cobalt">
+                          {DEPARTAMENTOS.find(([k]) => k === c.departamento)?.[1] ?? c.departamento}
+                        </span>
+                      )}
+                      {c.principal && <span className="ml-2 text-xs text-gold-dark">· principal</span>}
+                    </p>
+                    <p className="truncate text-xs text-grey">
+                      {[c.cargo, c.email, c.telefone].filter(Boolean).join(" · ") || "—"}
+                    </p>
+                  </div>
+                  <span className="shrink-0 text-xs font-bold text-gold-dark group-open:hidden">
+                    editar
+                  </span>
+                  <span className="shrink-0 text-soft transition group-open:rotate-90">›</span>
+                </summary>
+                <form action={editarContacto} className="grid gap-2 pb-3 sm:grid-cols-3">
                   <input type="hidden" name="contacto_id" value={c.id} />
                   <input type="hidden" name="cliente_id" value={cliente.id} />
-                  <button className="text-xs text-bad">remover</button>
+                  <input
+                    name="nome"
+                    defaultValue={c.nome}
+                    required
+                    placeholder="Nome *"
+                    className="rounded-lg border border-line px-3 py-2 text-sm"
+                  />
+                  <select
+                    name="departamento"
+                    defaultValue={c.departamento ?? ""}
+                    className="rounded-lg border border-line bg-white px-3 py-2 text-sm"
+                  >
+                    <option value="">Departamento…</option>
+                    {DEPARTAMENTOS.map(([v, t]) => (
+                      <option key={v} value={v}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    name="cargo"
+                    defaultValue={c.cargo ?? ""}
+                    placeholder="Cargo (ex.: CEO)"
+                    className="rounded-lg border border-line px-3 py-2 text-sm"
+                  />
+                  <input
+                    name="email"
+                    type="email"
+                    defaultValue={c.email ?? ""}
+                    placeholder="Email"
+                    className="rounded-lg border border-line px-3 py-2 text-sm"
+                  />
+                  <input
+                    name="telefone"
+                    defaultValue={c.telefone ?? ""}
+                    placeholder="Telefone (com indicativo)"
+                    className="rounded-lg border border-line px-3 py-2 text-sm"
+                  />
+                  <label className="flex items-center gap-2 text-xs text-grey">
+                    <input
+                      type="checkbox"
+                      name="principal"
+                      defaultChecked={c.principal}
+                      className="size-4 accent-[#E8A13C]"
+                    />
+                    principal
+                  </label>
+                  <div className="flex items-center gap-4 sm:col-span-3">
+                    <button className="rounded-full bg-gold px-5 py-2 text-sm font-bold text-ink">
+                      Guardar
+                    </button>
+                    <button formAction={apagarContacto} formNoValidate className="text-xs font-bold text-bad">
+                      remover
+                    </button>
+                  </div>
                 </form>
-              </div>
+              </details>
             ))}
           </div>
         )}

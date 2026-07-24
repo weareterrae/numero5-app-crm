@@ -184,3 +184,25 @@ export async function apagarContacto(formData: FormData) {
   await supabase.from("contactos").delete().eq("id", id);
   if (clienteId) revalidatePath(`/clientes/${clienteId}`);
 }
+
+export async function editarContacto(formData: FormData) {
+  const id = texto(formData.get("contacto_id"));
+  const clienteId = texto(formData.get("cliente_id"));
+  const nome = texto(formData.get("nome"));
+  if (!id || !nome) return;
+
+  const supabase = await criarClienteServidor();
+  await supabase
+    .from("contactos")
+    .update({
+      nome,
+      departamento: texto(formData.get("departamento")),
+      cargo: texto(formData.get("cargo")),
+      email: texto(formData.get("email")),
+      telefone: texto(formData.get("telefone")),
+      principal: formData.get("principal") === "on",
+    })
+    .eq("id", id);
+
+  if (clienteId) revalidatePath(`/clientes/${clienteId}`);
+}
