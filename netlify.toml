@@ -7,3 +7,5 @@
 [build.environment]
   # Evita que avisos de dependências parem o build.
   NODE_VERSION = "22"
+
+# CI/CD ligado ao GitHub em 24-07-2026 — push no main publica sozinho.
