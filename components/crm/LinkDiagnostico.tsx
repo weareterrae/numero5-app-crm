@@ -1,63 +1,57 @@
 "use client";
 
-import { useState } from "react";
 import { dataCurta } from "@/lib/dominio/metricas";
+import { EnviarLink } from "./EnviarLink";
 
 /**
  * O link que o cliente abre para preencher o diagnóstico dele.
- * Client component só para o botão de copiar; o token vem do servidor.
+ * Traz os botões de WhatsApp/email com o texto já preparado.
  */
 export function LinkDiagnostico({
   token,
   submetidoEm,
+  nome,
+  telefone,
+  email,
 }: {
   token: string | null;
   submetidoEm: string | null;
+  nome: string;
+  telefone?: string | null;
+  email?: string | null;
 }) {
-  const [copiado, setCopiado] = useState(false);
   if (!token) return null;
 
-  const url =
-    typeof window !== "undefined"
-      ? `${window.location.origin}/intake/${token}`
-      : `/intake/${token}`;
-
-  async function copiar() {
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopiado(true);
-      setTimeout(() => setCopiado(false), 2000);
-    } catch {
-      /* silêncio */
-    }
-  }
+  const mensagem = `Boas! 🖐️ Aqui é o Sandro, do Nº 5. Antes de avançarmos com o ${nome}, gostava de perceber bem o teu negócio — e ninguém o conta melhor do que tu. Preparei-te um raio-x rápido (leva 3 minutos). Preenche quando puderes, é por aqui:`;
 
   return (
     <section className="rounded-xl border border-line bg-white p-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="font-display text-lg font-extrabold">Diagnóstico do cliente</h2>
-          {submetidoEm ? (
-            <p className="text-sm text-good">
-              ✓ Preenchido pelo cliente a {dataCurta(submetidoEm)}. Vê o diagnóstico abaixo.
-            </p>
-          ) : (
-            <p className="text-sm text-grey">
-              Envia este link ao cliente para ele contar o negócio dele por ti.
-            </p>
-          )}
-        </div>
-        <button
-          type="button"
-          onClick={copiar}
-          className="shrink-0 rounded-full bg-gold px-4 py-2 text-sm font-bold text-ink"
-        >
-          {copiado ? "Copiado ✓" : "Copiar link"}
-        </button>
+      <div className="mb-3">
+        <h2 className="font-display text-lg font-extrabold">Diagnóstico do cliente</h2>
+        {submetidoEm ? (
+          <p className="text-sm text-good">
+            ✓ Preenchido pelo cliente a {dataCurta(submetidoEm)}. Vê o diagnóstico abaixo.
+          </p>
+        ) : (
+          <p className="text-sm text-grey">
+            Envia este link ao cliente para ele contar o negócio dele por ti.
+          </p>
+        )}
       </div>
-      <code className="mt-2 block break-all rounded-lg bg-cream px-3 py-2 text-xs text-gold-dark">
-        {url}
-      </code>
+
+      <EnviarLink
+        caminho={`/intake/${token}`}
+        assunto={`O teu diagnóstico — Nº 5`}
+        mensagem={mensagem}
+        telefone={telefone}
+        email={email}
+      />
+
+      {submetidoEm && (
+        <p className="mt-2 text-xs text-soft">
+          Já preenchido — só precisas de reenviar se quiseres que ele atualize os dados.
+        </p>
+      )}
     </section>
   );
 }

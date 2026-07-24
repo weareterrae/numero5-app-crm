@@ -88,6 +88,11 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
   }[];
   const hoje = new Date().toISOString().slice(0, 10);
   const porFazer = atividades.filter((a) => a.followup_em && !a.concluido);
+  // Para pré-preencher o WhatsApp/email: o contacto principal, ou o primeiro com contacto.
+  const contactoPrincipal =
+    contactos.find((c) => c.principal && (c.telefone || c.email)) ??
+    contactos.find((c) => c.telefone || c.email) ??
+    null;
 
   return (
     <div className="space-y-5">
@@ -160,7 +165,13 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
       )}
 
       {/* Link de diagnóstico para o cliente preencher */}
-      <LinkDiagnostico token={intake.intake_token} submetidoEm={intake.intake_submetido_em} />
+      <LinkDiagnostico
+        token={intake.intake_token}
+        submetidoEm={intake.intake_submetido_em}
+        nome={cliente.nome_marca}
+        telefone={contactoPrincipal?.telefone}
+        email={contactoPrincipal?.email}
+      />
 
       {/* Assistente comercial */}
       <Guia clienteId={cliente.id} nome={cliente.nome_marca} />
