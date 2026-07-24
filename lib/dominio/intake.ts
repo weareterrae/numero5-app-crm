@@ -1,116 +1,120 @@
+export type Idioma = "pt" | "en";
+export const idiomaDe = (v: unknown): Idioma => (v === "en" ? "en" : "pt");
+
 /** Faixas de orçamento que o cliente pode indicar (sempre opcional). */
 export const FAIXAS_ORCAMENTO = [
-  ["ate_500", "Até 500 €/mês"],
-  ["500_1000", "500 – 1 000 €/mês"],
-  ["1000_2000", "1 000 – 2 000 €/mês"],
-  ["mais_2000", "Mais de 2 000 €/mês"],
-  ["nao_sei", "Ainda não sei"],
+  ["ate_500", "Até 500 €/mês", "Up to €500/mo"],
+  ["500_1000", "500 – 1 000 €/mês", "€500 – €1,000/mo"],
+  ["1000_2000", "1 000 – 2 000 €/mês", "€1,000 – €2,000/mo"],
+  ["mais_2000", "Mais de 2 000 €/mês", "More than €2,000/mo"],
+  ["nao_sei", "Ainda não sei", "Not sure yet"],
 ] as const;
 
 export type FaixaOrcamento = (typeof FAIXAS_ORCAMENTO)[number][0];
 
-export function rotuloFaixa(chave: string | null | undefined): string | null {
+export function rotuloFaixa(chave: string | null | undefined, idioma: Idioma = "pt"): string | null {
   if (!chave) return null;
-  return FAIXAS_ORCAMENTO.find(([k]) => k === chave)?.[1] ?? null;
+  const o = FAIXAS_ORCAMENTO.find(([k]) => k === chave);
+  return o ? (idioma === "en" ? o[2] : o[1]) : null;
 }
 
 // =====================================================================
-// Diagnóstico profundo — as perguntas todas, no tom do Nº 5.
-// Escolhas rápidas (o cliente toca e avança) que nos dão um brief a sério.
+// Diagnóstico profundo — as perguntas todas, PT + EN.
+// Cada opção é [chave, PT, EN]. `[k, r]` continua a dar a chave e o PT.
 // =====================================================================
 
 export const PRESENCA = [
-  ["quase_nada", "Quase nada, começo agora"],
-  ["sem_plano", "Vou publicando sem plano"],
-  ["sem_resultados", "Tenho redes, mas sem resultados"],
-  ["ja_invisto", "Já invisto e quero mais"],
+  ["quase_nada", "Quase nada, começo agora", "Barely anything, just starting"],
+  ["sem_plano", "Vou publicando sem plano", "I post without a plan"],
+  ["sem_resultados", "Tenho redes, mas sem resultados", "I'm on social, but no results"],
+  ["ja_invisto", "Já invisto e quero mais", "I already invest and want more"],
 ] as const;
 
 export const PUBLICO = [
-  ["b2c", "Pessoas (particulares)"],
-  ["b2b", "Outras empresas"],
-  ["ambos", "Um bocado dos dois"],
+  ["b2c", "Pessoas (particulares)", "People (consumers)"],
+  ["b2b", "Outras empresas", "Other businesses"],
+  ["ambos", "Um bocado dos dois", "A bit of both"],
 ] as const;
 
 export const ONDE = [
-  ["zona", "A minha zona"],
-  ["pais", "Todo o país"],
-  ["pt_angola", "Portugal e Angola"],
-  ["intl", "Lá fora também"],
+  ["zona", "A minha zona", "My local area"],
+  ["pais", "Todo o país", "The whole country"],
+  ["pt_angola", "Portugal e Angola", "Portugal and Angola"],
+  ["intl", "Lá fora também", "Abroad too"],
 ] as const;
 
 export const IDADES = [
-  ["jovens", "18–25"],
-  ["adultos", "25–40"],
-  ["meia", "40–60"],
-  ["seniores", "60+"],
-  ["todos", "De tudo um pouco"],
+  ["jovens", "18–25", "18–25"],
+  ["adultos", "25–40", "25–40"],
+  ["meia", "40–60", "40–60"],
+  ["seniores", "60+", "60+"],
+  ["todos", "De tudo um pouco", "A bit of everything"],
 ] as const;
 
 export const TOM = [
-  ["proxima", "Próxima e calorosa"],
-  ["profissional", "Profissional e séria"],
-  ["divertida", "Divertida e irreverente"],
-  ["premium", "Elegante e premium"],
-  ["ousada", "Confiante e ousada"],
-  ["direta", "Simples e direta"],
-  ["inspiradora", "Inspiradora"],
-  ["especialista", "Especialista no assunto"],
+  ["proxima", "Próxima e calorosa", "Close and warm"],
+  ["profissional", "Profissional e séria", "Professional and serious"],
+  ["divertida", "Divertida e irreverente", "Fun and irreverent"],
+  ["premium", "Elegante e premium", "Elegant and premium"],
+  ["ousada", "Confiante e ousada", "Confident and bold"],
+  ["direta", "Simples e direta", "Simple and direct"],
+  ["inspiradora", "Inspiradora", "Inspiring"],
+  ["especialista", "Especialista no assunto", "The expert"],
 ] as const;
 
 export const TRATAMENTO = [
-  ["tu", "Por tu"],
-  ["voce", "Por você"],
-  ["depende", "Depende de quem é"],
+  ["tu", "Por tu", "Casual"],
+  ["voce", "Por você", "Formal"],
+  ["depende", "Depende de quem é", "Depends who it is"],
 ] as const;
 
 export const LOGO = [
-  ["atual", "Tenho e está atual"],
-  ["velho", "Tenho, mas está velhote"],
-  ["nao", "Não tenho / é fraquinho"],
+  ["atual", "Tenho e está atual", "Have one, it's current"],
+  ["velho", "Tenho, mas está velhote", "Have one, but it's dated"],
+  ["nao", "Não tenho / é fraquinho", "None / it's weak"],
 ] as const;
 
 export const RENOVAR = [
-  ["sim", "Sim, bora renovar"],
-  ["talvez", "Talvez, mostra-me ideias"],
-  ["nao", "Não, gosto do que tenho"],
+  ["sim", "Sim, bora renovar", "Yes, let's refresh it"],
+  ["talvez", "Talvez, mostra-me ideias", "Maybe, show me ideas"],
+  ["nao", "Não, gosto do que tenho", "No, I like what I have"],
 ] as const;
 
 export const SITE_ESTADO = [
-  ["nao", "Não tenho site"],
-  ["fraco", "Tenho, mas está fraco"],
-  ["melhorias", "Está bom, só uns retoques"],
-  ["otimo", "Está ótimo"],
+  ["nao", "Não tenho site", "No website"],
+  ["fraco", "Tenho, mas está fraco", "Have one, but it's weak"],
+  ["melhorias", "Está bom, só uns retoques", "It's good, just needs tweaks"],
+  ["otimo", "Está ótimo", "It's great"],
 ] as const;
 
 export const SITE_NOVO = [
-  ["sim", "Sim, quero um site novo"],
-  ["melhorias", "Só melhorias no atual"],
-  ["nao", "Por agora, não"],
+  ["sim", "Sim, quero um site novo", "Yes, I want a new site"],
+  ["melhorias", "Só melhorias no atual", "Just improve the current one"],
+  ["nao", "Por agora, não", "Not for now"],
 ] as const;
 
 export const SITE_TIPO = [
-  ["institucional", "Montra do negócio (institucional)"],
-  ["landing", "Página de campanha (landing)"],
-  ["loja", "Loja online"],
-  ["marcacoes", "Marcações / reservas"],
-  ["blog", "Blog / conteúdo"],
+  ["institucional", "Montra do negócio (institucional)", "Business showcase"],
+  ["landing", "Página de campanha (landing)", "Campaign landing page"],
+  ["loja", "Loja online", "Online store"],
+  ["marcacoes", "Marcações / reservas", "Bookings / reservations"],
+  ["blog", "Blog / conteúdo", "Blog / content"],
 ] as const;
 
 export const AUTOMACAO = [
-  ["assistente", "Assistente virtual no site (responde 24/7)"],
-  ["chatbot", "Chatbot que apanha contactos"],
-  ["whatsapp", "Respostas automáticas no WhatsApp"],
-  ["marcacoes", "Marcações online"],
-  ["newsletter", "Newsletter e email marketing"],
-  ["moderacao", "Responder a comentários e DMs"],
-  ["anuncios", "Anúncios geridos por vocês"],
+  ["assistente", "Assistente virtual no site (responde 24/7)", "Virtual assistant on the site (answers 24/7)"],
+  ["chatbot", "Chatbot que apanha contactos", "Chatbot that captures leads"],
+  ["whatsapp", "Respostas automáticas no WhatsApp", "Automatic WhatsApp replies"],
+  ["marcacoes", "Marcações online", "Online bookings"],
+  ["newsletter", "Newsletter e email marketing", "Newsletter & email marketing"],
+  ["moderacao", "Responder a comentários e DMs", "Reply to comments & DMs"],
+  ["anuncios", "Anúncios geridos por vocês", "Ads managed by you"],
 ] as const;
 
 export const PRAZO = [
-  ["ja", "O quanto antes 🔥"],
-  ["meses", "Nos próximos meses"],
-  ["estudar", "Ainda ando a estudar"],
+  ["ja", "O quanto antes 🔥", "As soon as possible 🔥"],
+  ["meses", "Nos próximos meses", "In the coming months"],
+  ["estudar", "Ainda ando a estudar", "Still exploring"],
 ] as const;
 
 /** Tudo o que o cliente conta no diagnóstico profundo. Guardado em diagnosticos.brief. */
@@ -139,8 +143,8 @@ export type Brief = {
   nota_final?: string;
 };
 
-/** Todas as listas juntas, para traduzir chaves → rótulos onde for preciso. */
-export const LISTAS_BRIEF: Record<string, readonly (readonly [string, string])[]> = {
+/** Todas as listas juntas, para traduzir chaves → rótulos. */
+export const LISTAS_BRIEF: Record<string, readonly (readonly [string, string, string])[]> = {
   presenca: PRESENCA,
   publico: PUBLICO,
   onde: ONDE,
@@ -156,8 +160,9 @@ export const LISTAS_BRIEF: Record<string, readonly (readonly [string, string])[]
   prazo: PRAZO,
 };
 
-/** Rótulo de uma chave numa dada lista. */
-export function rotulo(lista: string, chave: string | undefined): string | null {
+/** Rótulo de uma chave numa dada lista, no idioma pedido. */
+export function rotulo(lista: string, chave: string | undefined, idioma: Idioma = "pt"): string | null {
   if (!chave) return null;
-  return LISTAS_BRIEF[lista]?.find(([k]) => k === chave)?.[1] ?? chave;
+  const o = LISTAS_BRIEF[lista]?.find(([k]) => k === chave);
+  return o ? (idioma === "en" ? o[2] : o[1]) : chave;
 }

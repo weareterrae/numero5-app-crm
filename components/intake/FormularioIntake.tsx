@@ -19,9 +19,12 @@ import {
   TOM,
   TRATAMENTO,
   type Brief,
+  type Idioma,
 } from "@/lib/dominio/intake";
 import { CANAIS, ESCOPO_VAZIO, type ChaveCanal, type Escopo } from "@/lib/dominio/orcamento";
 import { submeterIntake } from "@/app/intake/[token]/acoes";
+
+type Opcao = readonly [string, string, string];
 
 const REDES_LINK: [string, string][] = [
   ["instagram", "Instagram"],
@@ -31,7 +34,175 @@ const REDES_LINK: [string, string][] = [
   ["youtube", "YouTube"],
 ];
 
-type Opcoes = readonly (readonly [string, string])[];
+// Todos os textos fixos do wizard, PT + EN.
+const TX = {
+  pt: {
+    eyebrow: "diagnóstico gratuito",
+    titulo: (n: string) => `Vamos sonhar com o ${n}`,
+    sub: "Umas perguntas rápidas — a maioria é só tocar. Quanto mais nos contas, mais à tua medida fica a proposta. 🖐️",
+    jaSubmetido: "Já nos tinhas enviado isto — se preencheres outra vez, ficamos com a versão mais recente.",
+    passo: (a: number, b: number) => `Passo ${a} de ${b}`,
+    voltar: "← Voltar",
+    continuar: "Continuar →",
+    enviar: "Enviar 🖐️",
+    aEnviar: "A enviar…",
+    erroObj: "Escolhe pelo menos um objetivo (ou escreve por tuas palavras). É o que mais ajuda. 🖐️",
+    rodape: (setor: string | null) =>
+      `${setor ? `${setor} · ` : ""}Os teus dados servem só para prepararmos a tua proposta.`,
+    okTitulo: "Recebido. Obrigado! 🖐️",
+    okTexto: (n: string) =>
+      `Já temos com que sonhar para o ${n}. Vamos preparar-te uma proposta à medida — falamos em breve.`,
+    politica: "política de privacidade",
+    ver: "Ver a",
+    p1t: "A tua marca hoje",
+    p1s: "Só para percebermos o ponto de partida.",
+    website: "O teu website (se tiveres)",
+    redes: "Onde já andas nas redes (opcional)",
+    presencaQ: "Como está a tua presença digital hoje?",
+    temHoje: "O que já fazes hoje em marketing? (opcional)",
+    temHojePH: "Ex.: publico quando me lembro, já tentei anúncios uma vez…",
+    p2t: "Quem queres alcançar",
+    p2s: "Falar com toda a gente é falar com ninguém.",
+    publicoQ: "Quem é o teu cliente ideal?",
+    ondeQ: "Onde é que ele está?",
+    idadesQ: "Que idades, mais ou menos?",
+    varias: "Podes escolher várias.",
+    publicoTxt: "O que faz alguém escolher-te a ti e não ao vizinho?",
+    publicoTxtPH: "Ex.: sou o único da zona que…, o meu atendimento é…",
+    p3t: "O que gostavas de alcançar",
+    p3s: "A parte importante. Escolhe o que fizer sentido.",
+    objQ: "Os teus objetivos",
+    escolheQuiseres: "Escolhe os que quiseres.",
+    objTxt: "Por tuas palavras: o que querias mesmo que acontecesse?",
+    objTxtPH: "Sonha um bocado. Daqui a um ano, o que mudou no negócio?",
+    p4t: "A personalidade da tua marca",
+    p4s: "É isto que faz uma marca soar a gente e não a folheto.",
+    tomQ: "Se a tua marca fosse uma pessoa, como falaria?",
+    encaixam: "Escolhe as que encaixam.",
+    sentirQ: "Como queres que as pessoas se sintam quando te veem?",
+    sentirPH: "Ex.: em confiança, com vontade de provar, que estão em boas mãos…",
+    tratQ: "E tratas o cliente por…",
+    p5t: "Inspiração & imagem",
+    p5s: "Mostra-nos o que te faz olhar duas vezes.",
+    refQ: "Marcas ou páginas que admiras",
+    refNota: "Não têm de ser do teu setor.",
+    refPH: "Nomes, @ ou links — o que te vier à cabeça.",
+    refGostoQ: "O que gostas nelas?",
+    refGostoPH: "As cores, o à-vontade, a forma de mostrar os produtos…",
+    evitarQ: "Algo que NÃO queres parecer?",
+    evitarPH: "Ex.: nada de foleiro, nada demasiado sério…",
+    logoQ: "O teu logótipo…",
+    renovarQ: "Apetece-te renovar a imagem?",
+    p6t: "O teu site",
+    p6s: "A casa que é mesmo tua — não a rede social dos outros.",
+    siteEstadoQ: "Como está o teu site?",
+    siteNovoQ: "Queres um site novo feito por nós?",
+    siteTipoQ: "Que tipo de site imaginas?",
+    maisQueUm: "Podes escolher mais do que um.",
+    siteFuncoesQ: "O que é que o site tem mesmo de conseguir fazer?",
+    siteFuncoesPH: "Ex.: receber marcações, vender online, mostrar o portefólio…",
+    p7t: "Tecnologia & automação",
+    p7s: "A parte de sonhar: o que a tecnologia pode tratar por ti.",
+    autoQ: "O que gostavas de automatizar?",
+    autoNota: "Escolhe tudo o que te fizer sonhar.",
+    tarefaQ: "Uma tarefa chata que adoravas tirar do teu prato?",
+    tarefaPH: "Ex.: responder sempre às mesmas perguntas no WhatsApp…",
+    p8t: "Ambição & investimento",
+    p8s: "Última passada. Depois é connosco.",
+    canaisQ: "Em que redes gostavas de estar?",
+    opcional: "Opcional.",
+    orcQ: "Que investimento tens em mente?",
+    orcNota: "Opcional, e sem compromisso.",
+    ambicaoQ: "A tua ambição para os próximos 12 meses",
+    ambicaoPH: "Onde queres estar daqui a um ano?",
+    prazoQ: "Para quando isto?",
+    notaFinalQ: "Mais alguma coisa que queiras que saibamos?",
+    notaFinalPH: "O que quiseres. Estamos a ouvir. 🖐️",
+  },
+  en: {
+    eyebrow: "free diagnostic",
+    titulo: (n: string) => `Let's dream up ${n}`,
+    sub: "A few quick questions — most are just a tap. The more you tell us, the more tailored your proposal. 🖐️",
+    jaSubmetido: "You'd already sent this — if you fill it in again, we keep the latest version.",
+    passo: (a: number, b: number) => `Step ${a} of ${b}`,
+    voltar: "← Back",
+    continuar: "Continue →",
+    enviar: "Send 🖐️",
+    aEnviar: "Sending…",
+    erroObj: "Pick at least one goal (or write it in your own words). That's what helps most. 🖐️",
+    rodape: (setor: string | null) =>
+      `${setor ? `${setor} · ` : ""}Your details are used only to prepare your proposal.`,
+    okTitulo: "Got it. Thank you! 🖐️",
+    okTexto: (n: string) =>
+      `We now have plenty to dream up for ${n}. We'll prepare a tailored proposal — talk soon.`,
+    politica: "privacy policy",
+    ver: "See the",
+    p1t: "Your brand today",
+    p1s: "Just so we get the starting point.",
+    website: "Your website (if you have one)",
+    redes: "Where you already are on social (optional)",
+    presencaQ: "How's your digital presence today?",
+    temHoje: "What do you already do in marketing? (optional)",
+    temHojePH: "e.g. I post when I remember, tried ads once…",
+    p2t: "Who you want to reach",
+    p2s: "Talking to everyone is talking to no one.",
+    publicoQ: "Who's your ideal customer?",
+    ondeQ: "Where are they?",
+    idadesQ: "Roughly what ages?",
+    varias: "Pick as many as you like.",
+    publicoTxt: "What makes someone choose you over the competition?",
+    publicoTxtPH: "e.g. I'm the only one around who…, my service is…",
+    p3t: "What you'd love to achieve",
+    p3s: "The important part. Pick what fits.",
+    objQ: "Your goals",
+    escolheQuiseres: "Choose any.",
+    objTxt: "In your words: what would you really love to happen?",
+    objTxtPH: "Dream a little. A year from now, what changed in the business?",
+    p4t: "Your brand's personality",
+    p4s: "This is what makes a brand sound human, not like a brochure.",
+    tomQ: "If your brand were a person, how would it talk?",
+    encaixam: "Pick the ones that fit.",
+    sentirQ: "How do you want people to feel when they see you?",
+    sentirPH: "e.g. reassured, tempted to try, in good hands…",
+    tratQ: "And you address customers as…",
+    p5t: "Inspiration & image",
+    p5s: "Show us what makes you look twice.",
+    refQ: "Brands or pages you admire",
+    refNota: "They don't have to be in your field.",
+    refPH: "Names, @ or links — whatever comes to mind.",
+    refGostoQ: "What do you like about them?",
+    refGostoPH: "The colours, the ease, the way they show their products…",
+    evitarQ: "Anything you do NOT want to look like?",
+    evitarPH: "e.g. nothing tacky, nothing too stiff…",
+    logoQ: "Your logo…",
+    renovarQ: "Fancy refreshing the image?",
+    p6t: "Your website",
+    p6s: "The home that's truly yours — not someone else's social feed.",
+    siteEstadoQ: "How's your website?",
+    siteNovoQ: "Want a new site built by us?",
+    siteTipoQ: "What kind of site do you picture?",
+    maisQueUm: "You can pick more than one.",
+    siteFuncoesQ: "What must the site actually be able to do?",
+    siteFuncoesPH: "e.g. take bookings, sell online, show the portfolio…",
+    p7t: "Technology & automation",
+    p7s: "The dreamy part: what tech can handle for you.",
+    autoQ: "What would you love to automate?",
+    autoNota: "Pick everything that makes you dream.",
+    tarefaQ: "A boring task you'd love off your plate?",
+    tarefaPH: "e.g. answering the same WhatsApp questions over and over…",
+    p8t: "Ambition & investment",
+    p8s: "Last stretch. Then it's on us.",
+    canaisQ: "Which networks would you like to be on?",
+    opcional: "Optional.",
+    orcQ: "What investment do you have in mind?",
+    orcNota: "Optional, no strings attached.",
+    ambicaoQ: "Your ambition for the next 12 months",
+    ambicaoPH: "Where do you want to be a year from now?",
+    prazoQ: "When are you looking to start?",
+    notaFinalQ: "Anything else you'd like us to know?",
+    notaFinalPH: "Anything you like. We're listening. 🖐️",
+  },
+};
 
 export function FormularioIntake({
   token,
@@ -40,6 +211,7 @@ export function FormularioIntake({
   websiteInicial,
   redesIniciais,
   jaSubmetido,
+  idioma = "pt",
 }: {
   token: string;
   nome: string;
@@ -47,7 +219,11 @@ export function FormularioIntake({
   websiteInicial: string;
   redesIniciais: Record<string, string>;
   jaSubmetido: boolean;
+  idioma?: Idioma;
 }) {
+  const t = TX[idioma];
+  const L = (o: Opcao) => (idioma === "en" ? o[2] : o[1]);
+
   const [passo, setPasso] = useState(0);
   const [website, setWebsite] = useState(websiteInicial);
   const [redes, setRedes] = useState<Record<string, string>>(redesIniciais);
@@ -62,7 +238,6 @@ export function FormularioIntake({
   );
   const [erro, setErro] = useState("");
 
-  // Atalhos para mexer no brief.
   const setB = (campo: keyof Brief, valor: unknown) => setBrief((b) => ({ ...b, [campo]: valor }));
   const um = (campo: keyof Brief, k: string) =>
     setBrief((b) => ({ ...b, [campo]: b[campo] === k ? undefined : k }));
@@ -87,7 +262,7 @@ export function FormularioIntake({
   async function enviar() {
     if (semObjetivos) {
       setPasso(2);
-      setErro("Diz-nos pelo menos o que gostavas de alcançar. É a parte que mais nos ajuda. 🖐️");
+      setErro(t.erroObj);
       return;
     }
     setEstado("a-enviar");
@@ -115,32 +290,23 @@ export function FormularioIntake({
       <main className="grid min-h-dvh place-items-center px-5">
         <div className="w-full max-w-md text-center">
           <Simbolo className="mx-auto mb-6 w-20" titulo="Nº 5" />
-          <h1 className="font-display text-3xl font-extrabold">Recebido. Obrigado! 🖐️</h1>
-          <p className="mt-3 text-grey">
-            Já temos com que sonhar para o {nome}. Vamos preparar-te uma proposta à medida — falamos
-            em breve.
-          </p>
+          <h1 className="font-display text-3xl font-extrabold">{t.okTitulo}</h1>
+          <p className="mt-3 text-grey">{t.okTexto(nome)}</p>
         </div>
       </main>
     );
   }
 
-  // ── Passos ────────────────────────────────────────────────────────────
   const passos: { titulo: string; sub: string; corpo: React.ReactNode }[] = [
     {
-      titulo: "A tua marca hoje",
-      sub: "Só para percebermos o ponto de partida.",
+      titulo: t.p1t,
+      sub: t.p1s,
       corpo: (
         <>
-          <Campo label="O teu website (se tiveres)">
-            <input
-              value={website}
-              onChange={(e) => setWebsite(e.target.value)}
-              placeholder="https://…"
-              className={CAMPO}
-            />
+          <Campo label={t.website}>
+            <input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://…" className={CAMPO} />
           </Campo>
-          <Campo label="Onde já andas nas redes (opcional)">
+          <Campo label={t.redes}>
             <div className="grid gap-2 sm:grid-cols-2">
               {REDES_LINK.map(([k, nomeRede]) => (
                 <input
@@ -153,218 +319,154 @@ export function FormularioIntake({
               ))}
             </div>
           </Campo>
-          <Pergunta titulo="Como está a tua presença digital hoje?">
-            <Chips opcoes={PRESENCA} ativo={(k) => brief.presenca === k} onSel={(k) => um("presenca", k)} />
+          <Pergunta titulo={t.presencaQ}>
+            <Chips opcoes={PRESENCA} L={L} ativo={(k) => brief.presenca === k} onSel={(k) => um("presenca", k)} />
           </Pergunta>
-          <Campo label="O que já fazes hoje em marketing? (opcional)">
-            <textarea
-              value={temHoje}
-              onChange={(e) => setTemHoje(e.target.value)}
-              rows={2}
-              placeholder="Ex.: publico quando me lembro, já tentei anúncios uma vez…"
-              className={CAMPO}
-            />
+          <Campo label={t.temHoje}>
+            <textarea value={temHoje} onChange={(e) => setTemHoje(e.target.value)} rows={2} placeholder={t.temHojePH} className={CAMPO} />
           </Campo>
         </>
       ),
     },
     {
-      titulo: "Quem queres alcançar",
-      sub: "Falar com toda a gente é falar com ninguém.",
+      titulo: t.p2t,
+      sub: t.p2s,
       corpo: (
         <>
-          <Pergunta titulo="Quem é o teu cliente ideal?">
-            <Chips opcoes={PUBLICO} ativo={(k) => brief.publico === k} onSel={(k) => um("publico", k)} />
+          <Pergunta titulo={t.publicoQ}>
+            <Chips opcoes={PUBLICO} L={L} ativo={(k) => brief.publico === k} onSel={(k) => um("publico", k)} />
           </Pergunta>
-          <Pergunta titulo="Onde é que ele está?">
-            <Chips opcoes={ONDE} ativo={(k) => brief.onde === k} onSel={(k) => um("onde", k)} />
+          <Pergunta titulo={t.ondeQ}>
+            <Chips opcoes={ONDE} L={L} ativo={(k) => brief.onde === k} onSel={(k) => um("onde", k)} />
           </Pergunta>
-          <Pergunta titulo="Que idades, mais ou menos?" nota="Podes escolher várias.">
-            <Chips opcoes={IDADES} multi ativo={(k) => (brief.idades ?? []).includes(k)} onSel={(k) => varios("idades", k)} />
+          <Pergunta titulo={t.idadesQ} nota={t.varias}>
+            <Chips opcoes={IDADES} L={L} multi ativo={(k) => (brief.idades ?? []).includes(k)} onSel={(k) => varios("idades", k)} />
           </Pergunta>
-          <Campo label="O que faz alguém escolher-te a ti e não ao vizinho?">
-            <textarea
-              value={brief.publico_texto ?? ""}
-              onChange={(e) => setB("publico_texto", e.target.value)}
-              rows={2}
-              placeholder="Ex.: sou o único da zona que…, o meu atendimento é…"
-              className={CAMPO}
-            />
+          <Campo label={t.publicoTxt}>
+            <textarea value={brief.publico_texto ?? ""} onChange={(e) => setB("publico_texto", e.target.value)} rows={2} placeholder={t.publicoTxtPH} className={CAMPO} />
           </Campo>
         </>
       ),
     },
     {
-      titulo: "O que gostavas de alcançar",
-      sub: "A parte importante. Escolhe o que fizer sentido.",
+      titulo: t.p3t,
+      sub: t.p3s,
       corpo: (
         <>
-          <Pergunta titulo="Os teus objetivos" nota="Escolhe os que quiseres.">
+          <Pergunta titulo={t.objQ} nota={t.escolheQuiseres}>
             <Chips
               opcoes={OBJETIVOS}
+              L={L}
               multi
               ativo={(k) => objetivos.includes(k as ChaveObjetivo)}
               onSel={(k) => toggleObjetivo(k as ChaveObjetivo)}
             />
           </Pergunta>
-          <Campo label="Por tuas palavras: o que querias mesmo que acontecesse?">
-            <textarea
-              value={objetivosTexto}
-              onChange={(e) => setObjetivosTexto(e.target.value)}
-              rows={3}
-              placeholder="Sonha um bocado. Daqui a um ano, o que mudou no negócio?"
-              className={CAMPO}
-            />
+          <Campo label={t.objTxt}>
+            <textarea value={objetivosTexto} onChange={(e) => setObjetivosTexto(e.target.value)} rows={3} placeholder={t.objTxtPH} className={CAMPO} />
           </Campo>
         </>
       ),
     },
     {
-      titulo: "A personalidade da tua marca",
-      sub: "É isto que faz uma marca soar a gente e não a folheto.",
+      titulo: t.p4t,
+      sub: t.p4s,
       corpo: (
         <>
-          <Pergunta titulo="Se a tua marca fosse uma pessoa, como falaria?" nota="Escolhe as que encaixam.">
-            <Chips opcoes={TOM} multi ativo={(k) => (brief.tom ?? []).includes(k)} onSel={(k) => varios("tom", k)} />
+          <Pergunta titulo={t.tomQ} nota={t.encaixam}>
+            <Chips opcoes={TOM} L={L} multi ativo={(k) => (brief.tom ?? []).includes(k)} onSel={(k) => varios("tom", k)} />
           </Pergunta>
-          <Campo label="Como queres que as pessoas se sintam quando te veem?">
-            <textarea
-              value={brief.sentir ?? ""}
-              onChange={(e) => setB("sentir", e.target.value)}
-              rows={2}
-              placeholder="Ex.: em confiança, com vontade de provar, que estão em boas mãos…"
-              className={CAMPO}
-            />
+          <Campo label={t.sentirQ}>
+            <textarea value={brief.sentir ?? ""} onChange={(e) => setB("sentir", e.target.value)} rows={2} placeholder={t.sentirPH} className={CAMPO} />
           </Campo>
-          <Pergunta titulo="E tratas o cliente por…">
-            <Chips opcoes={TRATAMENTO} ativo={(k) => brief.tratamento === k} onSel={(k) => um("tratamento", k)} />
+          <Pergunta titulo={t.tratQ}>
+            <Chips opcoes={TRATAMENTO} L={L} ativo={(k) => brief.tratamento === k} onSel={(k) => um("tratamento", k)} />
           </Pergunta>
         </>
       ),
     },
     {
-      titulo: "Inspiração & imagem",
-      sub: "Mostra-nos o que te faz olhar duas vezes.",
+      titulo: t.p5t,
+      sub: t.p5s,
       corpo: (
         <>
-          <Campo label="Marcas ou páginas que admiras" nota="Não têm de ser do teu setor.">
-            <textarea
-              value={brief.referencias ?? ""}
-              onChange={(e) => setB("referencias", e.target.value)}
-              rows={2}
-              placeholder="Nomes, @ ou links — o que te vier à cabeça."
-              className={CAMPO}
-            />
+          <Campo label={t.refQ} nota={t.refNota}>
+            <textarea value={brief.referencias ?? ""} onChange={(e) => setB("referencias", e.target.value)} rows={2} placeholder={t.refPH} className={CAMPO} />
           </Campo>
-          <Campo label="O que gostas nelas?">
-            <textarea
-              value={brief.referencias_gosto ?? ""}
-              onChange={(e) => setB("referencias_gosto", e.target.value)}
-              rows={2}
-              placeholder="As cores, o à-vontade, a forma de mostrar os produtos…"
-              className={CAMPO}
-            />
+          <Campo label={t.refGostoQ}>
+            <textarea value={brief.referencias_gosto ?? ""} onChange={(e) => setB("referencias_gosto", e.target.value)} rows={2} placeholder={t.refGostoPH} className={CAMPO} />
           </Campo>
-          <Campo label="Algo que NÃO queres parecer?">
-            <textarea
-              value={brief.evitar ?? ""}
-              onChange={(e) => setB("evitar", e.target.value)}
-              rows={2}
-              placeholder="Ex.: nada de foleiro, nada demasiado sério…"
-              className={CAMPO}
-            />
+          <Campo label={t.evitarQ}>
+            <textarea value={brief.evitar ?? ""} onChange={(e) => setB("evitar", e.target.value)} rows={2} placeholder={t.evitarPH} className={CAMPO} />
           </Campo>
-          <Pergunta titulo="O teu logótipo…">
-            <Chips opcoes={LOGO} ativo={(k) => brief.logo === k} onSel={(k) => um("logo", k)} />
+          <Pergunta titulo={t.logoQ}>
+            <Chips opcoes={LOGO} L={L} ativo={(k) => brief.logo === k} onSel={(k) => um("logo", k)} />
           </Pergunta>
-          <Pergunta titulo="Apetece-te renovar a imagem?">
-            <Chips opcoes={RENOVAR} ativo={(k) => brief.renovar === k} onSel={(k) => um("renovar", k)} />
+          <Pergunta titulo={t.renovarQ}>
+            <Chips opcoes={RENOVAR} L={L} ativo={(k) => brief.renovar === k} onSel={(k) => um("renovar", k)} />
           </Pergunta>
         </>
       ),
     },
     {
-      titulo: "O teu site",
-      sub: "A casa que é mesmo tua — não a rede social dos outros.",
+      titulo: t.p6t,
+      sub: t.p6s,
       corpo: (
         <>
-          <Pergunta titulo="Como está o teu site?">
-            <Chips opcoes={SITE_ESTADO} ativo={(k) => brief.site_estado === k} onSel={(k) => um("site_estado", k)} />
+          <Pergunta titulo={t.siteEstadoQ}>
+            <Chips opcoes={SITE_ESTADO} L={L} ativo={(k) => brief.site_estado === k} onSel={(k) => um("site_estado", k)} />
           </Pergunta>
-          <Pergunta titulo="Queres um site novo feito por nós?">
-            <Chips opcoes={SITE_NOVO} ativo={(k) => brief.site_novo === k} onSel={(k) => um("site_novo", k)} />
+          <Pergunta titulo={t.siteNovoQ}>
+            <Chips opcoes={SITE_NOVO} L={L} ativo={(k) => brief.site_novo === k} onSel={(k) => um("site_novo", k)} />
           </Pergunta>
-          <Pergunta titulo="Que tipo de site imaginas?" nota="Podes escolher mais do que um.">
-            <Chips opcoes={SITE_TIPO} multi ativo={(k) => (brief.site_tipo ?? []).includes(k)} onSel={(k) => varios("site_tipo", k)} />
+          <Pergunta titulo={t.siteTipoQ} nota={t.maisQueUm}>
+            <Chips opcoes={SITE_TIPO} L={L} multi ativo={(k) => (brief.site_tipo ?? []).includes(k)} onSel={(k) => varios("site_tipo", k)} />
           </Pergunta>
-          <Campo label="O que é que o site tem mesmo de conseguir fazer?">
-            <textarea
-              value={brief.site_funcoes ?? ""}
-              onChange={(e) => setB("site_funcoes", e.target.value)}
-              rows={2}
-              placeholder="Ex.: receber marcações, vender online, mostrar o portefólio…"
-              className={CAMPO}
-            />
+          <Campo label={t.siteFuncoesQ}>
+            <textarea value={brief.site_funcoes ?? ""} onChange={(e) => setB("site_funcoes", e.target.value)} rows={2} placeholder={t.siteFuncoesPH} className={CAMPO} />
           </Campo>
         </>
       ),
     },
     {
-      titulo: "Tecnologia & automação",
-      sub: "A parte de sonhar: o que a tecnologia pode tratar por ti.",
+      titulo: t.p7t,
+      sub: t.p7s,
       corpo: (
         <>
-          <Pergunta titulo="O que gostavas de automatizar?" nota="Escolhe tudo o que te fizer sonhar.">
-            <Chips opcoes={AUTOMACAO} multi ativo={(k) => (brief.automacao ?? []).includes(k)} onSel={(k) => varios("automacao", k)} />
+          <Pergunta titulo={t.autoQ} nota={t.autoNota}>
+            <Chips opcoes={AUTOMACAO} L={L} multi ativo={(k) => (brief.automacao ?? []).includes(k)} onSel={(k) => varios("automacao", k)} />
           </Pergunta>
-          <Campo label="Uma tarefa chata que adoravas tirar do teu prato?">
-            <textarea
-              value={brief.tarefa_chata ?? ""}
-              onChange={(e) => setB("tarefa_chata", e.target.value)}
-              rows={2}
-              placeholder="Ex.: responder sempre às mesmas perguntas no WhatsApp…"
-              className={CAMPO}
-            />
+          <Campo label={t.tarefaQ}>
+            <textarea value={brief.tarefa_chata ?? ""} onChange={(e) => setB("tarefa_chata", e.target.value)} rows={2} placeholder={t.tarefaPH} className={CAMPO} />
           </Campo>
         </>
       ),
     },
     {
-      titulo: "Ambição & investimento",
-      sub: "Última passada. Depois é connosco.",
+      titulo: t.p8t,
+      sub: t.p8s,
       corpo: (
         <>
-          <Pergunta titulo="Em que redes gostavas de estar?" nota="Opcional.">
+          <Pergunta titulo={t.canaisQ} nota={t.opcional}>
             <Chips
-              opcoes={CANAIS}
+              opcoes={CANAIS.map(([k, n]) => [k, n, n] as Opcao)}
+              L={L}
               multi
               ativo={(k) => !!pedido.canais[k as ChaveCanal]?.ativo}
               onSel={(k) => toggleCanal(k as ChaveCanal)}
             />
           </Pergunta>
-          <Pergunta titulo="Que investimento tens em mente?" nota="Opcional, e sem compromisso.">
-            <Chips opcoes={FAIXAS_ORCAMENTO} ativo={(k) => orcamento === k} onSel={(k) => setOrcamento(orcamento === k ? "" : k)} />
+          <Pergunta titulo={t.orcQ} nota={t.orcNota}>
+            <Chips opcoes={FAIXAS_ORCAMENTO} L={L} ativo={(k) => orcamento === k} onSel={(k) => setOrcamento(orcamento === k ? "" : k)} />
           </Pergunta>
-          <Campo label="A tua ambição para os próximos 12 meses">
-            <textarea
-              value={brief.ambicao ?? ""}
-              onChange={(e) => setB("ambicao", e.target.value)}
-              rows={2}
-              placeholder="Onde queres estar daqui a um ano?"
-              className={CAMPO}
-            />
+          <Campo label={t.ambicaoQ}>
+            <textarea value={brief.ambicao ?? ""} onChange={(e) => setB("ambicao", e.target.value)} rows={2} placeholder={t.ambicaoPH} className={CAMPO} />
           </Campo>
-          <Pergunta titulo="Para quando isto?">
-            <Chips opcoes={PRAZO} ativo={(k) => brief.prazo === k} onSel={(k) => um("prazo", k)} />
+          <Pergunta titulo={t.prazoQ}>
+            <Chips opcoes={PRAZO} L={L} ativo={(k) => brief.prazo === k} onSel={(k) => um("prazo", k)} />
           </Pergunta>
-          <Campo label="Mais alguma coisa que queiras que saibamos?">
-            <textarea
-              value={brief.nota_final ?? ""}
-              onChange={(e) => setB("nota_final", e.target.value)}
-              rows={2}
-              placeholder="O que quiseres. Estamos a ouvir. 🖐️"
-              className={CAMPO}
-            />
+          <Campo label={t.notaFinalQ}>
+            <textarea value={brief.nota_final ?? ""} onChange={(e) => setB("nota_final", e.target.value)} rows={2} placeholder={t.notaFinalPH} className={CAMPO} />
           </Campo>
         </>
       ),
@@ -377,7 +479,7 @@ export function FormularioIntake({
 
   function avancar() {
     if (passo === 2 && semObjetivos) {
-      setErro("Escolhe pelo menos um objetivo (ou escreve por tuas palavras). É o que mais ajuda. 🖐️");
+      setErro(t.erroObj);
       return;
     }
     setErro("");
@@ -392,42 +494,29 @@ export function FormularioIntake({
 
   return (
     <main className="mx-auto max-w-2xl px-5 py-8">
-      {/* Cabeçalho */}
       <header className="rounded-2xl bg-ink px-7 py-7 text-cream">
         <Simbolo fundo="escuro" className="mb-4 w-12" titulo="Nº 5" />
-        <p className="rotulo !text-gold">diagnóstico gratuito</p>
+        <p className="rotulo !text-gold">{t.eyebrow}</p>
         <h1 className="mt-1.5 font-display text-2xl font-extrabold leading-tight sm:text-3xl">
-          Vamos sonhar com o {nome}
+          {t.titulo(nome)}
         </h1>
-        <p className="mt-2 text-[15px] text-soft">
-          Umas perguntas rápidas — a maioria é só tocar. Quanto mais nos contas, mais à tua medida
-          fica a proposta. 🖐️
-        </p>
+        <p className="mt-2 text-[15px] text-soft">{t.sub}</p>
       </header>
 
       {jaSubmetido && passo === 0 && (
-        <p className="mt-4 rounded-lg border border-gold bg-gold/10 p-3 text-sm">
-          Já nos tinhas enviado isto — se preencheres outra vez, ficamos com a versão mais recente.
-        </p>
+        <p className="mt-4 rounded-lg border border-gold bg-gold/10 p-3 text-sm">{t.jaSubmetido}</p>
       )}
 
-      {/* Progresso */}
       <div className="mt-6 mb-4">
         <div className="mb-1.5 flex items-center justify-between text-xs font-bold text-grey">
-          <span>
-            Passo {passo + 1} de {total}
-          </span>
+          <span>{t.passo(passo + 1, total)}</span>
           <span className="text-soft">{Math.round(((passo + 1) / total) * 100)}%</span>
         </div>
         <div className="h-2 overflow-hidden rounded-full bg-line">
-          <div
-            className="h-full rounded-full bg-gold transition-all duration-300"
-            style={{ width: `${((passo + 1) / total) * 100}%` }}
-          />
+          <div className="h-full rounded-full bg-gold transition-all duration-300" style={{ width: `${((passo + 1) / total) * 100}%` }} />
         </div>
       </div>
 
-      {/* Passo atual */}
       <section className="rounded-xl border border-line bg-white p-5 sm:p-6">
         <h2 className="font-display text-xl font-extrabold">{atual.titulo}</h2>
         <p className="mb-4 mt-0.5 text-sm text-soft">{atual.sub}</p>
@@ -436,47 +525,28 @@ export function FormularioIntake({
 
       {erro && <p className="mt-3 text-sm font-bold text-bad">{erro}</p>}
 
-      {/* Navegação */}
       <div className="mt-5 flex items-center gap-3">
         {passo > 0 && (
-          <button
-            type="button"
-            onClick={voltar}
-            className="rounded-full border border-line px-5 py-3 text-sm font-bold text-grey hover:text-ink"
-          >
-            ← Voltar
+          <button type="button" onClick={voltar} className="rounded-full border border-line px-5 py-3 text-sm font-bold text-grey hover:text-ink">
+            {t.voltar}
           </button>
         )}
         <span className="flex-1" />
         {ultimo ? (
-          <button
-            type="button"
-            onClick={enviar}
-            disabled={estado === "a-enviar"}
-            className="rounded-full bg-gold px-7 py-3 text-lg font-bold text-ink transition hover:brightness-105 disabled:opacity-60"
-          >
-            {estado === "a-enviar" ? "A enviar…" : "Enviar 🖐️"}
+          <button type="button" onClick={enviar} disabled={estado === "a-enviar"} className="rounded-full bg-gold px-7 py-3 text-lg font-bold text-ink transition hover:brightness-105 disabled:opacity-60">
+            {estado === "a-enviar" ? t.aEnviar : t.enviar}
           </button>
         ) : (
-          <button
-            type="button"
-            onClick={avancar}
-            className="rounded-full bg-gold px-7 py-3 text-lg font-bold text-ink transition hover:brightness-105"
-          >
-            Continuar →
+          <button type="button" onClick={avancar} className="rounded-full bg-gold px-7 py-3 text-lg font-bold text-ink transition hover:brightness-105">
+            {t.continuar}
           </button>
         )}
       </div>
 
       <p className="mt-4 text-center text-xs text-soft">
-        {setor ? `${setor} · ` : ""}Os teus dados servem só para prepararmos a tua proposta. Ver a{" "}
-        <a
-          href="https://numerocinco.pt/politica-de-privacidade/"
-          target="_blank"
-          rel="noopener"
-          className="underline"
-        >
-          política de privacidade
+        {t.rodape(setor)} {t.ver}{" "}
+        <a href="https://numerocinco.pt/politica-de-privacidade/" target="_blank" rel="noopener" className="underline">
+          {t.politica}
         </a>
         .
       </p>
@@ -484,7 +554,6 @@ export function FormularioIntake({
   );
 }
 
-// ── Peças de UI ─────────────────────────────────────────────────────────
 const CAMPO =
   "w-full rounded-lg border border-line bg-white px-3.5 py-2.5 text-[15px] outline-none focus:border-gold";
 
@@ -496,34 +565,28 @@ function chipClasse(on: boolean) {
 
 function Chips({
   opcoes,
+  L,
   ativo,
   onSel,
 }: {
-  opcoes: Opcoes;
+  opcoes: readonly Opcao[];
+  L: (o: Opcao) => string;
   ativo: (k: string) => boolean;
   onSel: (k: string) => void;
   multi?: boolean;
 }) {
   return (
     <div className="flex flex-wrap gap-1.5">
-      {opcoes.map(([k, r]) => (
-        <button key={k} type="button" onClick={() => onSel(k)} className={chipClasse(ativo(k))}>
-          {r}
+      {opcoes.map((o) => (
+        <button key={o[0]} type="button" onClick={() => onSel(o[0])} className={chipClasse(ativo(o[0]))}>
+          {L(o)}
         </button>
       ))}
     </div>
   );
 }
 
-function Pergunta({
-  titulo,
-  nota,
-  children,
-}: {
-  titulo: string;
-  nota?: string;
-  children: React.ReactNode;
-}) {
+function Pergunta({ titulo, nota, children }: { titulo: string; nota?: string; children: React.ReactNode }) {
   return (
     <div>
       <p className="mb-2 text-sm font-bold text-ink">
@@ -535,15 +598,7 @@ function Pergunta({
   );
 }
 
-function Campo({
-  label,
-  nota,
-  children,
-}: {
-  label: string;
-  nota?: string;
-  children: React.ReactNode;
-}) {
+function Campo({ label, nota, children }: { label: string; nota?: string; children: React.ReactNode }) {
   return (
     <div>
       <label className="mb-1.5 block text-sm font-bold text-ink">

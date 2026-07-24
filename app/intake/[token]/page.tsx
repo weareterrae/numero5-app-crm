@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { criarClienteServico } from "@/lib/supabase/server";
 import { FormularioIntake } from "@/components/intake/FormularioIntake";
+import { idiomaDe } from "@/lib/dominio/intake";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -21,6 +22,13 @@ export default async function IntakePage({ params }: { params: Promise<{ token: 
 
   if (!cliente) notFound();
 
+  // Idioma à parte, tolerante (não parte se a migração 0021 ainda não correu).
+  const { data: idiomaRow } = await supabase
+    .from("clientes")
+    .select("idioma")
+    .eq("intake_token", token)
+    .maybeSingle();
+
   return (
     <FormularioIntake
       token={token}
@@ -29,6 +37,7 @@ export default async function IntakePage({ params }: { params: Promise<{ token: 
       websiteInicial={cliente.website ?? ""}
       redesIniciais={(cliente.redes ?? {}) as Record<string, string>}
       jaSubmetido={!!cliente.intake_submetido_em}
+      idioma={idiomaDe(idiomaRow?.idioma)}
     />
   );
 }

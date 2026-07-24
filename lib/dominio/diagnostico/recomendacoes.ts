@@ -22,14 +22,14 @@ export type Recomendacao = {
 
 /** Objetivos comuns, para o cliente escolher (e ainda texto livre). */
 export const OBJETIVOS = [
-  ["mais_contactos", "Receber mais contactos e pedidos"],
-  ["notoriedade", "Ser mais conhecido na zona"],
-  ["site_novo", "Ter um site à altura do negócio"],
-  ["redes_vivas", "Ter redes sociais vivas e com regularidade"],
-  ["automatizar", "Automatizar o atendimento e as respostas"],
-  ["lancar", "Lançar um produto ou serviço novo"],
-  ["imagem", "Profissionalizar a imagem da marca"],
-  ["vender_online", "Vender online"],
+  ["mais_contactos", "Receber mais contactos e pedidos", "Get more leads and enquiries"],
+  ["notoriedade", "Ser mais conhecido na zona", "Be better known locally"],
+  ["site_novo", "Ter um site à altura do negócio", "Have a website worthy of the business"],
+  ["redes_vivas", "Ter redes sociais vivas e com regularidade", "Have lively, consistent social media"],
+  ["automatizar", "Automatizar o atendimento e as respostas", "Automate customer service and replies"],
+  ["lancar", "Lançar um produto ou serviço novo", "Launch a new product or service"],
+  ["imagem", "Profissionalizar a imagem da marca", "Professionalize the brand image"],
+  ["vender_online", "Vender online", "Sell online"],
 ] as const;
 
 export type ChaveObjetivo = (typeof OBJETIVOS)[number][0];
