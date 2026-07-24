@@ -45,3 +45,31 @@ export async function enviarPorEmail(
 
   return { ok: true, msg: `Enviado para ${email} ✓` };
 }
+
+/**
+ * Regista no histórico que o link foi enviado por WhatsApp. O WhatsApp abre na
+ * app do utilizador (não passa por nós), por isso é ele que confirma o envio.
+ */
+export async function registarEnvioWhatsApp(
+  _prev: EstadoEnvio,
+  formData: FormData,
+): Promise<EstadoEnvio> {
+  const clienteId = (formData.get("cliente_id") ?? "").toString().trim();
+  const assunto = (formData.get("assunto") ?? "").toString().trim();
+  if (!clienteId) return { ok: false, msg: "" };
+
+  const supabase = await criarClienteServidor();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, msg: "Sem sessão." };
+
+  await supabase.from("atividades").insert({
+    cliente_id: clienteId,
+    tipo: "mensagem",
+    descricao: `Link enviado por WhatsApp${assunto ? `: ${assunto}` : ""}`,
+    autor_id: user.id,
+  });
+  revalidatePath(`/clientes/${clienteId}`);
+  return { ok: true, msg: "Registado no histórico ✓" };
+}
