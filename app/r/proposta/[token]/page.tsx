@@ -93,8 +93,10 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
   // Linhas a mostrar na comparação: se QUALQUER dos lados tiver esse valor.
   const temMensal = orcPedido.totalMensal > 0 || nossoMensal > 0;
   const temSetup = orcPedido.totalSetup > 0 || nossoSetup > 0;
-  // A comparação só aparece se o comercial a ligou. Por defeito: valor único.
-  const comparar = !!p.mostrar_comparacao && temPedido;
+  // A comparação só aparece se o comercial a ligou, se houve pedido do cliente,
+  // E se TEMOS mesmo uma avença para recomendar. Sem isto, mostrava "recomendação
+  // —/mês" e uma poupança absurda (pedido − 0). Neste caso cai no valor único.
+  const comparar = !!p.mostrar_comparacao && temPedido && nossoMensal > 0;
 
   const paras = (t?: string) =>
     (t ?? "")

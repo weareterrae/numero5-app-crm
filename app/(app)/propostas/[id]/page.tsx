@@ -110,6 +110,23 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
     (p.escopo_pedido as { orcamento?: string } | null)?.orcamento,
   );
 
+  // Coerência do financeiro — para não partilhar uma proposta com números incoerentes.
+  const nossoMensal = Number(p.avenca_valor) || 0;
+  const nossoSetup = Number(p.setup_valor) || 0;
+  const avisosFinanceiros: string[] = [];
+  if (orcPedido.totalMensal > 0 && nossoMensal === 0)
+    avisosFinanceiros.push(
+      "O cliente pediu produção mensal, mas ainda não definiste uma avença. Define-a no configurador (em cima) antes de partilhar.",
+    );
+  else if (p.mostrar_comparacao && nossoMensal === 0)
+    avisosFinanceiros.push(
+      "A comparação «pediste vs. recomendamos» está ligada, mas sem avença nossa não há o que comparar — o cliente vê só o valor único.",
+    );
+  if (nossoMensal === 0 && nossoSetup === 0)
+    avisosFinanceiros.push(
+      "Esta proposta ainda não tem valores (nem setup nem avença) — o bloco de investimento vai aparecer vazio.",
+    );
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -130,6 +147,19 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
         </div>
         <EstadoProposta id={p.id} estado={p.estado} />
       </div>
+
+      {avisosFinanceiros.length > 0 && (
+        <div className="rounded-xl border-2 border-warn bg-warn/10 p-4">
+          <p className="mb-1 text-sm font-bold text-warn">
+            ⚠️ Antes de partilhar — verifica o investimento
+          </p>
+          <ul className="space-y-1 text-sm text-grey">
+            {avisosFinanceiros.map((a, i) => (
+              <li key={i}>· {a}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* A resposta do cliente, quando decidiu pela página */}
       {(p.estado === "aceite" || p.estado === "recusada") && (
