@@ -3,12 +3,35 @@ import type { Metadata } from "next";
 import { criarClienteServico } from "@/lib/supabase/server";
 import { Simbolo } from "@/components/marca/Simbolo";
 import { DecisaoProposta } from "@/components/propostas/DecisaoProposta";
+import { EfeitosProposta } from "@/components/propostas/EfeitosProposta";
 import { euros } from "@/lib/dominio/metricas";
 import { calcular, normalizarEscopo, type Preco } from "@/lib/dominio/orcamento";
 import type { ConteudoProposta } from "@/lib/ia/prompts/proposta";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
+
+const PP_CSS = `
+.pp-bar{position:fixed;top:0;left:0;height:3px;width:0;z-index:60;background:linear-gradient(90deg,#E8A13C,#B4761A);transition:width .12s linear}
+.pp-grao{position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.5;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.04'/%3E%3C/svg%3E")}
+.pp-simbolo path{stroke-dasharray:240;stroke-dashoffset:240;animation:ppTraco 1.15s ease forwards}
+.pp-simbolo path:last-child{animation-delay:.8s;animation-duration:1s}
+@keyframes ppTraco{to{stroke-dashoffset:0}}
+.pp-cap::first-letter{float:left;font-family:var(--font-display);font-weight:800;font-size:3.4rem;line-height:.72;padding:6px 12px 0 0;color:#B4761A}
+.pp-indice{margin-top:20px;display:flex;flex-wrap:wrap;gap:8px}
+.pp-indice span{font-family:var(--font-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#c9cdd2;border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:5px 11px}
+.pp-cue{margin-top:22px;display:inline-flex;align-items:center;gap:9px;color:#8b9097;font-size:11.5px;font-family:var(--font-mono);letter-spacing:.12em;text-transform:uppercase}
+.pp-cue .seta{font-size:15px;animation:ppDesce 1.7s ease-in-out infinite}
+@keyframes ppDesce{0%,100%{transform:translateY(0)}50%{transform:translateY(5px)}}
+.pp-dots{display:inline-flex;gap:5px;align-items:center}
+.pp-dots i{width:7px;height:7px;border-radius:50%;background:#E8A13C;animation:ppPisca 1.2s infinite}
+.pp-dots i:nth-child(2){animation-delay:.18s}.pp-dots i:nth-child(3){animation-delay:.36s}
+@keyframes ppPisca{0%,60%,100%{opacity:.3}30%{opacity:1}}
+.pp-tagr{position:absolute;top:-11px;right:16px;background:#E8A13C;color:#15181D;font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:4px 10px;border-radius:999px}
+.pp-on .pp-corpo>section{opacity:0;transform:translateY(18px);transition:opacity .7s ease,transform .7s cubic-bezier(.2,.7,.2,1)}
+.pp-on .pp-corpo>section.pp-in{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){.pp-simbolo path,.pp-cue .seta,.pp-dots i{animation:none;stroke-dashoffset:0}.pp-on .pp-corpo>section{opacity:1!important;transform:none!important;transition:none}}
+`;
 
 const METODO = [
   ["Ouvir", "Percebemos o negócio, o cliente e o que já tentaste. Sem isto, é tudo palpite."],
@@ -80,24 +103,39 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
       .filter(Boolean);
 
   return (
-    <main className="mx-auto max-w-3xl px-5 py-10 print:py-0">
-      <header className="rounded-t-2xl bg-ink px-8 py-10 text-cream print:rounded-none">
-        <Simbolo fundo="escuro" className="mb-6 w-16" titulo="Nº 5" />
-        <p className="rotulo !text-gold">Proposta{pacote ? ` · ${pacote.nome}` : ""}</p>
-        <h1 className="mt-2 font-display text-4xl font-extrabold leading-tight tracking-tight">
-          {cliente?.nome_marca ?? "Proposta"}
-        </h1>
-        <p className="mt-3 text-[15px] text-soft">
-          Uma proposta do Nº 5 — o departamento de marketing das marcas que não têm um. 🖐️
-        </p>
+    <main className="relative z-10 mx-auto max-w-3xl px-5 py-10 print:py-0">
+      <style dangerouslySetInnerHTML={{ __html: PP_CSS }} />
+      <EfeitosProposta />
+      <header className="relative overflow-hidden rounded-t-2xl bg-ink px-8 py-10 text-cream print:rounded-none">
+        <div className="pointer-events-none absolute -right-24 -top-24 size-72 rounded-full bg-gold/25 blur-3xl print:hidden" />
+        <div className="relative">
+          <Simbolo fundo="escuro" className="pp-simbolo mb-6 w-16" titulo="Nº 5" />
+          <p className="rotulo !text-gold">Proposta{pacote ? ` · ${pacote.nome}` : ""}</p>
+          <h1 className="mt-2 font-display text-5xl font-extrabold leading-[0.98] tracking-tight">
+            {cliente?.nome_marca ?? "Proposta"}
+          </h1>
+          <p className="mt-3 max-w-[42ch] text-[15px] text-soft">
+            Uma proposta do Nº 5 — o departamento de marketing das marcas que não têm um. 🖐️
+          </p>
+          <div className="pp-indice">
+            {["Onde estás", "O que construímos", ...(c.assistente?.nome ? ["O teu assistente"] : []), "90 dias", "Investimento"].map(
+              (t) => (
+                <span key={t}>{t}</span>
+              ),
+            )}
+          </div>
+          <div className="pp-cue">
+            <span className="seta">↓</span> role para ver a proposta
+          </div>
+        </div>
       </header>
 
-      <div className="rounded-b-2xl border border-t-0 border-line bg-white px-8 py-9 print:rounded-none print:border-0">
+      <div className="pp-corpo rounded-b-2xl border border-t-0 border-line bg-white px-8 py-9 print:rounded-none print:border-0">
         {c.abertura && (
           <section className="mb-8">
             <p className="rotulo">onde estás hoje</p>
             {paras(c.abertura).map((t, i) => (
-              <p key={i} className="mt-2 text-[16px] leading-relaxed">
+              <p key={i} className={`mt-2 text-[16px] leading-relaxed ${i === 0 ? "pp-cap" : ""}`}>
                 {t}
               </p>
             ))}
@@ -150,16 +188,36 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
 
         {c.assistente?.nome && (
           <section className="mb-8">
-            <div className="rounded-2xl bg-ink px-7 py-8 text-cream">
-              <p className="rotulo !text-gold">o teu assistente, só teu</p>
-              <h2 className="mt-1 font-display text-3xl font-extrabold text-gold">
-                Conhece o {c.assistente.nome}
-              </h2>
-              <p className="mt-3 text-[15px] leading-relaxed text-soft">{c.assistente.descricao}</p>
-              <p className="mt-3 text-xs text-soft">
-                O nome é a nossa sugestão — o definitivo escolhemo-lo contigo. Feito à medida da tua
-                marca, nunca repetido noutra. 🖐️
-              </p>
+            <div className="relative overflow-hidden rounded-2xl bg-ink px-7 py-8 text-cream">
+              <div className="pointer-events-none absolute -right-16 -top-16 size-56 rounded-full bg-gold/20 blur-3xl print:hidden" />
+              <div
+                className="absolute right-6 top-6 hidden size-16 place-items-center bg-gold/15 text-3xl ring-1 ring-gold/40 sm:grid print:hidden"
+                style={{ borderRadius: "20px 20px 20px 6px" }}
+                aria-hidden
+              >
+                💬
+              </div>
+              <div className="relative">
+                <p className="rotulo !text-gold">o teu assistente, só teu</p>
+                <h2 className="mt-1 font-display text-3xl font-extrabold text-gold">
+                  Conhece o {c.assistente.nome}
+                </h2>
+                <p className="mt-3 max-w-[52ch] text-[15px] leading-relaxed text-soft">
+                  {c.assistente.descricao}
+                </p>
+                <div className="mt-4 flex items-center gap-2.5 text-sm">
+                  <span className="pp-dots" aria-hidden>
+                    <i></i>
+                    <i></i>
+                    <i></i>
+                  </span>
+                  <span className="text-soft">sempre a responder — no site e no WhatsApp</span>
+                </div>
+                <p className="mt-3 text-xs text-soft">
+                  O nome é a nossa sugestão — o definitivo escolhemo-lo contigo. Feito à medida da tua
+                  marca, nunca repetido noutra. 🖐️
+                </p>
+              </div>
             </div>
           </section>
         )}
@@ -300,7 +358,8 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
                       </p>
                     )}
                   </div>
-                  <div className="rounded-xl bg-ink px-6 py-5 text-cream ring-2 ring-gold">
+                  <div className="relative rounded-xl bg-ink px-6 py-5 text-cream ring-2 ring-gold">
+                    <span className="pp-tagr">recomendado</span>
                     <p className="text-xs font-bold uppercase tracking-wide text-gold">
                       A nossa recomendação
                     </p>
