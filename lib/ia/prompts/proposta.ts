@@ -4,6 +4,8 @@
  * a IA toca em texto que vai para o cliente.
  */
 
+import { rotulo, type Brief } from "@/lib/dominio/intake";
+
 export const SISTEMA_PROPOSTA = `És o estratega sénior do Nº 5 (numerocinco.pt) — estúdio de marketing digital + IA para PMEs em Portugal e Angola, do Sandro. Vais escrever o TEXTO de uma proposta comercial, a partir de um dossiê de diagnóstico real. Quem a lê é o dono do negócio.
 
 A VOZ DO CINCO (obrigatória):
@@ -29,6 +31,14 @@ Se fizer sentido propor um assistente, sugere um nome novo, inventado para ESTE 
 - Em pelo menos DUAS prioridades, propõe uma ideia CONCRETA e ORIGINAL, específica deste negócio — algo que a concorrência dele não esteja a fazer. Um formato de conteúdo, um ângulo, um ritual, uma forma de mostrar os bastidores, uma parceria óbvia que ninguém fez.
 - Teste que tens de passar: se a frase servisse igualmente para uma clínica dentária e para uma serralharia, está errada. Reescreve-a até só servir para ESTE cliente.
 - Nada de «aumentar o engagement», «criar conteúdo relevante», «fortalecer a presença digital». Isso é ruído de agência. Diz a coisa concreta que vamos fazer.
+
+🧭 O BRIEF DO CLIENTE (quando existe — foi ELE que o preencheu, é ouro):
+- Se o dossiê traz um brief profundo (público, tom, referências, site, automação, ambição), a proposta TEM de o refletir. Mostra que ouviste.
+- TOM: molda o teu texto ao tom que ele escolheu e propõe o assistente/conteúdo nessa voz.
+- REFERÊNCIAS: se ele admira certas marcas, capta o espírito (sem copiar) e nomeia-o.
+- SITE: se ele quer um site novo (ou de certo tipo), propõe-o como uma prioridade concreta — o que terá, o que resolve.
+- AUTOMAÇÃO: se ele quer assistente virtual / chatbot / WhatsApp / marcações, propõe-o a sério, com um nome inventado para o assistente (regra dos assistentes acima) e o que ele faria no dia-a-dia.
+- Uma das prioridades deve pegar no que ele mais SONHA (a ambição, a tarefa chata que quer largar) e transformá-lo em algo que vamos construir.
 
 DEVOLVES APENAS JSON válido, sem markdown, com esta forma exata:
 {
@@ -59,8 +69,48 @@ export type DossierProposta = {
   estadoAtual?: Record<string, string>;
   objetivos?: { rotulos: string[]; texto_livre?: string };
   recomendacoes?: { titulo: string; descricao: string; origem: string }[];
+  /** O brief profundo preenchido pelo próprio cliente (tom, site, automação…). */
+  brief?: Brief | null;
   notas?: string | null;
 };
+
+/** Traduz o brief do cliente para linhas legíveis para a IA. */
+function linhasBrief(b: Brief): string[] {
+  const L: string[] = [];
+  const um = (rot: string, lista: string, chave?: string) => {
+    const v = rotulo(lista, chave);
+    if (v) L.push(`  ${rot}: ${v}`);
+  };
+  const muitos = (rot: string, lista: string, chaves?: string[]) => {
+    if (chaves?.length) L.push(`  ${rot}: ${chaves.map((k) => rotulo(lista, k)).filter(Boolean).join(", ")}`);
+  };
+  const txt = (rot: string, v?: string) => {
+    if (v?.trim()) L.push(`  ${rot}: "${v.trim()}"`);
+  };
+
+  um("Cliente ideal", "publico", b.publico);
+  um("Onde está", "onde", b.onde);
+  muitos("Idades", "idades", b.idades);
+  txt("Porque o escolhem", b.publico_texto);
+  muitos("Tom de voz desejado", "tom", b.tom);
+  txt("Como quer que se sintam", b.sentir);
+  um("Tratamento", "tratamento", b.tratamento);
+  txt("Marcas que admira", b.referencias);
+  txt("O que gosta nelas", b.referencias_gosto);
+  txt("A evitar", b.evitar);
+  um("Logótipo", "logo", b.logo);
+  um("Renovar imagem", "renovar", b.renovar);
+  um("Estado do site", "site_estado", b.site_estado);
+  um("Quer site novo por nós", "site_novo", b.site_novo);
+  muitos("Tipo de site", "site_tipo", b.site_tipo);
+  txt("O site tem de", b.site_funcoes);
+  muitos("Quer automatizar", "automacao", b.automacao);
+  txt("Tarefa que quer largar", b.tarefa_chata);
+  txt("Ambição a 12 meses", b.ambicao);
+  um("Prazo", "prazo", b.prazo);
+  txt("Nota final", b.nota_final);
+  return L;
+}
 
 export function montarDossier(d: DossierProposta): string {
   const L: string[] = [];
@@ -99,6 +149,14 @@ export function montarDossier(d: DossierProposta): string {
           (r.fracos?.length ? ` · fraco em: ${r.fracos.join(", ")}` : ""),
       ),
     );
+  }
+
+  if (d.brief) {
+    const linhas = linhasBrief(d.brief);
+    if (linhas.length) {
+      L.push("\n— O QUE O CLIENTE SONHA (brief que ELE preencheu — usa-o muito) —");
+      L.push(...linhas);
+    }
   }
 
   if (d.recomendacoes?.length) {

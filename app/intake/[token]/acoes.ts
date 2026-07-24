@@ -6,6 +6,7 @@ import { correrTodas } from "@/lib/dominio/diagnostico/verificacoes";
 import { pontuarSite } from "@/lib/dominio/diagnostico/pontuacao";
 import { ESCOPO_VAZIO, type Escopo } from "@/lib/dominio/orcamento";
 import type { ChaveObjetivo } from "@/lib/dominio/diagnostico/recomendacoes";
+import type { Brief } from "@/lib/dominio/intake";
 
 export type SubmissaoIntake = {
   token: string;
@@ -16,6 +17,7 @@ export type SubmissaoIntake = {
   objetivosTexto: string;
   pedido: Escopo;
   orcamento: string;
+  brief: Brief;
 };
 
 /**
@@ -65,6 +67,7 @@ export async function submeterIntake(dados: SubmissaoIntake) {
     estado_atual: { site: siteUrl ?? "", notas: dados.temHoje ?? "" },
     objetivos: { selecionados: dados.objetivos ?? [], texto_livre: dados.objetivosTexto ?? "" },
     pedido: { ...ESCOPO_VAZIO, ...dados.pedido, orcamento: dados.orcamento || "" },
+    brief: dados.brief ?? {},
   });
   if (erroDiag) return { ok: false as const, erro: "Não foi possível guardar. Tenta de novo." };
 

@@ -7,6 +7,7 @@ import { criarPropostaDeDiagnostico } from "@/app/(app)/propostas/acoes";
 import { dataCurta } from "@/lib/dominio/metricas";
 import { descreverEscopo, normalizarEscopo } from "@/lib/dominio/orcamento";
 import { rotuloFaixa } from "@/lib/dominio/intake";
+import { BriefCliente } from "@/components/diagnostico/BriefCliente";
 import { EnviarLink } from "@/components/crm/EnviarLink";
 
 export const dynamic = "force-dynamic";
@@ -108,6 +109,9 @@ export default async function DiagnosticoPage({ params }: { params: Promise<{ id
           </p>
         </div>
       )}
+
+      {/* O brief profundo que o cliente preencheu */}
+      <BriefCliente brief={d.brief} />
 
       {d.partilha_ativa && (
         <div className="rounded-xl border border-gold bg-gold/5 p-4">

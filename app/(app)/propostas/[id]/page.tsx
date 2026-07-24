@@ -68,7 +68,7 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
   const { data: diag } = p.diagnostico_id
     ? await supabase
         .from("diagnosticos")
-        .select("site_url, site_score, site_resultado, redes_scorecard, estado_atual, objetivos, recomendacoes")
+        .select("site_url, site_score, site_resultado, redes_scorecard, estado_atual, objetivos, recomendacoes, brief")
         .eq("id", p.diagnostico_id)
         .maybeSingle()
     : { data: null };
@@ -95,6 +95,8 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
       texto_livre: diag?.objetivos?.texto_livre ?? "",
     },
     recomendacoes: diag?.recomendacoes ?? [],
+    // O brief profundo que o cliente preencheu — o que ele sonha para a marca.
+    brief: diag?.brief ?? null,
     // O que o Sandro já sabe do negócio — é daqui que sai a originalidade.
     notas: cliente?.notas_gerais ?? null,
   };
