@@ -2,42 +2,68 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { deslocarMes, mesISO, mesLegivel } from "@/lib/dominio/producao";
-import { GeradorConteudo } from "@/components/conteudo/GeradorConteudo";
+import { CANAIS, canaisAtivos, normalizarEscopo } from "@/lib/dominio/orcamento";
+import { OBJETIVOS } from "@/lib/dominio/diagnostico/recomendacoes";
 import { CopiarPeca } from "@/components/conteudo/CopiarPeca";
-import { atualizarConteudo, alternarAprovado, apagarConteudo } from "./acoes";
 
 export const dynamic = "force-dynamic";
 
-const ROTULO_TIPO: Record<string, string> = {
-  post: "Post",
-  carrossel: "Carrossel",
-  reel: "Reel",
-  story: "História",
-  outro: "Peça",
-};
+const NOME_CANAL = new Map<string, string>(CANAIS.map(([k, v]) => [k, v]));
 
-type Conteudo = {
-  id: string;
-  tipo: string;
-  tema: string | null;
-  copy: string;
-  hashtags: string[];
-  extra: { slides?: string[]; guiao?: string };
-  estado: string;
-  ordem: number;
-};
-
-/** Junta a peça inteira num texto pronto a colar. */
-function textoInteiro(c: Conteudo): string {
-  const partes = [c.copy];
-  if (c.extra?.slides?.length)
-    partes.push("\n" + c.extra.slides.map((s, i) => `${i + 1}. ${s}`).join("\n"));
-  if (c.extra?.guiao) partes.push("\n🎬 " + c.extra.guiao);
-  if (c.hashtags?.length) partes.push("\n" + c.hashtags.join(" "));
-  return partes.join("\n");
+/** Junta tudo o que o Claude Code precisa para produzir o mês deste cliente. */
+function montarBrief(d: {
+  marca: string;
+  setor: string | null;
+  notas: string | null;
+  objetivos: string[];
+  objetivoLivre: string | null;
+  mes: string;
+  producao: { posts: number; carrosseis: number; reels: number; stories: number } | null;
+  canais: string[];
+  moderacao: boolean;
+  verbaAnuncios: number;
+}): string {
+  const L: string[] = [];
+  L.push(`BRIEF DE PRODUÇÃO — ${d.marca}`);
+  L.push(`Mês: ${mesLegivel(d.mes)}`);
+  L.push("");
+  L.push("MARCA");
+  if (d.setor) L.push(`- Setor: ${d.setor}`);
+  L.push(`- Voz / notas: ${d.notas?.trim() || "[a definir — descreve o tom desta marca]"}`);
+  L.push("");
+  L.push("OBJETIVOS");
+  if (d.objetivos.length) d.objetivos.forEach((o) => L.push(`- ${o}`));
+  if (d.objetivoLivre) L.push(`- ${d.objetivoLivre}`);
+  if (!d.objetivos.length && !d.objetivoLivre) L.push("- [sem diagnóstico com objetivos]");
+  L.push("");
+  L.push("CONTRATADO (produzir este volume no mês)");
+  if (d.producao) {
+    const p = d.producao;
+    const partes = [
+      p.posts && `${p.posts} posts`,
+      p.carrosseis && `${p.carrosseis} carrosséis`,
+      p.reels && `${p.reels} reels`,
+      p.stories && `${p.stories} histórias`,
+    ].filter(Boolean);
+    L.push(`- ${partes.length ? partes.join(" + ") : "sem produção definida no âmbito"}`);
+    L.push(`- Canais: ${d.canais.length ? d.canais.join(", ") : "a combinar"}`);
+    if (d.moderacao) L.push("- Moderação de comentários/DMs: sim (com aprovação humana)");
+    if (d.verbaAnuncios > 0) L.push(`- Verba de anúncios do cliente: ${d.verbaAnuncios}€/mês`);
+  } else {
+    L.push("- [sem proposta aceite — volume a combinar com o Sandro]");
+  }
+  L.push("");
+  L.push("O QUE FAZER (Claude Code)");
+  L.push(
+    "Escreve e produz o mês na voz desta marca — PT-PT, sem inventar dados, com variedade.",
+  );
+  L.push(
+    "Faz as peças a sério (imagens/carrosséis/reels com o pipeline e o símbolo oficial), monta o plano na app para o cliente aprovar, e agenda no Metricool.",
+  );
+  return L.join("\n");
 }
 
-export default async function ConteudoPage({
+export default async function BriefPage({
   params,
   searchParams,
 }: {
@@ -56,15 +82,49 @@ export default async function ConteudoPage({
     .maybeSingle();
   if (!cliente) notFound();
 
-  const { data: conteudosRaw } = await supabase
-    .from("conteudos")
-    .select("id, tipo, tema, copy, hashtags, extra, estado, ordem")
-    .eq("cliente_id", id)
-    .eq("mes", mes)
-    .order("ordem", { ascending: true });
-  const conteudos = (conteudosRaw ?? []) as Conteudo[];
+  const [diagRes, propRes] = await Promise.all([
+    supabase
+      .from("diagnosticos")
+      .select("objetivos")
+      .eq("cliente_id", id)
+      .order("versao", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("propostas")
+      .select("escopo")
+      .eq("cliente_id", id)
+      .eq("estado", "aceite")
+      .order("versao", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
-  const aprovadas = conteudos.filter((c) => c.estado === "aprovado").length;
+  const objetivos: string[] = (diagRes.data?.objetivos?.selecionados ?? []).map(
+    (o: string) => OBJETIVOS.find(([k]) => k === o)?.[1] ?? o,
+  );
+  const objetivoLivre: string | null = diagRes.data?.objetivos?.texto_livre?.trim() || null;
+
+  const escopo = propRes.data?.escopo ? normalizarEscopo(propRes.data.escopo) : null;
+  const canais = escopo
+    ? canaisAtivos(escopo).map(([chave, c]) => {
+        const nome = NOME_CANAL.get(chave) ?? chave;
+        return c.proprio ? `${nome} (próprio)` : `${nome} (adaptado)`;
+      })
+    : [];
+
+  const brief = montarBrief({
+    marca: cliente.nome_marca,
+    setor: cliente.setor,
+    notas: cliente.notas_gerais,
+    objetivos,
+    objetivoLivre,
+    mes,
+    producao: escopo?.producao ?? null,
+    canais,
+    moderacao: !!escopo?.extras?.moderacao,
+    verbaAnuncios: escopo?.verba_anuncios ?? 0,
+  });
 
   return (
     <div className="space-y-5">
@@ -74,16 +134,8 @@ export default async function ConteudoPage({
           <Link href={`/clientes/${id}`} className="text-xs font-bold text-gold-dark">
             ← {cliente.nome_marca}
           </Link>
-          <h1 className="font-display text-3xl font-extrabold tracking-tight">Conteúdo do mês</h1>
-          <p className="text-sm text-grey">
-            {mesLegivel(mes)}
-            {conteudos.length > 0 && (
-              <>
-                {" "}
-                · <b>{conteudos.length}</b> peças · <b className="text-good">{aprovadas}</b> aprovadas
-              </>
-            )}
-          </p>
+          <h1 className="font-display text-3xl font-extrabold tracking-tight">Brief de conteúdo</h1>
+          <p className="text-sm text-grey">{mesLegivel(mes)}</p>
         </div>
         <div className="flex items-center gap-2">
           <Link
@@ -107,141 +159,49 @@ export default async function ConteudoPage({
         </div>
       </div>
 
-      {/* Gerador */}
-      <GeradorConteudo clienteId={id} mes={mes} vozInicial={cliente.notas_gerais ?? ""} />
+      {/* Como funciona */}
+      <section className="rounded-xl border-2 border-cobalt/25 bg-cobalt/[0.03] p-5">
+        <p className="rotulo !text-cobalt">o cérebro alimenta o motor</p>
+        <h2 className="font-display text-lg font-extrabold">A app prepara, o Claude Code produz</h2>
+        <p className="mt-1 text-sm text-grey">
+          O conteúdo a sério — texto forte + imagens, carrosséis e reels + agendamento no Metricool —
+          faz-se no Claude Code, onde estão as ligações e o pipeline visual. Esta página junta tudo o
+          que ele precisa saber deste cliente. Copia o brief, cola-o no Claude Code, e o mês sai de lá
+          pronto — depois volta à app como plano para o cliente aprovar.
+        </p>
+      </section>
 
-      {/* Peças guardadas */}
-      <section className="space-y-3">
-        <h2 className="font-display text-lg font-extrabold">
-          Guardado neste mês{" "}
-          <span className="font-normal text-soft">({conteudos.length})</span>
-        </h2>
-
-        {conteudos.length === 0 ? (
-          <p className="rounded-xl border border-line bg-white p-5 text-sm text-soft">
-            Ainda sem conteúdo guardado. Gera acima, revê, e guarda. Depois é rever, afinar e agendar
-            no Metricool. 🖐️
+      {/* O brief */}
+      <section className="rounded-xl border border-line bg-white p-5">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="font-display text-lg font-extrabold">O brief deste mês</h2>
+          <CopiarPeca texto={brief} />
+        </div>
+        <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg bg-cream p-4 font-mono text-xs leading-relaxed text-ink">
+          {brief}
+        </pre>
+        {!cliente.notas_gerais?.trim() && (
+          <p className="mt-3 rounded-lg bg-gold/10 px-3 py-2 text-xs text-gold-dark">
+            💡 Preenche as <b>Notas</b> do cliente com o tom de voz da marca — é o que dá alma ao
+            conteúdo. Está na ficha, em Dados.
           </p>
-        ) : (
-          conteudos.map((c) => (
-            <details
-              key={c.id}
-              className="group rounded-xl border border-line bg-white p-0 open:border-gold/50"
-            >
-              <summary className="flex cursor-pointer list-none items-center gap-2 p-4">
-                <span className="rounded-full bg-gold/20 px-2 py-0.5 text-[11px] font-bold text-gold-dark">
-                  {ROTULO_TIPO[c.tipo] ?? c.tipo}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-sm font-bold">
-                  {c.tema || c.copy.slice(0, 60)}
-                </span>
-                {c.estado === "aprovado" ? (
-                  <span className="rounded-full bg-good/15 px-2 py-0.5 text-[11px] font-bold text-good">
-                    aprovado ✓
-                  </span>
-                ) : (
-                  <span className="rounded-full bg-line/70 px-2 py-0.5 text-[11px] font-bold text-grey">
-                    rascunho
-                  </span>
-                )}
-                <span className="text-soft transition group-open:rotate-90">›</span>
-              </summary>
-
-              <div className="border-t border-line/60 p-4">
-                <form action={atualizarConteudo} className="space-y-3">
-                  <input type="hidden" name="id" value={c.id} />
-                  <input type="hidden" name="cliente_id" value={id} />
-
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-bold text-grey">Tema</span>
-                    <input
-                      name="tema"
-                      defaultValue={c.tema ?? ""}
-                      className="w-full rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-gold"
-                    />
-                  </label>
-
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-bold text-grey">Legenda</span>
-                    <textarea
-                      name="copy"
-                      defaultValue={c.copy}
-                      rows={5}
-                      className="w-full rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-gold"
-                    />
-                  </label>
-
-                  {c.tipo === "carrossel" && (
-                    <label className="block">
-                      <span className="mb-1 block text-xs font-bold text-grey">
-                        Slides (um por linha)
-                      </span>
-                      <textarea
-                        name="slides"
-                        defaultValue={(c.extra?.slides ?? []).join("\n")}
-                        rows={5}
-                        className="w-full rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-gold"
-                      />
-                    </label>
-                  )}
-
-                  {c.tipo === "reel" && (
-                    <label className="block">
-                      <span className="mb-1 block text-xs font-bold text-grey">Guião</span>
-                      <textarea
-                        name="guiao"
-                        defaultValue={c.extra?.guiao ?? ""}
-                        rows={4}
-                        className="w-full rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-gold"
-                      />
-                    </label>
-                  )}
-
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-bold text-grey">Hashtags</span>
-                    <input
-                      name="hashtags"
-                      defaultValue={(c.hashtags ?? []).join(" ")}
-                      className="w-full rounded-lg border border-line px-3 py-2 font-mono text-xs text-cobalt outline-none focus:border-gold"
-                    />
-                  </label>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button className="rounded-full bg-gold px-4 py-1.5 text-sm font-bold text-ink">
-                      Guardar alterações
-                    </button>
-                    <CopiarPeca texto={textoInteiro(c)} />
-                    <span className="flex-1" />
-                  </div>
-                </form>
-
-                <div className="mt-2 flex items-center gap-3 border-t border-line/60 pt-3">
-                  <form action={alternarAprovado}>
-                    <input type="hidden" name="id" value={c.id} />
-                    <input type="hidden" name="cliente_id" value={id} />
-                    <input
-                      type="hidden"
-                      name="estado"
-                      value={c.estado === "aprovado" ? "rascunho" : "aprovado"}
-                    />
-                    <button
-                      className={`text-xs font-bold ${
-                        c.estado === "aprovado" ? "text-grey" : "text-good"
-                      }`}
-                    >
-                      {c.estado === "aprovado" ? "voltar a rascunho" : "aprovar ✓"}
-                    </button>
-                  </form>
-                  <form action={apagarConteudo}>
-                    <input type="hidden" name="id" value={c.id} />
-                    <input type="hidden" name="cliente_id" value={id} />
-                    <button className="text-xs text-soft hover:text-bad">apagar</button>
-                  </form>
-                </div>
-              </div>
-            </details>
-          ))
         )}
+      </section>
+
+      {/* Onde o resultado volta */}
+      <section className="rounded-xl border border-line bg-white p-5">
+        <h2 className="mb-1 font-display text-lg font-extrabold">Depois de produzir</h2>
+        <p className="text-sm text-grey">
+          O plano do mês entra pela ficha, em <b>Planos mensais</b> — colas o HTML feito no Claude
+          Code, partilhas com o cliente por WhatsApp/email, e ele aprova ou pede alterações. Fica tudo
+          registado.
+        </p>
+        <Link
+          href={`/clientes/${id}`}
+          className="mt-3 inline-block rounded-full bg-ink px-4 py-2 text-sm font-bold text-cream"
+        >
+          ← Voltar à ficha
+        </Link>
       </section>
     </div>
   );

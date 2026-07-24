@@ -117,7 +117,7 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
               href={`/clientes/${cliente.id}/conteudo`}
               className="rounded-full bg-gold px-4 py-2 text-sm font-bold text-ink"
             >
-              ✍️ Conteúdo do mês
+              🧠 Brief de conteúdo
             </Link>
             <Link
               href={`/clientes/${cliente.id}/producao`}
