@@ -73,7 +73,11 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
       .select("id, mes, titulo, estado, visto_em")
       .eq("cliente_id", id)
       .order("mes", { ascending: false }),
-    supabase.from("clientes").select("metricool_blog_id").eq("id", id).maybeSingle(),
+    supabase
+      .from("clientes")
+      .select("metricool_blog_id, empresa_fiscal, nif, morada, codigo_postal, localidade")
+      .eq("id", id)
+      .maybeSingle(),
   ]);
   const propostas = (propRes.data ?? []) as {
     id: string;
@@ -97,6 +101,13 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
     visto_em: string | null;
   }[];
   const metricoolBlogId = (metricoolRes.data?.metricool_blog_id ?? "") as string;
+  const fat = (metricoolRes.data ?? {}) as {
+    empresa_fiscal?: string | null;
+    nif?: string | null;
+    morada?: string | null;
+    codigo_postal?: string | null;
+    localidade?: string | null;
+  };
   const diagnosticos = (diagRes.data ?? []) as {
     id: string;
     versao: number;
@@ -417,6 +428,25 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
               defaultValue={cliente.notas_gerais ?? ""}
               className="w-full rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-gold"
             />
+          </div>
+
+          {/* Dados de faturação */}
+          <div className="border-t border-line/60 pt-4">
+            <p className="mb-2 text-xs font-bold text-grey">Dados de faturação</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Campo
+                id="empresa_fiscal"
+                label="Empresa (nome fiscal)"
+                defaultValue={fat.empresa_fiscal ?? ""}
+                placeholder="ex.: Os Caetanos, Lda"
+              />
+              <Campo id="nif" label="NIF / NIPC" defaultValue={fat.nif ?? ""} placeholder="ex.: 504428918" />
+              <Campo id="morada" label="Morada" defaultValue={fat.morada ?? ""} />
+              <div className="grid grid-cols-2 gap-3">
+                <Campo id="codigo_postal" label="Código postal" defaultValue={fat.codigo_postal ?? ""} />
+                <Campo id="localidade" label="Localidade" defaultValue={fat.localidade ?? ""} />
+              </div>
+            </div>
           </div>
 
           <button className="rounded-full bg-gold px-5 py-2 text-sm font-bold text-ink">

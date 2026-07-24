@@ -74,8 +74,22 @@ export async function atualizarCliente(formData: FormData) {
       origem: texto(formData.get("origem")),
       valor_estimado: numero(formData.get("valor_estimado")),
       notas_gerais: texto(formData.get("notas_gerais")),
-      metricool_blog_id: texto(formData.get("metricool_blog_id")),
       redes: lerRedes(formData),
+    })
+    .eq("id", id);
+
+  // Campos de colunas mais recentes (migrações 0016 / 0018). Vão num update à
+  // parte: se a migração ainda não correu, isto falha em silêncio sem partir
+  // a gravação dos dados base.
+  await supabase
+    .from("clientes")
+    .update({
+      metricool_blog_id: texto(formData.get("metricool_blog_id")),
+      empresa_fiscal: texto(formData.get("empresa_fiscal")),
+      nif: texto(formData.get("nif")),
+      morada: texto(formData.get("morada")),
+      codigo_postal: texto(formData.get("codigo_postal")),
+      localidade: texto(formData.get("localidade")),
     })
     .eq("id", id);
 
