@@ -13,12 +13,14 @@ export function LinkDiagnostico({
   nome,
   telefone,
   email,
+  clienteId,
 }: {
   token: string | null;
   submetidoEm: string | null;
   nome: string;
   telefone?: string | null;
   email?: string | null;
+  clienteId?: string | null;
 }) {
   if (!token) return null;
 
@@ -45,6 +47,7 @@ export function LinkDiagnostico({
         mensagem={mensagem}
         telefone={telefone}
         email={email}
+        clienteId={clienteId}
       />
 
       {submetidoEm && (

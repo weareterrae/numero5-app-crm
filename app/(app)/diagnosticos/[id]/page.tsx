@@ -118,6 +118,7 @@ export default async function DiagnosticoPage({ params }: { params: Promise<{ id
             mensagem={`Olá${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ Preparámos um Raio-X à presença digital do ${cliente?.nome_marca ?? "teu negócio"}. Vê aqui o que encontrámos e onde podemos ajudar:`}
             telefone={contacto?.telefone}
             email={contacto?.email}
+            clienteId={cliente?.id}
           />
           <p className="mt-2 text-xs text-soft">
             Abre o WhatsApp/email com o texto pronto — só tens de rever e enviar.

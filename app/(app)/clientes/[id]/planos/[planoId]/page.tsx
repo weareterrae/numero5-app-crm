@@ -158,6 +158,7 @@ export default async function PlanoPage({
               mensagem={`Olá${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ Aqui está o plano de publicações de ${mesLegivel(plano.mes)} para o ${cliente.nome_marca}. Dá uma olhada e diz-nos se está tudo bem ou o que queres ajustar — tens até 5 dias:`}
               telefone={contacto?.telefone}
               email={contacto?.email}
+              clienteId={cliente.id}
             />
             <code className="mt-2 block break-all text-xs text-gold-dark">
               /r/plano/{plano.partilha_token}

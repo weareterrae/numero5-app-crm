@@ -294,6 +294,7 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
               mensagem={`Olá${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ Aqui está a proposta que preparámos para o ${cliente?.nome_marca ?? "teu negócio"}. Podes vê-la, e ao fundo aceitas ou dizes-nos o que achas:`}
               telefone={contacto?.telefone}
               email={contacto?.email}
+              clienteId={cliente?.id}
             />
             <code className="mt-2 block break-all text-xs text-gold-dark">
               /r/proposta/{p.partilha_token}

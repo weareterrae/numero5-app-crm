@@ -171,6 +171,7 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
         nome={cliente.nome_marca}
         telefone={contactoPrincipal?.telefone}
         email={contactoPrincipal?.email}
+        clienteId={cliente.id}
       />
 
       {/* Assistente comercial */}

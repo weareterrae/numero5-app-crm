@@ -1,12 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
+import { enviarPorEmail, type EstadoEnvio } from "./enviar-acoes";
 
 /**
- * Botões para enviar um link (diagnóstico, proposta, plano…) ao cliente por
- * WhatsApp ou email, com o texto já preparado na voz do Nº 5. Não envia nada
- * por nós — abre a app de WhatsApp/email do utilizador com tudo preenchido,
- * ele revê e carrega em enviar.
+ * Botões para enviar um link (diagnóstico, proposta, plano…) ao cliente.
+ *
+ * - "Enviar já" → sai pela app (Resend), de geral@numerocinco.pt, e fica no
+ *   histórico. Precisa da RESEND_API_KEY no Netlify.
+ * - "Abrir no meu email" / "WhatsApp" → abrem a tua app já preenchida, para
+ *   quando quiseres que saia de ti. Não enviam nada por nós.
  */
 export function EnviarLink({
   caminho,
@@ -14,6 +17,7 @@ export function EnviarLink({
   mensagem,
   telefone,
   email,
+  clienteId,
 }: {
   /** Caminho relativo do link público, ex.: /r/proposta/xxxx */
   caminho: string;
@@ -22,9 +26,14 @@ export function EnviarLink({
   mensagem: string;
   telefone?: string | null;
   email?: string | null;
+  clienteId?: string | null;
 }) {
   const [origem, setOrigem] = useState("");
   const [copiado, setCopiado] = useState(false);
+  const [estado, enviar, aEnviar] = useActionState<EstadoEnvio, FormData>(enviarPorEmail, {
+    ok: false,
+    msg: "",
+  });
 
   useEffect(() => setOrigem(window.location.origin), []);
 
@@ -46,28 +55,52 @@ export function EnviarLink({
   }
 
   return (
-    <div className="flex flex-wrap gap-2">
-      <a
-        href={whatsapp}
-        target="_blank"
-        rel="noopener"
-        className="rounded-full bg-[#25D366] px-4 py-2 text-sm font-bold text-white"
-      >
-        WhatsApp
-      </a>
-      <a
-        href={mailto}
-        className="rounded-full border-2 border-gold-dark px-4 py-2 text-sm font-bold text-gold-dark"
-      >
-        Email
-      </a>
-      <button
-        type="button"
-        onClick={copiar}
-        className="rounded-full border border-line px-4 py-2 text-sm font-bold text-grey hover:text-ink"
-      >
-        {copiado ? "Copiado ✓" : "Copiar link"}
-      </button>
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Enviar já pela app (Resend) — só se houver email */}
+        {email && (
+          <form action={enviar}>
+            <input type="hidden" name="email" value={email} />
+            <input type="hidden" name="assunto" value={assunto} />
+            <input type="hidden" name="mensagem" value={mensagem} />
+            <input type="hidden" name="url" value={url} />
+            {clienteId && <input type="hidden" name="cliente_id" value={clienteId} />}
+            <button
+              type="submit"
+              disabled={aEnviar || !origem}
+              className="rounded-full bg-gold px-4 py-2 text-sm font-bold text-ink disabled:opacity-60"
+            >
+              {aEnviar ? "A enviar…" : "Enviar já por email ✈️"}
+            </button>
+          </form>
+        )}
+
+        <a
+          href={whatsapp}
+          target="_blank"
+          rel="noopener"
+          className="rounded-full bg-[#25D366] px-4 py-2 text-sm font-bold text-white"
+        >
+          WhatsApp
+        </a>
+        <a
+          href={mailto}
+          className="rounded-full border-2 border-gold-dark px-4 py-2 text-sm font-bold text-gold-dark"
+        >
+          Abrir no meu email
+        </a>
+        <button
+          type="button"
+          onClick={copiar}
+          className="rounded-full border border-line px-4 py-2 text-sm font-bold text-grey hover:text-ink"
+        >
+          {copiado ? "Copiado ✓" : "Copiar link"}
+        </button>
+      </div>
+
+      {estado.msg && (
+        <p className={`text-sm ${estado.ok ? "text-good" : "text-bad"}`}>{estado.msg}</p>
+      )}
     </div>
   );
 }
