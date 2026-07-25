@@ -40,7 +40,9 @@ export async function POST(req: NextRequest) {
     sistema,
     utilizador: `${emIngles ? "Write the proposal from this real dossier" : "Escreve a proposta a partir deste dossiê real"}:\n\n${montarDossier(dossier)}`,
     json: true,
-    maxTokens: 4096,
+    // Esquema grande (percebemos, medição, responsabilidades…) + o Gemini gasta
+    // tokens a "pensar". Com pouco espaço a resposta sai truncada → JSON inválido.
+    maxTokens: 8192,
   });
 
   if (!r.ok) return NextResponse.json({ erro: r.erro }, { status: 200 });
