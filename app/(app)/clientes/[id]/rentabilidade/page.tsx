@@ -10,9 +10,12 @@ import {
   indiceEsforco,
   indicadorAprovacao,
   resumoRevisoesPeca,
+  sugerirComplexidade,
+  COMPLEXIDADE_ROTULO,
   type Reuniao,
   type Aprovacao,
 } from "@/lib/dominio/operacao";
+import { guardarComplexidade } from "@/app/(app)/clientes/acoes";
 
 const ESFORCO = {
   baixo: { rotulo: "Saudável", cls: "text-good" },
@@ -115,7 +118,7 @@ export default async function RentabilidadePage({ params }: { params: Promise<{ 
         .select("peca, tipo, incluido")
         .eq("cliente_id", id)
         .then((r) => r, () => ({ data: [] })),
-      supabase.from("clientes").select("aprovacao, financeiro").eq("id", id).maybeSingle().then(
+      supabase.from("clientes").select("aprovacao, financeiro, complexidade").eq("id", id).maybeSingle().then(
         (r) => r,
         () => ({ data: null }),
       ),
@@ -196,8 +199,9 @@ export default async function RentabilidadePage({ params }: { params: Promise<{ 
   const hojeISO = new Date().toISOString().slice(0, 10);
   const indAp = indicadorAprovacao((aprovacoesRes.data ?? []) as Aprovacao[], hojeISO);
   const jsonRow = (clienteJsonRes.data ?? null) as {
-    aprovacao?: { decisores?: number } | null;
+    aprovacao?: { decisores?: number; validacao_juridica?: boolean; validacao_tecnica?: boolean } | null;
     financeiro?: { estado?: string } | null;
+    complexidade?: string | null;
   } | null;
   const esforco = indiceEsforco({
     reunioesExtra,
@@ -209,6 +213,16 @@ export default async function RentabilidadePage({ params }: { params: Promise<{ 
     estadoFinanceiro: jsonRow?.financeiro?.estado ?? null,
   });
   const esf = ESFORCO[esforco.nivel];
+
+  // Complexidade — sugestão a partir dos sinais + o que o operador definiu.
+  const sugComplex = sugerirComplexidade({
+    decisores: jsonRow?.aprovacao?.decisores ?? null,
+    validacaoJuridica: !!jsonRow?.aprovacao?.validacao_juridica,
+    validacaoTecnica: !!jsonRow?.aprovacao?.validacao_tecnica,
+    multiIdioma: false,
+    setorRegulado: false,
+  });
+  const complexidadeAtual = jsonRow?.complexidade ?? null;
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
@@ -266,6 +280,38 @@ export default async function RentabilidadePage({ params }: { params: Promise<{ 
           Interno · nunca visível ao cliente. Somado a partir de reuniões, aprovações, revisões e
           pagamentos reais.
         </p>
+      </section>
+
+      {/* Complexidade — nível definido pelo operador, com sugestão */}
+      <section className="rounded-xl border border-line bg-white p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-display text-lg font-extrabold">Complexidade</h2>
+          {complexidadeAtual && (
+            <span className="rounded-full bg-cream px-3 py-1 text-xs font-bold text-grey">
+              {COMPLEXIDADE_ROTULO[complexidadeAtual] ?? complexidadeAtual}
+            </span>
+          )}
+        </div>
+        <p className="mt-1 text-xs text-soft">
+          Sugestão: <b className="text-ink">{COMPLEXIDADE_ROTULO[sugComplex.nivel]}</b>
+          {sugComplex.motivos.length > 0 && <> · {sugComplex.motivos.join(", ")}</>}. Só a
+          plataforma sugere — a complexidade pode pedir mais horas ou fee superior; decides tu.
+        </p>
+        <form action={guardarComplexidade} className="mt-2 flex flex-wrap items-center gap-2">
+          <input type="hidden" name="id" value={cliente.id} />
+          <select
+            name="complexidade"
+            defaultValue={complexidadeAtual ?? sugComplex.nivel}
+            className="rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-gold"
+          >
+            {["baixa", "media", "alta", "personalizada"].map((k) => (
+              <option key={k} value={k}>
+                {COMPLEXIDADE_ROTULO[k]}
+              </option>
+            ))}
+          </select>
+          <button className="rounded-full bg-ink px-4 py-2 text-sm font-bold text-cream">Guardar</button>
+        </form>
       </section>
 
       {/* Previsto vs real */}

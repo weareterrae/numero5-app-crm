@@ -21,6 +21,7 @@ import {
   rentabilidade,
   sugestoesRentabilidade,
   indiceEsforco,
+  sugerirComplexidade,
   diferencasVersao,
   totalOrdem,
   ordemEntraProducao,
@@ -337,6 +338,24 @@ describe("índice de esforço do cliente (Fase 2, Prioridade 2)", () => {
   it("os sinais são limitados (não disparam ao infinito)", () => {
     const e = indiceEsforco({ ...zero, reunioesExtra: 99, retrabalhos: 99, aprovacoesBloqueadas: 99 });
     expect(e.pontos).toBe(9); // 3 + 3 + 3
+  });
+});
+
+describe("complexidade do cliente (Fase 2, Prioridade 2)", () => {
+  const zero = { decisores: null, validacaoJuridica: false, validacaoTecnica: false, multiIdioma: false, setorRegulado: false };
+
+  it("sem sinais → baixa", () => {
+    expect(sugerirComplexidade(zero).nivel).toBe("baixa");
+  });
+
+  it("jurídico + regulado → alta, com motivos", () => {
+    const c = sugerirComplexidade({ ...zero, validacaoJuridica: true, setorRegulado: true });
+    expect(c.nivel).toBe("alta");
+    expect(c.motivos).toContain("Setor regulado");
+  });
+
+  it("dois decisores + multi-idioma → média", () => {
+    expect(sugerirComplexidade({ ...zero, decisores: 2, multiIdioma: true }).nivel).toBe("media");
   });
 });
 

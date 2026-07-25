@@ -237,3 +237,14 @@ export async function editarContacto(formData: FormData) {
 
   if (clienteId) revalidatePath(`/clientes/${clienteId}`);
 }
+
+/** Guarda o nível de complexidade do cliente (Fase 2, Prioridade 2). */
+export async function guardarComplexidade(formData: FormData) {
+  const id = (formData.get("id") ?? "").toString();
+  const nivel = (formData.get("complexidade") ?? "").toString();
+  if (!id || !["baixa", "media", "alta", "personalizada"].includes(nivel)) return;
+  const supabase = await criarClienteServidor();
+  await supabase.from("clientes").update({ complexidade: nivel }).eq("id", id);
+  revalidatePath(`/clientes/${id}/rentabilidade`);
+  revalidatePath(`/clientes/${id}`);
+}

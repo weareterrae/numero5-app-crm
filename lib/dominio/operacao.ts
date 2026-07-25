@@ -442,6 +442,62 @@ export function indiceEsforco(s: SinaisEsforco): Esforco {
   return { pontos, nivel, criterios };
 }
 
+// ── Complexidade do cliente (Parte 30) ───────────────────────────────────────
+
+export type NivelComplexidade = "baixa" | "media" | "alta";
+
+export const COMPLEXIDADE_ROTULO: Record<string, string> = {
+  baixa: "Baixa",
+  media: "Média",
+  alta: "Alta",
+  personalizada: "Personalizada",
+};
+
+export type SinaisComplexidade = {
+  decisores: number | null;
+  validacaoJuridica: boolean;
+  validacaoTecnica: boolean;
+  multiIdioma: boolean;
+  setorRegulado: boolean;
+};
+
+/**
+ * Sugere um nível de complexidade a partir de sinais — nunca aplica um
+ * multiplicador sozinho; é o operador que decide. Devolve nível + motivos.
+ */
+export function sugerirComplexidade(s: SinaisComplexidade): {
+  nivel: NivelComplexidade;
+  motivos: string[];
+} {
+  const motivos: string[] = [];
+  let p = 0;
+  if (s.decisores != null && s.decisores >= 3) {
+    p += 2;
+    motivos.push("Vários decisores");
+  } else if (s.decisores === 2) {
+    p += 1;
+    motivos.push("Dois decisores");
+  }
+  if (s.validacaoJuridica) {
+    p += 2;
+    motivos.push("Validação jurídica");
+  }
+  if (s.validacaoTecnica) {
+    p += 1;
+    motivos.push("Validação técnica");
+  }
+  if (s.multiIdioma) {
+    p += 1;
+    motivos.push("Vários idiomas/mercados");
+  }
+  if (s.setorRegulado) {
+    p += 2;
+    motivos.push("Setor regulado");
+  }
+  const nivel: NivelComplexidade = p >= 4 ? "alta" : p >= 2 ? "media" : "baixa";
+  return { nivel, motivos };
+}
+
 // ── Rentabilidade real ───────────────────────────────────────────────────────
 
 export type EntradaRentabilidade = {
