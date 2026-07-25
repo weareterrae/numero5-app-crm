@@ -9,6 +9,9 @@ import { descreverEscopo, normalizarEscopo } from "@/lib/dominio/orcamento";
 import { rotuloFaixa } from "@/lib/dominio/intake";
 import { BriefCliente } from "@/components/diagnostico/BriefCliente";
 import { EnviarLink } from "@/components/crm/EnviarLink";
+import { AnaliseInterna } from "@/components/diagnostico/AnaliseInterna";
+import { informacaoEmFalta, podeGerarProposta, type EntradaAnalise } from "@/lib/dominio/diagnostico/analise";
+import type { Brief } from "@/lib/dominio/intake";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +52,16 @@ export default async function DiagnosticoPage({ params }: { params: Promise<{ id
   const pedidoLinhas = descreverEscopo(pedido);
   const faixaPedido = rotuloFaixa((d.pedido as { orcamento?: string } | null)?.orcamento);
 
+  // Análise interna (Fase 4) — derivada do brief, tolerante.
+  const entradaAnalise: EntradaAnalise = {
+    brief: (d.brief ?? {}) as Brief,
+    objetivos: (d.objetivos?.selecionados as string[]) ?? [],
+    objetivosTexto: (d.objetivos?.texto_livre as string) ?? null,
+    orcamento: (d.pedido as { orcamento?: string } | null)?.orcamento ?? null,
+    siteScore: d.site_score ?? null,
+  };
+  const faltaCritica = !podeGerarProposta(informacaoEmFalta(entradaAnalise));
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -69,8 +82,11 @@ export default async function DiagnosticoPage({ params }: { params: Promise<{ id
         <div className="flex flex-wrap gap-2">
           <form action={criarPropostaDeDiagnostico}>
             <input type="hidden" name="diagnostico_id" value={d.id} />
-            <button className="rounded-full bg-gold px-5 py-2 text-sm font-bold text-ink">
-              Criar proposta 🖐️
+            <button
+              className="rounded-full bg-gold px-5 py-2 text-sm font-bold text-ink"
+              title={faltaCritica ? "Falta informação crítica — confirma na análise interna." : undefined}
+            >
+              Criar proposta {faltaCritica ? "⚠️" : "🖐️"}
             </button>
           </form>
           {d.estado !== "concluido" && (
@@ -114,6 +130,13 @@ export default async function DiagnosticoPage({ params }: { params: Promise<{ id
           </p>
         </div>
       )}
+
+      {/* Análise interna — oportunidades, adequação, lacunas (só para o operador) */}
+      <AnaliseInterna
+        diagnosticoId={d.id}
+        entrada={entradaAnalise}
+        analise={(d.analise ?? {}) as { resumo?: string | null; notas?: string | null }}
+      />
 
       {/* O brief profundo que o cliente preencheu */}
       <BriefCliente brief={d.brief} />

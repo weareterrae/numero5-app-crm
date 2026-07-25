@@ -149,3 +149,20 @@ export async function alternarPartilha(formData: FormData) {
   await supabase.from("diagnosticos").update({ partilha_ativa: ativar }).eq("id", id);
   revalidatePath(`/diagnosticos/${id}`);
 }
+
+/** Guarda o resumo e as notas da análise interna (Fase 4). */
+export async function guardarAnalise(formData: FormData) {
+  const id = (formData.get("id") ?? "").toString();
+  if (!id) return;
+  const texto = (v: FormDataEntryValue | null) => {
+    const s = (v ?? "").toString().trim();
+    return s === "" ? null : s;
+  };
+  const analise = {
+    resumo: texto(formData.get("resumo")),
+    notas: texto(formData.get("notas")),
+  };
+  const supabase = await criarClienteServidor();
+  await supabase.from("diagnosticos").update({ analise }).eq("id", id);
+  revalidatePath(`/diagnosticos/${id}`);
+}
