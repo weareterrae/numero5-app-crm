@@ -57,10 +57,27 @@ Funções-chave: `calcular`, `arredondarComercial`, `margem`, `euroHora`,
 Limiares e passo vivem na tabela `configuracoes` (key/value). Auditoria em
 `auditoria` (preço alterado, abaixo do catálogo, desconto). 29 testes (`npm test`).
 
+## Fase 2 — operação, capacidade e controlo (Blocos 1–10, `lib/dominio/operacao.ts`)
+Camada de gestão operacional sobre o sistema comercial. 73 testes (`npm test`).
+- **Direção obrigatória** na avença (extras.direcao + `ehAvencaMensal`; exceção auditada).
+- **Reuniões** (`/clientes/[id]/reunioes`): incluídas vs extra, horas reais, alertas.
+- **Aprovações** (`/aprovacoes`): fluxo sem aprovação tácita, indicador, microcopy de atraso.
+- **Revisões** (`/revisoes`): correção/alteração/retrabalho, rondas, retrabalho faturável.
+- **Duração + pagamentos** (condições da proposta) e **estado financeiro** (`/financeiro`;
+  dívida derivada de `cobrancas`; arranque da Fundação com desbloqueio auditado).
+- **Capacidade** (`/capacidade`): horas produtivas vs planeadas, impacto na proposta.
+- **Rentabilidade real** (`/rentabilidade`): previsto vs real, semáforo por cliente.
+- **Propostas versionadas** (`proposta_versoes`): fotografia imutável do catálogo.
+- **Ordens de alteração** (`/extras` + público `/r/ordem/[token]`): extras aceites pelo cliente.
+Cockpit e digest ganharam os alertas acionáveis de cada bloco.
+
 ## Pendências do Sandro (fora do código)
-- **Correr no Supabase** as migrações que faltam: 0016–0020 e **0023, 0024, 0025**
-  (0022 já corrido). Sem elas, descontos/custos externos/condições ficam inertes
-  (o código é tolerante — não parte).
+- **Correr no Supabase** as migrações que faltam: 0016–0020, **0023, 0024, 0025**
+  (0022 já corrido) e as da Fase 2 **0026–0033**. Sem elas, as funcionalidades
+  ficam inertes (o código é tolerante — não parte).
+- **Preencher os parâmetros [A DEFINIR]** em `configuracoes`: preço/custo/tempo da
+  `direcao`; reuniões incluídas/duração/preço extra; revisões incluídas;
+  horas_mes_total e pct_nao_faturavel (capacidade).
 - **Definir os preços [A DEFINIR]** do catálogo em Definições → Preços (custo
   interno, custos externos, tempo planeado) para a margem e o semáforo terem base.
 - **Env** `DIGEST_EMAIL` no Netlify (para o digest da manhã).
