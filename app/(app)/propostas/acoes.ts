@@ -256,7 +256,85 @@ export async function criarServico(formData: FormData) {
 export async function desativarServico(chave: string, _formData: FormData) {
   if (!chave) return;
   const supabase = await criarClienteServidor();
-  await supabase.from("precos_unitarios").update({ ativo: false }).eq("chave", chave);
+  await supabase
+    .from("precos_unitarios")
+    .update({ ativo: false, estado: "inativo" })
+    .eq("chave", chave);
+  revalidatePath("/definicoes/precos");
+}
+
+/** Guarda TODOS os campos comerciais de um serviço do catálogo, com auditoria
+ *  ao preço (Fase 2 do sistema comercial). */
+export async function guardarServico(formData: FormData) {
+  const chave = t(formData.get("chave"));
+  const rotulo = t(formData.get("rotulo"));
+  if (!chave || !rotulo) return;
+
+  const num = (k: string) => {
+    const s = (formData.get(k) ?? "").toString().trim().replace(",", ".");
+    if (s === "") return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  };
+  const int = (k: string) => {
+    const n = num(k);
+    return n === null ? null : Math.round(n);
+  };
+
+  const supabase = await criarClienteServidor();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: antes } = await supabase
+    .from("precos_unitarios")
+    .select("preco")
+    .eq("chave", chave)
+    .maybeSingle();
+
+  const estado = t(formData.get("estado")) ?? "ativo";
+  const novoPreco = num("preco");
+
+  await supabase
+    .from("precos_unitarios")
+    .update({
+      rotulo,
+      rotulo_en: t(formData.get("rotulo_en")),
+      categoria: t(formData.get("categoria")),
+      cobranca: t(formData.get("cobranca")),
+      unidade: t(formData.get("unidade")) ?? "unidade",
+      estado,
+      ativo: estado === "ativo",
+      preco: novoPreco,
+      preco_minimo: num("preco_minimo"),
+      percentagem: num("percentagem"),
+      minutos: int("minutos"),
+      custo_interno: num("custo_interno"),
+      tempo_planeado_min: int("tempo_planeado_min"),
+      limite_revisoes: int("limite_revisoes"),
+      descricao_interna: t(formData.get("descricao_interna")),
+      desc_cliente_pt: t(formData.get("desc_cliente_pt")),
+      desc_cliente_en: t(formData.get("desc_cliente_en")),
+      inclusoes: t(formData.get("inclusoes")),
+      exclusoes: t(formData.get("exclusoes")),
+      dependencias: t(formData.get("dependencias")),
+      notas_internas: t(formData.get("notas_internas")),
+      permite_desconto: formData.get("permite_desconto") === "on",
+      mostrar_discriminado: formData.get("mostrar_discriminado") === "on",
+    })
+    .eq("chave", chave);
+
+  const antesP = antes?.preco ?? null;
+  if (String(antesP) !== String(novoPreco)) {
+    await supabase.from("auditoria").insert({
+      tabela: "precos_unitarios",
+      registo_id: chave,
+      campo: "preco",
+      valor_anterior: antesP === null ? null : String(antesP),
+      valor_novo: novoPreco === null ? null : String(novoPreco),
+      motivo: t(formData.get("motivo")),
+      autor_id: user?.id ?? null,
+    });
+  }
   revalidatePath("/definicoes/precos");
 }
 

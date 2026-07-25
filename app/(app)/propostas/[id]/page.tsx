@@ -44,7 +44,7 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
     supabase
       .from("precos_unitarios")
       .select("chave, rotulo, tipo, unidade, preco, minutos")
-      .eq("ativo", true)
+      .neq("estado", "inativo")
       .order("ordem"),
     supabase
       .from("casos")

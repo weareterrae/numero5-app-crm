@@ -364,7 +364,8 @@ export function Configurador({
 
             {orc.porDefinir.length > 0 && (
               <p className="mt-3 rounded-lg bg-bad/20 p-2 text-xs">
-                ⚠️ Sem preço definido: {orc.porDefinir.join(", ")}. O total está incompleto.
+                ⚠️ {orc.porDefinir.join(", ")}: este serviço ainda não tem preço definido. Define o
+                preço no catálogo (Definições → Preços) antes de concluir a proposta.
               </p>
             )}
 
@@ -428,7 +429,8 @@ export function Configurador({
         <button
           type="button"
           onClick={guardar}
-          disabled={aGuardar}
+          disabled={aGuardar || orc.porDefinir.length > 0}
+          title={orc.porDefinir.length > 0 ? "Há serviços sem preço definido." : undefined}
           className="rounded-full bg-gold px-5 py-2 text-sm font-bold text-ink disabled:opacity-60"
         >
           {aGuardar ? "A guardar…" : "Guardar âmbito e valores"}
