@@ -470,6 +470,20 @@ export function diferencasVersao(
   };
 }
 
+// ── Ordens de alteração ──────────────────────────────────────────────────────
+
+/** Total de uma ordem de alteração com IVA. */
+export function totalOrdem(preco: number | null | undefined, ivaPct: number | null | undefined): number {
+  const base = Number(preco) || 0;
+  const iva = ivaPct == null ? 0 : Number(ivaPct) || 0;
+  return Math.round(base * (1 + iva / 100) * 100) / 100;
+}
+
+/** Uma ordem só entra em produção depois de aceite. */
+export function ordemEntraProducao(estado: string | null | undefined): boolean {
+  return estado === "aceite" || estado === "produzida" || estado === "faturada";
+}
+
 /** Sugestões internas quando a rentabilidade aperta (nunca aplicadas sozinhas). */
 export function sugestoesRentabilidade(cor: string, desvioHoras: number): string[] {
   const s: string[] = [];

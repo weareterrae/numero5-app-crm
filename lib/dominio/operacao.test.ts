@@ -21,6 +21,8 @@ import {
   rentabilidade,
   sugestoesRentabilidade,
   diferencasVersao,
+  totalOrdem,
+  ordemEntraProducao,
   type Reuniao,
   type Aprovacao,
   type Revisao,
@@ -328,5 +330,21 @@ describe("propostas versionadas (Fase 2, bloco 9)", () => {
     const comNovos = calcular(escopo, precosNovos).totalMensal;
     expect(comSnapshot).toBe(antes);
     expect(comNovos).not.toBe(antes); // confirma que a diferença existiria sem o snapshot
+  });
+});
+
+describe("ordens de alteração (Fase 2, bloco 10)", () => {
+  it("o total soma o IVA", () => {
+    expect(totalOrdem(100, 23)).toBe(123);
+    expect(totalOrdem(100, 0)).toBe(100);
+    expect(totalOrdem(null, 23)).toBe(0);
+  });
+
+  it("só entra em produção depois de aceite", () => {
+    expect(ordemEntraProducao("enviada")).toBe(false);
+    expect(ordemEntraProducao("esclarecimento")).toBe(false);
+    expect(ordemEntraProducao("recusada")).toBe(false);
+    expect(ordemEntraProducao("aceite")).toBe(true);
+    expect(ordemEntraProducao("produzida")).toBe(true);
   });
 });

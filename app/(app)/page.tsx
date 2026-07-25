@@ -140,6 +140,16 @@ export default async function Cockpit() {
     ESTADOS_FINANCEIROS_ALERTA.has(c.financeiro?.estado ?? ""),
   );
 
+  // Ordens de alteração à espera do cliente (tolerante: 0033).
+  const { data: ordRows } = await supabase
+    .from("ordens_alteracao")
+    .select("cliente_id, titulo, estado, clientes(nome_marca)")
+    .in("estado", ["enviada", "esclarecimento"])
+    .order("criado_em", { ascending: false })
+    .then((r) => r, () => ({ data: [] }));
+  type OrdemPend = { cliente_id: string; titulo: string; estado: string; clientes: ClienteEmbed };
+  const ordensPendentes = (ordRows ?? []) as unknown as OrdemPend[];
+
   const vazio = clientes.length === 0;
 
   return (
@@ -300,6 +310,31 @@ export default async function Cockpit() {
                       {ESTADO_FINANCEIRO_ROTULO[
                         (c.financeiro?.estado ?? "regular") as keyof typeof ESTADO_FINANCEIRO_ROTULO
                       ] ?? c.financeiro?.estado}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {ordensPendentes.length > 0 && (
+            <section className="rounded-xl border-2 border-gold/40 bg-gold/5 p-5">
+              <h2 className="font-display text-lg font-extrabold">
+                Ordens à espera do cliente ({ordensPendentes.length})
+              </h2>
+              <p className="mb-3 text-xs text-soft">Extras enviados que aguardam aceitação.</p>
+              <ul className="space-y-1.5">
+                {ordensPendentes.slice(0, 8).map((o, i) => (
+                  <li
+                    key={i}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-white px-3 py-2 text-sm"
+                  >
+                    <Link href={`/clientes/${o.cliente_id}/extras`} className="font-bold hover:underline">
+                      {nomeDe(o.clientes)}
+                    </Link>
+                    <span className="text-soft">
+                      {o.titulo}
+                      {o.estado === "esclarecimento" && " · esclarecimento pedido"}
                     </span>
                   </li>
                 ))}

@@ -200,6 +200,12 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
             >
               📈 Rentabilidade
             </Link>
+            <Link
+              href={`/clientes/${cliente.id}/extras`}
+              className="rounded-full border border-line px-4 py-2 text-sm font-bold text-ink"
+            >
+              ➕ Ordens de alteração
+            </Link>
           </div>
           <MudarEstado
             clienteId={cliente.id}
