@@ -92,6 +92,17 @@ export default async function Cockpit() {
     .filter((d) => d.alvo === "avenca")
     .reduce((s, d) => s + Math.max(0, (d.preco_apos ?? 0) - (d.preco_durante ?? 0)), 0);
 
+  // Reuniões extra por faturar (tolerante: 0027 pode não ter corrido).
+  const { data: reuRows } = await supabase
+    .from("reunioes")
+    .select("cliente_id, data, clientes(nome_marca)")
+    .eq("incluida", false)
+    .eq("faturar", true)
+    .eq("faturada", false)
+    .order("data", { ascending: false });
+  type ReuFaturar = { cliente_id: string; data: string; clientes: ClienteEmbed };
+  const reunioesPorFaturar = (reuRows ?? []) as unknown as ReuFaturar[];
+
   const vazio = clientes.length === 0;
 
   return (
@@ -151,6 +162,28 @@ export default async function Cockpit() {
                       <b>{d.preco_apos != null ? euros(d.preco_apos) : "—"}</b>
                       <span className="ml-2 text-soft">até {dataCurta(d.fim)}</span>
                     </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {reunioesPorFaturar.length > 0 && (
+            <section className="rounded-xl border-2 border-warn bg-warn/10 p-5">
+              <h2 className="font-display text-lg font-extrabold">
+                Reuniões extra por faturar ({reunioesPorFaturar.length})
+              </h2>
+              <p className="mb-3 text-xs text-soft">Trabalho fora do plano que ainda não foi cobrado.</p>
+              <ul className="space-y-1.5">
+                {reunioesPorFaturar.slice(0, 8).map((r, i) => (
+                  <li
+                    key={i}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-white px-3 py-2 text-sm"
+                  >
+                    <Link href={`/clientes/${r.cliente_id}/reunioes`} className="font-bold hover:underline">
+                      {nomeDe(r.clientes)}
+                    </Link>
+                    <span className="text-soft">reunião extra · {dataCurta(r.data)}</span>
                   </li>
                 ))}
               </ul>
