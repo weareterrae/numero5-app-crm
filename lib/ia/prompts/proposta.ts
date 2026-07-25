@@ -162,6 +162,10 @@ function linhasBrief(b: Brief): string[] {
   txt("Ambição a 12 meses", b.ambicao);
   um("Orçamento de arranque", "orcamento_arranque", b.orcamento_arranque);
   um("Prazo", "prazo", b.prazo);
+  // Quem decide (para a proposta e o onboarding)
+  um("Quem decide", "quem_decide", b.quem_decide);
+  txt("Nome do decisor", b.decisor_nome);
+  txt("Contacto do decisor", b.decisor_contacto);
   txt("Nota final", b.nota_final);
   return L;
 }

@@ -179,6 +179,14 @@ export const FAIXAS_ARRANQUE = [
   ["nao_sei", "Ainda não sei", "Not sure yet"],
 ] as const;
 
+// ── Quem decide (Parte 19) ──────────────────────────────────────────────────
+export const DECISORES = [
+  ["eu", "Sou eu", "It's me"],
+  ["socios", "Eu e os sócios", "Me and the partners"],
+  ["direcao", "A direção", "The leadership"],
+  ["varios", "Várias pessoas", "Several people"],
+] as const;
+
 /** Tudo o que o cliente conta no diagnóstico profundo. Guardado em diagnosticos.brief. */
 export type Brief = {
   presenca?: string;
@@ -218,6 +226,10 @@ export type Brief = {
   // Ambição / investimento
   intencao?: string;
   orcamento_arranque?: string;
+  // Quem decide (Parte 19)
+  quem_decide?: string;
+  decisor_nome?: string;
+  decisor_contacto?: string;
   // Detetado no website (verificável, para o cliente confirmar/corrigir)
   site_detetado?: Record<string, unknown>;
 };
@@ -245,6 +257,7 @@ export const LISTAS_BRIEF: Record<string, readonly (readonly [string, string, st
   ferramentas: FERRAMENTAS,
   intencao: INTENCAO,
   orcamento_arranque: FAIXAS_ARRANQUE,
+  quem_decide: DECISORES,
 };
 
 // ── Lógica adaptativa (Parte 6): que perguntas fazem sentido mostrar ─────────

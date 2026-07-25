@@ -5,6 +5,7 @@ import { Simbolo } from "@/components/marca/Simbolo";
 import { OBJETIVOS, type ChaveObjetivo } from "@/lib/dominio/diagnostico/recomendacoes";
 import {
   AUTOMACAO,
+  DECISORES,
   FAIXAS_ORCAMENTO,
   FAIXAS_ARRANQUE,
   FERRAMENTAS,
@@ -30,6 +31,8 @@ import {
   TRATAMENTO,
   investeAnuncios,
   recebeContactos,
+  respostaSubstancial,
+  urlValido,
   type Brief,
   type Idioma,
 } from "@/lib/dominio/intake";
@@ -102,6 +105,11 @@ const TX = {
     revSite: "Site",
     revOrcamento: "Investimento",
     revVazio: "—",
+    decideQ: "Quem terá de dizer «sim» para avançarmos?",
+    decisorNomeQ: "Nome de quem decide (opcional)",
+    decisorContactoQ: "Contacto dele (opcional)",
+    avisoObjTexto: "Escreve um bocadinho mais — ajuda-nos a perceber o que queres.",
+    avisoUrl: "Isto não parece um endereço válido — confere.",
     objTxt: "Por tuas palavras: o que querias mesmo que acontecesse?",
     objTxtPH: "Sonha um bocado. Daqui a um ano, o que mudou no negócio?",
     p4t: "A personalidade da tua marca",
@@ -212,6 +220,11 @@ const TX = {
     revSite: "Website",
     revOrcamento: "Investment",
     revVazio: "—",
+    decideQ: "Who has to say «yes» for us to go ahead?",
+    decisorNomeQ: "Name of the decision-maker (optional)",
+    decisorContactoQ: "Their contact (optional)",
+    avisoObjTexto: "Write a little more — it helps us understand what you want.",
+    avisoUrl: "That doesn't look like a valid address — check it.",
     objTxt: "In your words: what would you really love to happen?",
     objTxtPH: "Dream a little. A year from now, what changed in the business?",
     p4t: "Your brand's personality",
@@ -429,6 +442,9 @@ export function FormularioIntake({
         <>
           <Campo label={t.website}>
             <input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://…" className={CAMPO} />
+            {website.trim().length > 3 && !urlValido(website) && (
+              <p className="mt-1 text-xs text-warn">{t.avisoUrl}</p>
+            )}
             {website.trim() && (
               <button
                 type="button"
@@ -534,6 +550,9 @@ export function FormularioIntake({
           </Pergunta>
           <Campo label={t.objTxt}>
             <textarea value={objetivosTexto} onChange={(e) => setObjetivosTexto(e.target.value)} rows={3} placeholder={t.objTxtPH} className={CAMPO} />
+            {objetivosTexto.trim().length > 0 && !respostaSubstancial(objetivosTexto) && (
+              <p className="mt-1 text-xs text-warn">{t.avisoObjTexto}</p>
+            )}
           </Campo>
         </>
       ),
@@ -691,6 +710,19 @@ export function FormularioIntake({
           <Pergunta titulo={t.prazoQ}>
             <Chips opcoes={PRAZO} L={L} ativo={(k) => brief.prazo === k} onSel={(k) => um("prazo", k)} />
           </Pergunta>
+          <Pergunta titulo={t.decideQ}>
+            <Chips opcoes={DECISORES} L={L} ativo={(k) => brief.quem_decide === k} onSel={(k) => um("quem_decide", k)} />
+          </Pergunta>
+          {(brief.quem_decide === "direcao" || brief.quem_decide === "varios") && (
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Campo label={t.decisorNomeQ}>
+                <input value={brief.decisor_nome ?? ""} onChange={(e) => setB("decisor_nome", e.target.value)} className={CAMPO} />
+              </Campo>
+              <Campo label={t.decisorContactoQ}>
+                <input value={brief.decisor_contacto ?? ""} onChange={(e) => setB("decisor_contacto", e.target.value)} className={CAMPO} />
+              </Campo>
+            </div>
+          )}
           <Campo label={t.notaFinalQ}>
             <textarea value={brief.nota_final ?? ""} onChange={(e) => setB("nota_final", e.target.value)} rows={2} placeholder={t.notaFinalPH} className={CAMPO} />
           </Campo>
