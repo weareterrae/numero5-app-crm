@@ -58,13 +58,20 @@ export default async function ExtrasPage({ params }: { params: Promise<{ id: str
     (contactos ?? []).find((c) => c.telefone || c.email) ??
     null;
 
-  const { data: ordensData } = await supabase
-    .from("ordens_alteracao")
-    .select("id, titulo, descricao, origem, impacto, prazo, horas, preco, iva_pct, estado, token, decisao_nota, criado_em")
-    .eq("cliente_id", id)
-    .order("criado_em", { ascending: false })
-    .then((r) => r, () => ({ data: [] }));
+  const [{ data: ordensData }, { data: cfgIva }] = await Promise.all([
+    supabase
+      .from("ordens_alteracao")
+      .select("id, titulo, descricao, origem, impacto, prazo, horas, preco, iva_pct, estado, token, decisao_nota, criado_em")
+      .eq("cliente_id", id)
+      .order("criado_em", { ascending: false })
+      .then((r) => r, () => ({ data: [] })),
+    supabase.from("configuracoes").select("valor").eq("chave", "iva_taxa").maybeSingle().then(
+      (r) => r,
+      () => ({ data: null }),
+    ),
+  ]);
   const ordens = (ordensData ?? []) as Ordem[];
+  const ivaDefeito = Number(cfgIva?.valor) || 23;
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
@@ -219,7 +226,7 @@ export default async function ExtrasPage({ params }: { params: Promise<{ id: str
           </div>
           <div>
             <label className={lab}>IVA (%)</label>
-            <input name="iva_pct" type="number" step="1" min="0" defaultValue={23} className={`${inp} tabular-nums`} />
+            <input name="iva_pct" type="number" step="1" min="0" defaultValue={ivaDefeito} className={`${inp} tabular-nums`} />
           </div>
           <button className="rounded-full bg-gold px-5 py-2 text-sm font-bold text-ink sm:col-span-2">
             Criar ordem
