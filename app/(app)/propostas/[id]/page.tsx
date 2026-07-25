@@ -329,8 +329,16 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
           <div className="mt-3">
             <EnviarLink
               caminho={`/r/proposta/${p.partilha_token}`}
-              assunto={`A tua proposta · ${cliente?.nome_marca ?? "Nº 5"}`}
-              mensagem={`Olá${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ Aqui está a proposta que preparámos para o ${cliente?.nome_marca ?? "teu negócio"}. Podes vê-la, e ao fundo aceitas ou dizes-nos o que achas:`}
+              assunto={
+                idiomaCliente === "en"
+                  ? `Your proposal · ${cliente?.nome_marca ?? "Nº 5"}`
+                  : `A tua proposta · ${cliente?.nome_marca ?? "Nº 5"}`
+              }
+              mensagem={
+                idiomaCliente === "en"
+                  ? `Hi${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ Here's the proposal we've put together for ${cliente?.nome_marca ?? "your business"}. Take a look — at the bottom you can accept or tell us what you think:`
+                  : `Olá${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ Aqui está a proposta que preparámos para o ${cliente?.nome_marca ?? "teu negócio"}. Podes vê-la, e ao fundo aceitas ou dizes-nos o que achas:`
+              }
               telefone={contacto?.telefone}
               email={contacto?.email}
               clienteId={cliente?.id}

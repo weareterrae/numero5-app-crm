@@ -14,6 +14,7 @@ export function LinkDiagnostico({
   telefone,
   email,
   clienteId,
+  idioma = "pt",
 }: {
   token: string | null;
   submetidoEm: string | null;
@@ -21,10 +22,15 @@ export function LinkDiagnostico({
   telefone?: string | null;
   email?: string | null;
   clienteId?: string | null;
+  idioma?: "pt" | "en";
 }) {
   if (!token) return null;
 
-  const mensagem = `Boas! 🖐️ Aqui é o Sandro, do Nº 5. Antes de avançarmos com o ${nome}, gostava de perceber bem o teu negócio — e ninguém o conta melhor do que tu. Preparei-te um raio-x rápido (leva 3 minutos). Preenche quando puderes, é por aqui:`;
+  const mensagem =
+    idioma === "en"
+      ? `Hi! 🖐️ This is Sandro, from Nº 5. Before we move ahead with ${nome}, I'd love to understand your business properly — and no one tells it better than you. I've put together a quick diagnostic (takes 3 minutes). Fill it in whenever you can, right here:`
+      : `Boas! 🖐️ Aqui é o Sandro, do Nº 5. Antes de avançarmos com o ${nome}, gostava de perceber bem o teu negócio — e ninguém o conta melhor do que tu. Preparei-te um raio-x rápido (leva 3 minutos). Preenche quando puderes, é por aqui:`;
+  const assunto = idioma === "en" ? "Your diagnostic — Nº 5" : "O teu diagnóstico — Nº 5";
 
   return (
     <section className="rounded-xl border border-line bg-white p-5">
@@ -43,7 +49,7 @@ export function LinkDiagnostico({
 
       <EnviarLink
         caminho={`/intake/${token}`}
-        assunto={`O teu diagnóstico — Nº 5`}
+        assunto={assunto}
         mensagem={mensagem}
         telefone={telefone}
         email={email}

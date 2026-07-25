@@ -42,6 +42,9 @@ export default async function PlanoPage({
     .limit(1)
     .maybeSingle();
 
+  const { data: idiomaRow } = await supabase.from("clientes").select("idioma").eq("id", id).maybeSingle();
+  const idiomaCliente = idiomaRow?.idioma === "en" ? "en" : "pt";
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -154,8 +157,16 @@ export default async function PlanoPage({
           <div className="mt-3">
             <EnviarLink
               caminho={`/r/plano/${plano.partilha_token}`}
-              assunto={`Plano de ${mesLegivel(plano.mes)} · ${cliente.nome_marca}`}
-              mensagem={`Olá${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ Aqui está o plano de publicações de ${mesLegivel(plano.mes)} para o ${cliente.nome_marca}. Dá uma olhada e diz-nos se está tudo bem ou o que queres ajustar — tens até 5 dias:`}
+              assunto={
+                idiomaCliente === "en"
+                  ? `${mesLegivel(plano.mes, "en")} plan · ${cliente.nome_marca}`
+                  : `Plano de ${mesLegivel(plano.mes)} · ${cliente.nome_marca}`
+              }
+              mensagem={
+                idiomaCliente === "en"
+                  ? `Hi${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ Here's the ${mesLegivel(plano.mes, "en")} publishing plan for ${cliente.nome_marca}. Take a look and let us know if it's all good or what you'd like to adjust — you have 5 days:`
+                  : `Olá${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ Aqui está o plano de publicações de ${mesLegivel(plano.mes)} para o ${cliente.nome_marca}. Dá uma olhada e diz-nos se está tudo bem ou o que queres ajustar — tens até 5 dias:`
+              }
               telefone={contacto?.telefone}
               email={contacto?.email}
               clienteId={cliente.id}

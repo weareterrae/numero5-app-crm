@@ -50,6 +50,9 @@ export default async function RelatorioPage({
       .maybeSingle(),
   ]);
 
+  const { data: idiomaRow } = await supabase.from("clientes").select("idioma").eq("id", id).maybeSingle();
+  const idiomaCliente = idiomaRow?.idioma === "en" ? "en" : "pt";
+
   // Brief que uso no Claude Code para produzir o relatório.
   const p = prop?.escopo ? normalizarEscopo(prop.escopo).producao : null;
   const contratado = p
@@ -183,8 +186,16 @@ export default async function RelatorioPage({
           <div className="mt-3">
             <EnviarLink
               caminho={`/r/mes/${relatorio.partilha_token}`}
-              assunto={`O teu mês em números · ${cliente.nome_marca}`}
-              mensagem={`Olá${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ Fechámos ${mesLegivel(relatorio.mes)} e aqui está o que aconteceu com o ${cliente.nome_marca}, em números. Dá uma olhada:`}
+              assunto={
+                idiomaCliente === "en"
+                  ? `Your month in numbers · ${cliente.nome_marca}`
+                  : `O teu mês em números · ${cliente.nome_marca}`
+              }
+              mensagem={
+                idiomaCliente === "en"
+                  ? `Hi${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ We've wrapped up ${mesLegivel(relatorio.mes, "en")} — here's what happened with ${cliente.nome_marca}, in numbers. Take a look:`
+                  : `Olá${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ Fechámos ${mesLegivel(relatorio.mes)} e aqui está o que aconteceu com o ${cliente.nome_marca}, em números. Dá uma olhada:`
+              }
               telefone={contacto?.telefone}
               email={contacto?.email}
               clienteId={cliente.id}

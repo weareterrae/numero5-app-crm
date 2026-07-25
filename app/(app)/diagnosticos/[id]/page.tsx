@@ -39,6 +39,11 @@ export default async function DiagnosticoPage({ params }: { params: Promise<{ id
         .maybeSingle()
     : { data: null };
 
+  const { data: idiomaRow } = cliente
+    ? await supabase.from("clientes").select("idioma").eq("id", cliente.id).maybeSingle()
+    : { data: null };
+  const idiomaCliente = idiomaRow?.idioma === "en" ? "en" : "pt";
+
   const doCliente = d.origem === "cliente";
   const pedido = normalizarEscopo(d.pedido ?? {});
   const pedidoLinhas = descreverEscopo(pedido);
@@ -118,8 +123,16 @@ export default async function DiagnosticoPage({ params }: { params: Promise<{ id
           <p className="mb-2 text-sm font-bold">Enviar o relatório ao cliente:</p>
           <EnviarLink
             caminho={`/r/relatorio/${d.partilha_token}`}
-            assunto={`O teu Raio-X · ${cliente?.nome_marca ?? "Nº 5"}`}
-            mensagem={`Olá${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ Preparámos um Raio-X à presença digital do ${cliente?.nome_marca ?? "teu negócio"}. Vê aqui o que encontrámos e onde podemos ajudar:`}
+            assunto={
+              idiomaCliente === "en"
+                ? `Your X-ray · ${cliente?.nome_marca ?? "Nº 5"}`
+                : `O teu Raio-X · ${cliente?.nome_marca ?? "Nº 5"}`
+            }
+            mensagem={
+              idiomaCliente === "en"
+                ? `Hi${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ We've put together an X-ray of ${cliente?.nome_marca ?? "your business"}'s digital presence. See what we found and where we can help:`
+                : `Olá${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ Preparámos um Raio-X à presença digital do ${cliente?.nome_marca ?? "teu negócio"}. Vê aqui o que encontrámos e onde podemos ajudar:`
+            }
             telefone={contacto?.telefone}
             email={contacto?.email}
             clienteId={cliente?.id}

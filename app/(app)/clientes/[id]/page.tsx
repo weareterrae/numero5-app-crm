@@ -212,6 +212,7 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
         telefone={contactoPrincipal?.telefone}
         email={contactoPrincipal?.email}
         clienteId={cliente.id}
+        idioma={idiomaCliente === "en" ? "en" : "pt"}
       />
 
       {/* Assistente comercial */}
