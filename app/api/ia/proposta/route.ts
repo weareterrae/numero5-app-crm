@@ -36,25 +36,31 @@ export async function POST(req: NextRequest) {
     ? `WRITE EVERYTHING IN ENGLISH — the client speaks English. Keep the Nº 5 voice (warm, direct, confident, human, "you") but in natural English. The Portuguese/"tu" language rule below does NOT apply; every other rule still does. All JSON string values must be in English.\n\n${SISTEMA_PROPOSTA}`
     : SISTEMA_PROPOSTA;
 
-  const r = await ia.gerar({
+  const pedido = {
     sistema,
     utilizador: `${emIngles ? "Write the proposal from this real dossier" : "Escreve a proposta a partir deste dossiê real"}:\n\n${montarDossier(dossier)}`,
     json: true,
     // Esquema grande (percebemos, medição, responsabilidades…) + o Gemini gasta
     // tokens a "pensar". Com pouco espaço a resposta sai truncada → JSON inválido.
     maxTokens: 8192,
-  });
+  };
 
-  if (!r.ok) return NextResponse.json({ erro: r.erro }, { status: 200 });
+  // Gera, valida, e tenta uma segunda vez se vier truncada/inválida (Parte 49).
+  let ultimoErro = "";
+  for (let tentativa = 0; tentativa < 2; tentativa++) {
+    const r = await ia.gerar(pedido);
+    if (!r.ok) {
+      ultimoErro = r.erro;
+      continue;
+    }
+    const conteudo = lerJson<ConteudoProposta>(r.texto);
+    const validacao = validarConteudoProposta(conteudo);
+    if (validacao.ok) return NextResponse.json({ conteudo });
+    ultimoErro = validacao.erros.join("; ");
+  }
 
-  const conteudo = lerJson<ConteudoProposta>(r.texto);
-  // Valida o schema ANTES de devolver — conteúdo inválido não se publica (Parte 49).
-  const validacao = validarConteudoProposta(conteudo);
-  if (!validacao.ok)
-    return NextResponse.json(
-      { erro: `A IA devolveu algo incompleto (${validacao.erros.join("; ")}). Tenta de novo.` },
-      { status: 200 },
-    );
-
-  return NextResponse.json({ conteudo });
+  return NextResponse.json(
+    { erro: `A IA não conseguiu completar (${ultimoErro}). Tenta de novo daqui a pouco.` },
+    { status: 200 },
+  );
 }
