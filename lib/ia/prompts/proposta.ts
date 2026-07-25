@@ -55,18 +55,26 @@ Se fizer sentido propor um assistente, sugere um nome novo, inventado para ESTE 
 🗺️ OS PRIMEIROS 90 DIAS (dá confiança e mostra o caminho):
 - 3 fases concretas do arranque, para o cliente ver que há um plano. Sem números garantidos.
 
+🔎 FACTOS vs. INTERPRETAÇÃO (Parte 50 — obrigatório):
+- Separa o que o CLIENTE DISSE ou o que foi OBSERVADO no site (factos) da tua LEITURA estratégica (interpretação). Nunca apresentes uma inferência como facto.
+- Onde tiveres dúvida ou faltar um dado, escreve linguagem prudente e marca «[A CONFIRMAR]». Nunca inventes para preencher.
+
 DEVOLVES APENAS JSON válido, sem markdown, com esta forma exata:
 {
   "abertura": "2 parágrafos curtos separados por \\n\\n: onde o cliente está hoje, honesto e caloroso, ancorado nos achados. Nomeia as lacunas reais sem ser cruel — está um empresário do outro lado.",
   "objetivo": "1 parágrafo: onde vamos chegar juntos. Ambicioso mas com os pés na terra, sem números garantidos.",
+  "percebemos": { "factos": ["o que o cliente disse / o que se observou no site — factos, não opinião"], "leitura": ["a nossa leitura estratégica desses factos"] },
   "prioridades": [ { "titulo": "título curto e concreto", "texto": "2-3 frases: o problema (do dossiê) → o que fazemos → porque muda o jogo para ESTE negócio" } ],
   "construir": [ { "titulo": "nome do entregável (ex.: 'Site montra com marcações', 'Motor de conteúdo mensal')", "texto": "1-2 frases: o que é e o que muda para ele" } ],
   "assistente": { "nome": "nome inventado para esta marca", "descricao": "2-3 frases: o que faz no dia-a-dia, na voz da marca" },
   "roadmap": [ { "fase": "Primeiros 30 dias", "titulo": "título da fase", "texto": "1-2 frases do que acontece" } ],
+  "medicao": [ { "metrica": "o que vamos medir (ex.: contactos do formulário)", "fonte": "de onde vem o número (ex.: formulário do site)" } ],
+  "responsabilidades": { "n5": ["o que o Nº 5 assume"], "cliente": ["o que a empresa assegura: acessos, materiais, aprovações, resposta aos contactos"] },
+  "por_confirmar": ["dados que ficaram por confirmar, se existirem — senão, lista vazia"],
   "porque_n5": "1 parágrafo: porquê o Nº 5 — pessoas + IA como acelerador, a prova real (marcas acompanhadas em 2 países, redes geridas e sites no ar) e a honestidade da casa.",
   "fecho": "1-2 frases a convidar para o próximo passo. Aqui podes usar 🖐️."
 }
-Entre 3 e 5 prioridades. "construir" com 2-5 itens. "roadmap" com exatamente 3 fases (30 / 60 / 90 dias). "assistente" pode ser null se não encaixar. Texto simples, sem markdown.`;
+Entre 3 e 5 prioridades. "construir" com 2-5 itens. "roadmap" com exatamente 3 fases (30 / 60 / 90 dias). "medicao" com 2-4 métricas, SEMPRE com fonte real (nunca ROI se o cliente não liga leads a vendas). "assistente" pode ser null se não encaixar. "por_confirmar" pode ser lista vazia. Texto simples, sem markdown.`;
 
 export type ConteudoProposta = {
   abertura: string;
@@ -77,6 +85,15 @@ export type ConteudoProposta = {
   roadmap: { fase: string; titulo: string; texto: string }[];
   porque_n5: string;
   fecho: string;
+  // Novos (Parte C+E) — opcionais, para não partir propostas antigas.
+  /** O que percebemos: factos que o cliente deu vs. a nossa leitura. */
+  percebemos?: { factos: string[]; leitura: string[] } | null;
+  /** O que será medido e a fonte de cada métrica. */
+  medicao?: { metrica: string; fonte: string }[] | null;
+  /** Responsabilidades: o Nº 5 assume / a empresa assegura. */
+  responsabilidades?: { n5: string[]; cliente: string[] } | null;
+  /** Dados por confirmar antes de fechar (marcados [A CONFIRMAR]). */
+  por_confirmar?: string[] | null;
 };
 
 export type DossierProposta = {

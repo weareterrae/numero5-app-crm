@@ -7,6 +7,7 @@ import {
   type ConteudoProposta,
   type DossierProposta,
 } from "@/lib/ia/prompts/proposta";
+import { validarConteudoProposta } from "@/lib/ia/prompts/validar-proposta";
 
 export async function POST(req: NextRequest) {
   const supabase = await criarClienteServidor();
@@ -45,8 +46,13 @@ export async function POST(req: NextRequest) {
   if (!r.ok) return NextResponse.json({ erro: r.erro }, { status: 200 });
 
   const conteudo = lerJson<ConteudoProposta>(r.texto);
-  if (!conteudo?.abertura || !Array.isArray(conteudo.prioridades))
-    return NextResponse.json({ erro: "A IA devolveu algo que não consegui ler. Tenta de novo." }, { status: 200 });
+  // Valida o schema ANTES de devolver — conteúdo inválido não se publica (Parte 49).
+  const validacao = validarConteudoProposta(conteudo);
+  if (!validacao.ok)
+    return NextResponse.json(
+      { erro: `A IA devolveu algo incompleto (${validacao.erros.join("; ")}). Tenta de novo.` },
+      { status: 200 },
+    );
 
   return NextResponse.json({ conteudo });
 }

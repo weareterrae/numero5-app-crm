@@ -12,6 +12,7 @@ import { Configurador } from "@/components/propostas/Configurador";
 import { DescontoProposta, type Desconto } from "@/components/propostas/DescontoProposta";
 import { CondicoesProposta, type Condicoes } from "@/components/propostas/CondicoesProposta";
 import { VersoesProposta, type Versao } from "@/components/propostas/VersoesProposta";
+import { ChecklistRevisao } from "@/components/propostas/ChecklistRevisao";
 import { CasosPicker, type Caso } from "@/components/propostas/CasosPicker";
 import { calcular, descreverEscopo, normalizarEscopo, type Preco } from "@/lib/dominio/orcamento";
 import { horasProdutivas, ocupacao, nivelCapacidade } from "@/lib/dominio/operacao";
@@ -77,6 +78,17 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
         .eq("id", p.diagnostico_id)
         .maybeSingle()
     : { data: null };
+
+  // Resumo da análise interna (tolerante: coluna só existe após 0035).
+  const { data: analiseRow } = p.diagnostico_id
+    ? await supabase
+        .from("diagnosticos")
+        .select("analise")
+        .eq("id", p.diagnostico_id)
+        .maybeSingle()
+        .then((r) => r, () => ({ data: null }))
+    : { data: null };
+  const analiseResumo = (analiseRow?.analise as { resumo?: string } | null)?.resumo ?? null;
 
   const { data: idiomaRow } = cliente
     ? await supabase.from("clientes").select("idioma").eq("id", cliente.id).maybeSingle()
@@ -185,7 +197,8 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
     brief: diag?.brief ?? null,
     idioma: idiomaCliente,
     // O que o Sandro já sabe do negócio — é daqui que sai a originalidade.
-    notas: cliente?.notas_gerais ?? null,
+    // Junta a leitura do consultor (resumo da análise interna), se existir.
+    notas: [cliente?.notas_gerais, analiseResumo].filter(Boolean).join("\n\n") || null,
   };
 
   // O pedido do cliente (para o duplo investimento).
@@ -362,6 +375,13 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
       />
 
       <VersoesProposta propostaId={p.id} versoes={versoes} />
+
+      <ChecklistRevisao
+        conteudo={p.conteudo}
+        temValores={nossoMensal > 0 || nossoSetup > 0}
+        temValidade={!!p.validade}
+        idiomaCliente={idiomaCliente}
+      />
 
       {/* Pacote, âmbito e investimento */}
       <form action={guardarProposta} className="rounded-xl border border-line bg-white p-5">

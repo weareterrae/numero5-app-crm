@@ -100,6 +100,13 @@ const TX = {
     condFundacaoTitulo: "Pagamento do arranque",
     fundAdjudicacao: "na adjudicação",
     fundEntrega: "antes da entrega",
+    percebemosT: "O que percebemos",
+    factosT: "O que nos disseste",
+    leituraT: "A nossa leitura",
+    medicaoT: "O que vamos medir",
+    respT: "Quem faz o quê",
+    respN5: "O Nº 5 assume",
+    respCliente: "A tua parte",
     ritmo: "o ritmo, mês a mês",
     ritmoH: "Como trabalhamos, todos os meses",
     ritmoItens: [
@@ -180,6 +187,13 @@ const TX = {
     condFundacaoTitulo: "Setup payment",
     fundAdjudicacao: "on signing",
     fundEntrega: "before delivery",
+    percebemosT: "What we understood",
+    factosT: "What you told us",
+    leituraT: "Our reading",
+    medicaoT: "What we'll measure",
+    respT: "Who does what",
+    respN5: "Nº 5 handles",
+    respCliente: "Your part",
     ritmo: "the monthly rhythm",
     ritmoH: "How we work, every month",
     ritmoItens: [
@@ -342,6 +356,34 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
           </section>
         )}
 
+        {c.percebemos && (!!c.percebemos.factos?.length || !!c.percebemos.leitura?.length) && (
+          <section className="mb-8">
+            <p className="rotulo">{t.percebemosT}</p>
+            <div className="mt-2 grid gap-3 sm:grid-cols-2">
+              {!!c.percebemos.factos?.length && (
+                <div className="rounded-xl border border-line bg-white p-4">
+                  <p className="mb-1.5 text-xs font-bold text-grey">{t.factosT}</p>
+                  <ul className="space-y-1 text-sm">
+                    {c.percebemos.factos.map((f, i) => (
+                      <li key={i}>· {f}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {!!c.percebemos.leitura?.length && (
+                <div className="rounded-xl border border-gold/40 bg-gold/5 p-4">
+                  <p className="mb-1.5 text-xs font-bold text-gold-dark">{t.leituraT}</p>
+                  <ul className="space-y-1 text-sm">
+                    {c.percebemos.leitura.map((f, i) => (
+                      <li key={i}>· {f}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
         {!!c.prioridades?.length && (
           <section className="mb-8">
             <p className="rotulo">{t.resolver}</p>
@@ -456,6 +498,44 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
                   <p className="mt-1 text-sm text-grey">{x.texto}</p>
                 </div>
               ))}
+            </div>
+          </section>
+        )}
+
+        {!!c.medicao?.length && (
+          <section className="mb-8">
+            <p className="rotulo">{t.medicaoT}</p>
+            <ul className="mt-2 divide-y divide-line/60 rounded-xl border border-line bg-white">
+              {c.medicao.map((m, i) => (
+                <li key={i} className="flex flex-wrap items-baseline justify-between gap-2 px-4 py-2.5 text-sm">
+                  <span className="font-bold">{m.metrica}</span>
+                  <span className="text-xs text-soft">{m.fonte}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        {c.responsabilidades && (!!c.responsabilidades.n5?.length || !!c.responsabilidades.cliente?.length) && (
+          <section className="mb-8">
+            <p className="rotulo">{t.respT}</p>
+            <div className="mt-2 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl border border-gold/40 bg-gold/5 p-4">
+                <p className="mb-1.5 text-xs font-bold text-gold-dark">{t.respN5}</p>
+                <ul className="space-y-1 text-sm">
+                  {(c.responsabilidades.n5 ?? []).map((x, i) => (
+                    <li key={i}>· {x}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className="rounded-xl border border-line bg-white p-4">
+                <p className="mb-1.5 text-xs font-bold text-grey">{t.respCliente}</p>
+                <ul className="space-y-1 text-sm">
+                  {(c.responsabilidades.cliente ?? []).map((x, i) => (
+                    <li key={i}>· {x}</li>
+                  ))}
+                </ul>
+              </div>
             </div>
           </section>
         )}
