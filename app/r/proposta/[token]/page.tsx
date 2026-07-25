@@ -234,10 +234,29 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
   const c = (p.conteudo ?? {}) as Partial<ConteudoProposta>;
   const ambito = (p.ambito ?? []) as string[];
 
-  const { data: precos } = await supabase
-    .from("precos_unitarios")
-    .select("chave, rotulo, tipo, unidade, preco, minutos")
-    .eq("ativo", true);
+  // Imutabilidade: se houver uma versão congelada, usa os preços da fotografia
+  // (assim o «pediste vs. recomendamos» não muda quando o catálogo muda).
+  const { data: versaoCongelada } = await supabase
+    .from("proposta_versoes")
+    .select("snapshot")
+    .eq("proposta_id", p.id)
+    .order("versao", { ascending: false })
+    .limit(1)
+    .maybeSingle()
+    .then((r) => r, () => ({ data: null }));
+
+  type PrecoLinha = { chave: string; rotulo: string; tipo: string; unidade: string; preco: number | null; minutos: number | null };
+  let precos: PrecoLinha[] | null = null;
+  const snapPrecos = (versaoCongelada?.snapshot as { precos?: unknown })?.precos;
+  if (Array.isArray(snapPrecos) && snapPrecos.length > 0) {
+    precos = snapPrecos as PrecoLinha[];
+  } else {
+    const { data } = await supabase
+      .from("precos_unitarios")
+      .select("chave, rotulo, tipo, unidade, preco, minutos")
+      .eq("ativo", true);
+    precos = data;
+  }
   const chavesCasos = (p.casos ?? []) as string[];
   let casos: {
     chave: string;

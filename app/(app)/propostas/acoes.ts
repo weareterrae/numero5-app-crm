@@ -455,12 +455,99 @@ export async function guardarCondicoes(formData: FormData) {
   revalidatePath(`/propostas/${id}`);
 }
 
+/**
+ * Congela uma fotografia imutável da proposta: preços, âmbito, condições,
+ * descontos e valores no momento. Alterar o catálogo depois não mexe nas
+ * versões antigas. Devolve o número da versão criada.
+ */
+export async function congelarVersao(propostaId: string, motivo?: string | null) {
+  const supabase = await criarClienteServidor();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { data: p } = await supabase
+    .from("propostas")
+    .select(
+      "cliente_id, escopo, escopo_pedido, condicoes, validade, avenca_valor, setup_valor, ambito, mostrar_comparacao",
+    )
+    .eq("id", propostaId)
+    .maybeSingle();
+  if (!p) return { ok: false as const, erro: "Proposta não encontrada." };
+
+  const [{ data: precos }, { data: descontos }, { data: ultima }] = await Promise.all([
+    supabase
+      .from("precos_unitarios")
+      .select("chave, rotulo, tipo, unidade, preco, minutos")
+      .neq("estado", "inativo"),
+    supabase.from("descontos").select("*").eq("cliente_id", p.cliente_id).eq("estado", "ativo").then(
+      (r) => r,
+      () => ({ data: [] }),
+    ),
+    supabase
+      .from("proposta_versoes")
+      .select("versao")
+      .eq("proposta_id", propostaId)
+      .order("versao", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  const versao = (ultima?.versao ?? 0) + 1;
+  const snapshot = {
+    data: new Date().toISOString(),
+    precos: precos ?? [],
+    escopo: p.escopo,
+    escopo_pedido: p.escopo_pedido,
+    condicoes: p.condicoes,
+    validade: p.validade,
+    mostrar_comparacao: p.mostrar_comparacao,
+    descontos: descontos ?? [],
+  };
+
+  const { error } = await supabase.from("proposta_versoes").insert({
+    proposta_id: propostaId,
+    versao,
+    snapshot,
+    avenca_valor: p.avenca_valor,
+    setup_valor: p.setup_valor,
+    ambito: p.ambito,
+    motivo: motivo ?? null,
+    enviada: true,
+    autor_id: user?.id ?? null,
+  });
+  if (error) return { ok: false as const, erro: error.message };
+
+  revalidatePath(`/propostas/${propostaId}`);
+  return { ok: true as const, versao };
+}
+
+export async function congelarVersaoForm(formData: FormData) {
+  const id = (formData.get("id") ?? "").toString();
+  if (!id) return;
+  await congelarVersao(id, (formData.get("motivo") ?? "").toString().trim() || null);
+}
+
 export async function alternarPartilhaProposta(formData: FormData) {
   const id = (formData.get("id") ?? "").toString();
   const ativar = formData.get("ativar") === "1";
   if (!id) return;
   const supabase = await criarClienteServidor();
   await supabase.from("propostas").update({ partilha_ativa: ativar }).eq("id", id);
+
+  // Ao PARTILHAR pela primeira vez, congela automaticamente uma versão se ainda
+  // não houver nenhuma — para o que o cliente vê ficar imutável.
+  if (ativar) {
+    const { data: existe } = await supabase
+      .from("proposta_versoes")
+      .select("id")
+      .eq("proposta_id", id)
+      .limit(1)
+      .maybeSingle()
+      .then((r) => r, () => ({ data: null }));
+    if (!existe) await congelarVersao(id, "primeira partilha");
+  }
+
   revalidatePath(`/propostas/${id}`);
 }
 

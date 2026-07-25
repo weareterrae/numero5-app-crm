@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { semaforo, LIMIARES_DEFEITO } from "./orcamento";
+import { semaforo, LIMIARES_DEFEITO, calcular, normalizarEscopo, type Preco } from "./orcamento";
 import {
   minutosReuniao,
   resumoReunioes,
@@ -20,6 +20,7 @@ import {
   distribuirFundacao,
   rentabilidade,
   sugestoesRentabilidade,
+  diferencasVersao,
   type Reuniao,
   type Aprovacao,
   type Revisao,
@@ -288,5 +289,44 @@ describe("rentabilidade real (Fase 2, bloco 8)", () => {
     expect(sugestoesRentabilidade("verde", 0)).toHaveLength(0);
     expect(sugestoesRentabilidade("vermelho", 5).length).toBeGreaterThan(0);
     expect(sugestoesRentabilidade("amarelo", 5).some((s) => s.includes("reuniões"))).toBe(true);
+  });
+});
+
+describe("propostas versionadas (Fase 2, bloco 9)", () => {
+  it("a primeira versão não tem deltas", () => {
+    const d = diferencasVersao(null, { avenca_valor: 800, setup_valor: 2000, ambito: ["A", "B"] });
+    expect(d.deltaAvenca).toBeNull();
+    expect(d.ambitoAdicionado).toEqual(["A", "B"]);
+    expect(d.ambitoRemovido).toEqual([]);
+  });
+
+  it("calcula deltas de preço e diferenças de âmbito entre versões", () => {
+    const v1 = { avenca_valor: 800, setup_valor: 2000, ambito: ["Posts", "Reels"] };
+    const v2 = { avenca_valor: 950, setup_valor: 2000, ambito: ["Posts", "Anúncios"] };
+    const d = diferencasVersao(v1, v2);
+    expect(d.deltaAvenca).toBe(150);
+    expect(d.deltaSetup).toBe(0);
+    expect(d.ambitoAdicionado).toEqual(["Anúncios"]);
+    expect(d.ambitoRemovido).toEqual(["Reels"]);
+  });
+
+  it("um snapshot congelado não muda quando o catálogo muda (imutabilidade)", () => {
+    // O snapshot guarda os preços do momento; recalcular com eles é estável,
+    // independentemente de o catálogo «atual» ter outro preço.
+    const precosCongelados = [
+      { chave: "post", rotulo: "Post", tipo: "mensal", unidade: "unidade", preco: 32, minutos: null },
+      { chave: "gestao_canal", rotulo: "Gestão", tipo: "mensal", unidade: "canal", preco: 130, minutos: null },
+    ] as Preco[];
+    const escopo = normalizarEscopo({
+      producao: { posts: 4 },
+      canais: { instagram: { ativo: true, proprio: false } },
+    });
+    const antes = calcular(escopo, precosCongelados).totalMensal;
+    // O «catálogo novo» duplica o preço do post — mas o snapshot mantém os antigos.
+    const precosNovos = precosCongelados.map((p) => (p.chave === "post" ? { ...p, preco: 64 } : p));
+    const comSnapshot = calcular(escopo, precosCongelados).totalMensal;
+    const comNovos = calcular(escopo, precosNovos).totalMensal;
+    expect(comSnapshot).toBe(antes);
+    expect(comNovos).not.toBe(antes); // confirma que a diferença existiria sem o snapshot
   });
 });

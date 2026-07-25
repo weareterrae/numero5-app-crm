@@ -11,6 +11,7 @@ import { idiomaDe } from "@/lib/dominio/intake";
 import { Configurador } from "@/components/propostas/Configurador";
 import { DescontoProposta, type Desconto } from "@/components/propostas/DescontoProposta";
 import { CondicoesProposta, type Condicoes } from "@/components/propostas/CondicoesProposta";
+import { VersoesProposta, type Versao } from "@/components/propostas/VersoesProposta";
 import { CasosPicker, type Caso } from "@/components/propostas/CasosPicker";
 import { calcular, descreverEscopo, normalizarEscopo, type Preco } from "@/lib/dominio/orcamento";
 import { horasProdutivas, ocupacao, nivelCapacidade } from "@/lib/dominio/operacao";
@@ -148,6 +149,15 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
     ? await supabase.from("descontos").select("*").eq("cliente_id", cliente.id).eq("estado", "ativo")
     : { data: null };
   const descontos = (descontosData ?? []) as Desconto[];
+
+  // Versões congeladas (tolerante: 0032 pode não ter corrido).
+  const { data: versoesData } = await supabase
+    .from("proposta_versoes")
+    .select("id, versao, avenca_valor, setup_valor, ambito, motivo, criado_em, aceite")
+    .eq("proposta_id", p.id)
+    .order("versao", { ascending: false })
+    .then((r) => r, () => ({ data: [] }));
+  const versoes = (versoesData ?? []) as Versao[];
 
   const objetivosSel: string[] = diag?.objetivos?.selecionados ?? [];
   const dossier: DossierProposta = {
@@ -350,6 +360,8 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
         condicoes={(p.condicoes as Condicoes) ?? {}}
         setupValor={p.setup_valor}
       />
+
+      <VersoesProposta propostaId={p.id} versoes={versoes} />
 
       {/* Pacote, âmbito e investimento */}
       <form action={guardarProposta} className="rounded-xl border border-line bg-white p-5">

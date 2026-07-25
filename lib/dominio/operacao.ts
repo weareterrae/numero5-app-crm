@@ -427,6 +427,49 @@ export function rentabilidade(e: EntradaRentabilidade): Rentabilidade {
   };
 }
 
+// ── Versões de proposta ──────────────────────────────────────────────────────
+
+export type SnapshotVersao = {
+  avenca_valor?: number | null;
+  setup_valor?: number | null;
+  ambito?: string[] | null;
+};
+
+export type DiferencaVersao = {
+  deltaAvenca: number | null;
+  deltaSetup: number | null;
+  avencaAnterior: number | null;
+  avencaNova: number | null;
+  setupAnterior: number | null;
+  setupNovo: number | null;
+  ambitoAdicionado: string[];
+  ambitoRemovido: string[];
+};
+
+/** Diferenças entre duas versões — preço e âmbito. `anterior` a null = primeira. */
+export function diferencasVersao(
+  anterior: SnapshotVersao | null,
+  nova: SnapshotVersao,
+): DiferencaVersao {
+  const aAvenca = anterior?.avenca_valor ?? null;
+  const nAvenca = nova.avenca_valor ?? null;
+  const aSetup = anterior?.setup_valor ?? null;
+  const nSetup = nova.setup_valor ?? null;
+  const aAmbito = new Set(anterior?.ambito ?? []);
+  const nAmbito = new Set(nova.ambito ?? []);
+
+  return {
+    avencaAnterior: aAvenca,
+    avencaNova: nAvenca,
+    deltaAvenca: aAvenca != null && nAvenca != null ? nAvenca - aAvenca : null,
+    setupAnterior: aSetup,
+    setupNovo: nSetup,
+    deltaSetup: aSetup != null && nSetup != null ? nSetup - aSetup : null,
+    ambitoAdicionado: [...nAmbito].filter((x) => !aAmbito.has(x)),
+    ambitoRemovido: [...aAmbito].filter((x) => !nAmbito.has(x)),
+  };
+}
+
 /** Sugestões internas quando a rentabilidade aperta (nunca aplicadas sozinhas). */
 export function sugestoesRentabilidade(cor: string, desvioHoras: number): string[] {
   const s: string[] = [];
