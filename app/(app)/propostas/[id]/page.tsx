@@ -9,6 +9,7 @@ import { OBJETIVOS } from "@/lib/dominio/diagnostico/recomendacoes";
 import type { DossierProposta } from "@/lib/ia/prompts/proposta";
 import { idiomaDe } from "@/lib/dominio/intake";
 import { Configurador } from "@/components/propostas/Configurador";
+import { DescontoProposta, type Desconto } from "@/components/propostas/DescontoProposta";
 import { CasosPicker, type Caso } from "@/components/propostas/CasosPicker";
 import { calcular, descreverEscopo, normalizarEscopo, type Preco } from "@/lib/dominio/orcamento";
 import { rotuloFaixa } from "@/lib/dominio/intake";
@@ -87,6 +88,12 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
   const cfg = Object.fromEntries((cfgRows ?? []).map((r) => [r.chave, Number(r.valor)]));
   const passo = cfg.passo_arredondamento || 50;
   const valorHoraAlvo = cfg.valor_hora_alvo || 65;
+
+  // Descontos ativos (tolerante: vazio se a migração 0023 não correu).
+  const { data: descontosData } = cliente
+    ? await supabase.from("descontos").select("*").eq("cliente_id", cliente.id).eq("estado", "ativo")
+    : { data: null };
+  const descontos = (descontosData ?? []) as Desconto[];
 
   const objetivosSel: string[] = diag?.objetivos?.selecionados ?? [];
   const dossier: DossierProposta = {
@@ -235,6 +242,16 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
         passo={passo}
         valorHoraAlvo={valorHoraAlvo}
       />
+
+      {cliente && (
+        <DescontoProposta
+          clienteId={cliente.id}
+          propostaId={p.id}
+          avencaValor={p.avenca_valor}
+          setupValor={p.setup_valor}
+          descontos={descontos}
+        />
+      )}
 
       {/* Pacote, âmbito e investimento */}
       <form action={guardarProposta} className="rounded-xl border border-line bg-white p-5">

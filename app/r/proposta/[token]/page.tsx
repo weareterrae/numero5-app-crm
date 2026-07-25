@@ -82,6 +82,11 @@ const TX = {
     fechaContigo:
       "O número exato fecha-se contigo depois de alinharmos o âmbito — sem surpresas, sem letras pequeninas.",
     iva: "Aos valores apresentados acresce IVA à taxa legal em vigor.",
+    descNormal: "Valor normal",
+    descCondicao: "Condição de lançamento",
+    descInicial: "Investimento inicial",
+    descDepois: "Depois",
+    meses: "meses",
     ritmo: "o ritmo, mês a mês",
     ritmoH: "Como trabalhamos, todos os meses",
     ritmoItens: [
@@ -145,6 +150,11 @@ const TX = {
     fechaContigo:
       "The exact number is finalised with you once we align the scope — no surprises, no fine print.",
     iva: "VAT at the legal rate applies to the amounts shown.",
+    descNormal: "Standard price",
+    descCondicao: "Launch offer",
+    descInicial: "Initial investment",
+    descDepois: "Afterwards",
+    meses: "months",
     ritmo: "the monthly rhythm",
     ritmoH: "How we work, every month",
     ritmoItens: [
@@ -183,6 +193,15 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
     .maybeSingle();
   const idioma = idiomaDe(idiomaRow?.idioma);
   const t = TX[idioma];
+
+  // Desconto ativo na avença (tolerante: null se a migração 0023 não correu).
+  const { data: descAvenca } = await supabase
+    .from("descontos")
+    .select("valor_normal, tipo, valor_desconto, preco_durante, preco_apos, duracao_meses")
+    .eq("cliente_id", p.cliente_id)
+    .eq("alvo", "avenca")
+    .eq("estado", "ativo")
+    .maybeSingle();
 
   const um = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
   const cliente = um(p.clientes) as { nome_marca: string; setor: string | null } | null;
@@ -508,6 +527,42 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
                   </div>
                 ) : null}
                 <p className="mt-3 text-xs text-soft">{t.fechaContigo}</p>
+              </div>
+            )}
+            {descAvenca && descAvenca.preco_durante != null && (
+              <div className="mt-3 rounded-xl border border-gold/40 bg-gold/5 p-4 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-grey">{t.descNormal}</span>
+                  <span>
+                    {euros(descAvenca.valor_normal)}
+                    {t.mes}
+                  </span>
+                </div>
+                <div className="flex justify-between text-gold-dark">
+                  <span>
+                    {t.descCondicao}
+                    {descAvenca.duracao_meses ? ` (${descAvenca.duracao_meses} ${t.meses})` : ""}
+                  </span>
+                  <span>
+                    {descAvenca.tipo === "percentagem"
+                      ? `−${descAvenca.valor_desconto}%`
+                      : `−${euros(descAvenca.valor_desconto)}`}
+                  </span>
+                </div>
+                <div className="mt-1.5 flex justify-between border-t border-gold/20 pt-1.5 font-bold">
+                  <span>{t.descInicial}</span>
+                  <b className="text-gold-dark">
+                    {euros(descAvenca.preco_durante)}
+                    {t.mes}
+                  </b>
+                </div>
+                <div className="flex justify-between text-soft">
+                  <span>{t.descDepois}</span>
+                  <span>
+                    {euros(descAvenca.preco_apos ?? descAvenca.valor_normal)}
+                    {t.mes}
+                  </span>
+                </div>
               </div>
             )}
             <p className="mt-2 text-xs font-bold text-grey">{t.iva}</p>

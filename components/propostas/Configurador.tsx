@@ -66,6 +66,7 @@ export function Configurador({
   const [override, setOverride] = useState(false);
   const [setupProp, setSetupProp] = useState("");
   const [mensalProp, setMensalProp] = useState("");
+  const [motivoDesc, setMotivoDesc] = useState("");
 
   const orc = useMemo(() => calcular(e, precos), [e, precos]);
   const pecas = pecasPorMes(e);
@@ -80,6 +81,10 @@ export function Configurador({
 
   const setupFinal = override ? Math.max(0, Number(setupProp) || 0) : setupComercial;
   const mensalFinal = override ? Math.max(0, Number(mensalProp) || 0) : mensalComercial;
+  const abaixoCatalogo =
+    override &&
+    ((orc.totalMensal > 0 && mensalFinal < orc.totalMensal) ||
+      (orc.totalSetup > 0 && setupFinal < orc.totalSetup));
 
   // Serviços à medida do catálogo (tudo o que não é gerido pelos controlos acima).
   const outros = precos.filter(
@@ -114,8 +119,16 @@ export function Configurador({
   }
 
   async function guardar() {
+    if (abaixoCatalogo && !motivoDesc.trim()) {
+      setEstado("⚠️ Estás abaixo do valor do catálogo — diz o motivo para guardar.");
+      return;
+    }
     setAGuardar(true);
-    const r = await guardarEscopo(propostaId, e, descreverEscopo(e), mensalFinal, setupFinal);
+    const r = await guardarEscopo(propostaId, e, descreverEscopo(e), mensalFinal, setupFinal, {
+      motivo: abaixoCatalogo ? motivoDesc : null,
+      mensalCalculado: orc.totalMensal,
+      setupCalculado: orc.totalSetup,
+    });
     setAGuardar(false);
     setEstado(r.ok ? "Guardado ✓ — é este o valor que vai na proposta." : `⚠️ ${r.erro}`);
     setTimeout(() => setEstado(""), 4000);
@@ -460,6 +473,20 @@ export function Configurador({
                   <p className="mt-1.5 text-[11px] text-soft">
                     Podes propor abaixo do custo — é o teu investimento na relação.
                   </p>
+                  {abaixoCatalogo && (
+                    <div className="mt-2 rounded-lg border-2 border-bad bg-bad/15 p-2.5">
+                      <p className="text-xs font-bold text-bad">
+                        ⚠️ Esta proposta está abaixo do valor calculado pelo catálogo. Confirma que é
+                        uma decisão comercial consciente.
+                      </p>
+                      <input
+                        value={motivoDesc}
+                        onChange={(ev) => setMotivoDesc(ev.target.value)}
+                        placeholder="Motivo (obrigatório para guardar)"
+                        className="mt-2 w-full rounded border border-white/20 bg-ink px-2 py-1.5 text-sm text-cream"
+                      />
+                    </div>
+                  )}
                 </>
               )}
 

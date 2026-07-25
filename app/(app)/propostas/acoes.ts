@@ -169,8 +169,12 @@ export async function guardarEscopo(
   ambito: string[],
   totalMensal: number,
   totalSetup: number,
+  aud?: { motivo?: string | null; mensalCalculado?: number; setupCalculado?: number },
 ) {
   const supabase = await criarClienteServidor();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const { error } = await supabase
     .from("propostas")
     .update({
@@ -181,6 +185,24 @@ export async function guardarEscopo(
     })
     .eq("id", id);
   if (error) return { ok: false as const, erro: error.message };
+
+  // Auditoria: proposta abaixo do valor calculado pelo catálogo.
+  if (aud) {
+    const abaixoM = aud.mensalCalculado != null && totalMensal < aud.mensalCalculado;
+    const abaixoS = aud.setupCalculado != null && totalSetup < aud.setupCalculado;
+    if (abaixoM || abaixoS) {
+      await supabase.from("auditoria").insert({
+        tabela: "propostas",
+        registo_id: id,
+        campo: "abaixo_do_catalogo",
+        valor_anterior: `mensal ${aud.mensalCalculado ?? "—"} · setup ${aud.setupCalculado ?? "—"}`,
+        valor_novo: `mensal ${totalMensal} · setup ${totalSetup}`,
+        motivo: aud.motivo ?? null,
+        autor_id: user?.id ?? null,
+      });
+    }
+  }
+
   revalidatePath(`/propostas/${id}`);
   return { ok: true as const };
 }
@@ -385,4 +407,82 @@ export async function alternarPartilhaProposta(formData: FormData) {
   const supabase = await criarClienteServidor();
   await supabase.from("propostas").update({ partilha_ativa: ativar }).eq("id", id);
   revalidatePath(`/propostas/${id}`);
+}
+
+/** Guarda um desconto (condição de lançamento) para o cliente. Calcula o preço
+ *  durante e depois, e regista na auditoria. Um desconto ativo por alvo. */
+export async function guardarDesconto(formData: FormData) {
+  const clienteId = t(formData.get("cliente_id"));
+  const propostaId = t(formData.get("proposta_id"));
+  if (!clienteId) return;
+  const alvo = t(formData.get("alvo")) === "setup" ? "setup" : "avenca";
+
+  const num = (k: string) => {
+    const s = (formData.get(k) ?? "").toString().trim().replace(",", ".");
+    const n = Number(s);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const valorNormal = alvo === "setup" ? num("setup_valor") : num("avenca_valor");
+  const tipo = t(formData.get("tipo")) === "fixo" ? "fixo" : "percentagem";
+  const valorDesconto = num("valor_desconto");
+  const duracao = Math.max(0, Math.round(num("duracao_meses")));
+  const inicio = t(formData.get("inicio"));
+  const precoDurante = Math.max(
+    0,
+    tipo === "percentagem" ? valorNormal * (1 - valorDesconto / 100) : valorNormal - valorDesconto,
+  );
+
+  let fim: string | null = null;
+  if (inicio && duracao > 0) {
+    const [y, m, d] = inicio.split("-").map(Number);
+    const dt = new Date(y, m - 1 + duracao, d);
+    fim = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+  }
+
+  const supabase = await criarClienteServidor();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  await supabase
+    .from("descontos")
+    .delete()
+    .eq("cliente_id", clienteId)
+    .eq("alvo", alvo)
+    .eq("estado", "ativo");
+  await supabase.from("descontos").insert({
+    cliente_id: clienteId,
+    proposta_id: propostaId,
+    alvo,
+    valor_normal: valorNormal,
+    tipo,
+    valor_desconto: valorDesconto,
+    preco_durante: Math.round(precoDurante * 100) / 100,
+    preco_apos: valorNormal,
+    motivo: t(formData.get("motivo")),
+    inicio: inicio ?? null,
+    duracao_meses: duracao || null,
+    fim,
+    autor_id: user?.id ?? null,
+    notas: t(formData.get("notas")),
+  });
+  await supabase.from("auditoria").insert({
+    tabela: "descontos",
+    registo_id: clienteId,
+    campo: `desconto_${alvo}`,
+    valor_anterior: String(valorNormal),
+    valor_novo: String(Math.round(precoDurante)),
+    motivo: t(formData.get("motivo")),
+    autor_id: user?.id ?? null,
+  });
+
+  if (propostaId) revalidatePath(`/propostas/${propostaId}`);
+}
+
+export async function apagarDesconto(id: string, _fd: FormData) {
+  if (!id) return;
+  const supabase = await criarClienteServidor();
+  const { data } = await supabase.from("descontos").select("proposta_id").eq("id", id).maybeSingle();
+  await supabase.from("descontos").delete().eq("id", id);
+  if (data?.proposta_id) revalidatePath(`/propostas/${data.proposta_id}`);
 }
