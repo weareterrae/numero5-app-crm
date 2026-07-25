@@ -117,6 +117,68 @@ export const PRAZO = [
   ["estudar", "Ainda ando a estudar", "Still exploring"],
 ] as const;
 
+// ── Processo comercial (o que acontece depois do lead) ──────────────────────
+export const LEADS_COMO = [
+  ["telefone", "Ligam-me", "They call me"],
+  ["formulario", "Formulário do site", "Website form"],
+  ["redes", "Mensagens/comentários nas redes", "Social messages/comments"],
+  ["email", "Email", "Email"],
+  ["presencial", "Aparecem na loja/espaço", "They show up in person"],
+  ["passa_palavra", "Passa-palavra", "Word of mouth"],
+  ["ainda_nao", "Ainda não recebo contactos", "I don't get leads yet"],
+] as const;
+
+export const LEADS_RESPOSTA = [
+  ["na_hora", "Quase na hora", "Almost right away"],
+  ["mesmo_dia", "No mesmo dia", "Same day"],
+  ["um_dois_dias", "1 a 2 dias", "1 to 2 days"],
+  ["mais", "Mais de 2 dias", "More than 2 days"],
+  ["sem_processo", "Não tenho um processo", "I have no process"],
+] as const;
+
+export const LEADS_REGISTO = [
+  ["cabeca", "De cabeça", "In my head"],
+  ["papel_folha", "Papel ou folha de cálculo", "Paper or spreadsheet"],
+  ["crm", "Num CRM", "In a CRM"],
+  ["nao_registo", "Não registo", "I don't track them"],
+] as const;
+
+export const LEADS_FOLLOWUP = [
+  ["sempre", "Sim, faço sempre seguimento", "Yes, I always follow up"],
+  ["as_vezes", "Às vezes", "Sometimes"],
+  ["nao", "Não faço", "I don't"],
+] as const;
+
+export const SIM_NAO = [
+  ["sim", "Sim", "Yes"],
+  ["nao", "Não", "No"],
+] as const;
+
+// ── Tecnologia ──────────────────────────────────────────────────────────────
+export const FERRAMENTAS = [
+  ["crm", "CRM", "CRM"],
+  ["email_mkt", "Email marketing", "Email marketing"],
+  ["whatsapp", "WhatsApp Business", "WhatsApp Business"],
+  ["agenda", "Agenda/marcações", "Calendar/bookings"],
+  ["faturacao", "Faturação", "Invoicing"],
+  ["nenhuma", "Nenhuma, ainda", "None, yet"],
+] as const;
+
+// ── Ambição/investimento ────────────────────────────────────────────────────
+export const INTENCAO = [
+  ["essencial", "Resolver o essencial", "Cover the essentials"],
+  ["presenca", "Criar uma presença consistente", "Build a consistent presence"],
+  ["departamento", "Ter um departamento de marketing externo", "Have an outsourced marketing dept"],
+  ["acelerar", "Acelerar o crescimento", "Accelerate growth"],
+] as const;
+
+export const FAIXAS_ARRANQUE = [
+  ["ate1500", "Até 1.500 €", "Up to €1,500"],
+  ["1500_2500", "1.500 – 2.500 €", "€1,500 – €2,500"],
+  ["2500_mais", "Mais de 2.500 €", "More than €2,500"],
+  ["nao_sei", "Ainda não sei", "Not sure yet"],
+] as const;
+
 /** Tudo o que o cliente conta no diagnóstico profundo. Guardado em diagnosticos.brief. */
 export type Brief = {
   presenca?: string;
@@ -141,6 +203,21 @@ export type Brief = {
   ambicao?: string;
   prazo?: string;
   nota_final?: string;
+  // Processo comercial (o que acontece depois do lead)
+  leads_como?: string[];
+  leads_resposta?: string;
+  leads_registo?: string;
+  leads_followup?: string;
+  leads_perda?: string;
+  // Aquisição / anúncios
+  anuncios_investe?: string;
+  anuncios_detalhe?: string;
+  anuncios_porque_nao?: string;
+  // Tecnologia
+  ferramentas?: string[];
+  // Ambição / investimento
+  intencao?: string;
+  orcamento_arranque?: string;
 };
 
 /** Todas as listas juntas, para traduzir chaves → rótulos. */
@@ -158,7 +235,46 @@ export const LISTAS_BRIEF: Record<string, readonly (readonly [string, string, st
   site_tipo: SITE_TIPO,
   automacao: AUTOMACAO,
   prazo: PRAZO,
+  leads_como: LEADS_COMO,
+  leads_resposta: LEADS_RESPOSTA,
+  leads_registo: LEADS_REGISTO,
+  leads_followup: LEADS_FOLLOWUP,
+  anuncios_investe: SIM_NAO,
+  ferramentas: FERRAMENTAS,
+  intencao: INTENCAO,
+  orcamento_arranque: FAIXAS_ARRANQUE,
 };
+
+// ── Lógica adaptativa (Parte 6): que perguntas fazem sentido mostrar ─────────
+
+/** O cliente recebe contactos hoje? (senão, não perguntar tempo de resposta). */
+export function recebeContactos(b: Brief): boolean {
+  const como = b.leads_como ?? [];
+  return como.length > 0 && !(como.length === 1 && como[0] === "ainda_nao");
+}
+
+/** O cliente investe em anúncios? (mostra detalhe vs. «porque ainda não»). */
+export function investeAnuncios(b: Brief): boolean {
+  return b.anuncios_investe === "sim";
+}
+
+/** O cliente tem site? (senão, não perguntar problemas técnicos do site). */
+export function temSite(b: Brief): boolean {
+  return !!b.site_estado && b.site_estado !== "nao";
+}
+
+/**
+ * O processo comercial é fraco? Se sim, a proposta deve recomendar primeiro
+ * organização/CRM/atendimento, não «mais anúncios». (Parte 16.)
+ */
+export function processoComercialFraco(b: Brief): boolean {
+  const sinais = [
+    b.leads_resposta === "mais" || b.leads_resposta === "sem_processo",
+    b.leads_registo === "cabeca" || b.leads_registo === "nao_registo",
+    b.leads_followup === "nao",
+  ].filter(Boolean).length;
+  return sinais >= 2;
+}
 
 /** Rótulo de uma chave numa dada lista, no idioma pedido. */
 export function rotulo(lista: string, chave: string | undefined, idioma: Idioma = "pt"): string | null {

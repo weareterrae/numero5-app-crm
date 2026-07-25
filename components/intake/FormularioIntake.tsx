@@ -6,18 +6,28 @@ import { OBJETIVOS, type ChaveObjetivo } from "@/lib/dominio/diagnostico/recomen
 import {
   AUTOMACAO,
   FAIXAS_ORCAMENTO,
+  FAIXAS_ARRANQUE,
+  FERRAMENTAS,
   IDADES,
+  INTENCAO,
+  LEADS_COMO,
+  LEADS_FOLLOWUP,
+  LEADS_REGISTO,
+  LEADS_RESPOSTA,
   LOGO,
   ONDE,
   PRAZO,
   PRESENCA,
   PUBLICO,
   RENOVAR,
+  SIM_NAO,
   SITE_ESTADO,
   SITE_NOVO,
   SITE_TIPO,
   TOM,
   TRATAMENTO,
+  investeAnuncios,
+  recebeContactos,
   type Brief,
   type Idioma,
 } from "@/lib/dominio/intake";
@@ -120,6 +130,24 @@ const TX = {
     prazoQ: "Para quando isto?",
     notaFinalQ: "Mais alguma coisa que queiras que saibamos?",
     notaFinalPH: "O que quiseres. Estamos a ouvir. 🖐️",
+    pcT: "Depois do contacto",
+    pcS: "O que acontece quando alguém te procura. É aqui que muito negócio se ganha ou perde.",
+    leadsComoQ: "Como chegam os contactos hoje?",
+    leadsRespostaQ: "Quando te contactam, em quanto tempo respondes?",
+    leadsRegistoQ: "Onde ficam registados?",
+    leadsFollowupQ: "Fazes seguimento de quem não fecha logo?",
+    leadsPerdaQ: "Qual a razão mais comum para perderes um cliente? (opcional)",
+    leadsPerdaPH: "Ex.: demoro a responder, preço, não volto a contactar…",
+    aqT: "Anúncios e aquisição",
+    aqS: "Onde investes para trazer gente nova.",
+    anunciosQ: "Já investes em anúncios? (Google, Meta, etc.)",
+    anunciosDetalheQ: "Boa. Conta-nos: plataformas, verba e resultados.",
+    anunciosDetalhePH: "Ex.: Meta, ~150 €/mês, alguns contactos mas sem saber o custo…",
+    anunciosPorqueQ: "O que te trava de investir em anúncios?",
+    anunciosPorquePH: "Ex.: não sei por onde começar, já tentei e não resultou…",
+    ferramentasQ: "Que ferramentas já usas? (opcional)",
+    intencaoQ: "O que procuras neste momento?",
+    arranqueQ: "E para o arranque (pagamento único)?",
   },
   en: {
     eyebrow: "free diagnostic",
@@ -205,6 +233,24 @@ const TX = {
     notaFinalPH: "Anything you like. We're listening. 🖐️",
     guardado: "Your answers are saved — you can close and continue later. It's confidential.",
     retomado: "Welcome back — we picked up where you left off.",
+    pcT: "After the lead",
+    pcS: "What happens when someone reaches out. This is where a lot of business is won or lost.",
+    leadsComoQ: "How do leads reach you today?",
+    leadsRespostaQ: "When someone contacts you, how fast do you reply?",
+    leadsRegistoQ: "Where are they recorded?",
+    leadsFollowupQ: "Do you follow up with those who don't close right away?",
+    leadsPerdaQ: "Most common reason you lose a client? (optional)",
+    leadsPerdaPH: "e.g. slow to reply, price, I don't follow up…",
+    aqT: "Ads & acquisition",
+    aqS: "Where you invest to bring in new people.",
+    anunciosQ: "Do you already invest in ads? (Google, Meta, etc.)",
+    anunciosDetalheQ: "Great. Tell us: platforms, budget and results.",
+    anunciosDetalhePH: "e.g. Meta, ~€150/mo, some leads but I don't know the cost…",
+    anunciosPorqueQ: "What's stopping you from investing in ads?",
+    anunciosPorquePH: "e.g. don't know where to start, tried it and it didn't work…",
+    ferramentasQ: "Which tools do you already use? (optional)",
+    intencaoQ: "What are you looking for right now?",
+    arranqueQ: "And for the setup (one-off payment)?",
   },
 };
 
@@ -457,9 +503,59 @@ export function FormularioIntake({
           <Pergunta titulo={t.autoQ} nota={t.autoNota}>
             <Chips opcoes={AUTOMACAO} L={L} multi ativo={(k) => (brief.automacao ?? []).includes(k)} onSel={(k) => varios("automacao", k)} />
           </Pergunta>
+          <Pergunta titulo={t.ferramentasQ} nota={t.maisQueUm}>
+            <Chips opcoes={FERRAMENTAS} L={L} multi ativo={(k) => (brief.ferramentas ?? []).includes(k)} onSel={(k) => varios("ferramentas", k)} />
+          </Pergunta>
           <Campo label={t.tarefaQ}>
             <textarea value={brief.tarefa_chata ?? ""} onChange={(e) => setB("tarefa_chata", e.target.value)} rows={2} placeholder={t.tarefaPH} className={CAMPO} />
           </Campo>
+        </>
+      ),
+    },
+    {
+      titulo: t.pcT,
+      sub: t.pcS,
+      corpo: (
+        <>
+          <Pergunta titulo={t.leadsComoQ} nota={t.maisQueUm}>
+            <Chips opcoes={LEADS_COMO} L={L} multi ativo={(k) => (brief.leads_como ?? []).includes(k)} onSel={(k) => varios("leads_como", k)} />
+          </Pergunta>
+          {recebeContactos(brief) && (
+            <>
+              <Pergunta titulo={t.leadsRespostaQ}>
+                <Chips opcoes={LEADS_RESPOSTA} L={L} ativo={(k) => brief.leads_resposta === k} onSel={(k) => um("leads_resposta", k)} />
+              </Pergunta>
+              <Pergunta titulo={t.leadsRegistoQ}>
+                <Chips opcoes={LEADS_REGISTO} L={L} ativo={(k) => brief.leads_registo === k} onSel={(k) => um("leads_registo", k)} />
+              </Pergunta>
+              <Pergunta titulo={t.leadsFollowupQ}>
+                <Chips opcoes={LEADS_FOLLOWUP} L={L} ativo={(k) => brief.leads_followup === k} onSel={(k) => um("leads_followup", k)} />
+              </Pergunta>
+              <Campo label={t.leadsPerdaQ}>
+                <textarea value={brief.leads_perda ?? ""} onChange={(e) => setB("leads_perda", e.target.value)} rows={2} placeholder={t.leadsPerdaPH} className={CAMPO} />
+              </Campo>
+            </>
+          )}
+        </>
+      ),
+    },
+    {
+      titulo: t.aqT,
+      sub: t.aqS,
+      corpo: (
+        <>
+          <Pergunta titulo={t.anunciosQ}>
+            <Chips opcoes={SIM_NAO} L={L} ativo={(k) => brief.anuncios_investe === k} onSel={(k) => um("anuncios_investe", k)} />
+          </Pergunta>
+          {investeAnuncios(brief) ? (
+            <Campo label={t.anunciosDetalheQ}>
+              <textarea value={brief.anuncios_detalhe ?? ""} onChange={(e) => setB("anuncios_detalhe", e.target.value)} rows={3} placeholder={t.anunciosDetalhePH} className={CAMPO} />
+            </Campo>
+          ) : brief.anuncios_investe === "nao" ? (
+            <Campo label={t.anunciosPorqueQ}>
+              <textarea value={brief.anuncios_porque_nao ?? ""} onChange={(e) => setB("anuncios_porque_nao", e.target.value)} rows={2} placeholder={t.anunciosPorquePH} className={CAMPO} />
+            </Campo>
+          ) : null}
         </>
       ),
     },
@@ -477,8 +573,14 @@ export function FormularioIntake({
               onSel={(k) => toggleCanal(k as ChaveCanal)}
             />
           </Pergunta>
+          <Pergunta titulo={t.intencaoQ}>
+            <Chips opcoes={INTENCAO} L={L} ativo={(k) => brief.intencao === k} onSel={(k) => um("intencao", k)} />
+          </Pergunta>
           <Pergunta titulo={t.orcQ} nota={t.orcNota}>
             <Chips opcoes={FAIXAS_ORCAMENTO} L={L} ativo={(k) => orcamento === k} onSel={(k) => setOrcamento(orcamento === k ? "" : k)} />
+          </Pergunta>
+          <Pergunta titulo={t.arranqueQ}>
+            <Chips opcoes={FAIXAS_ARRANQUE} L={L} ativo={(k) => brief.orcamento_arranque === k} onSel={(k) => um("orcamento_arranque", k)} />
           </Pergunta>
           <Campo label={t.ambicaoQ}>
             <textarea value={brief.ambicao ?? ""} onChange={(e) => setB("ambicao", e.target.value)} rows={2} placeholder={t.ambicaoPH} className={CAMPO} />

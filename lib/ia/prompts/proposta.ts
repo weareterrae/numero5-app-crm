@@ -4,7 +4,7 @@
  * a IA toca em texto que vai para o cliente.
  */
 
-import { rotulo, type Brief } from "@/lib/dominio/intake";
+import { rotulo, processoComercialFraco, type Brief } from "@/lib/dominio/intake";
 
 export const SISTEMA_PROPOSTA = `És o estratega sénior do Nº 5 (numerocinco.pt) — estúdio de marketing digital + IA para PMEs em Portugal e Angola, do Sandro. Vais escrever o TEXTO de uma proposta comercial, a partir de um dossiê de diagnóstico real. Quem a lê é o dono do negócio.
 
@@ -21,6 +21,7 @@ REGRAS INVIOLÁVEIS (falhar nisto estraga a proposta):
 - NUNCA prometas resultados garantidos («vais triplicar as vendas»). Fala de método e de intenção, não de garantias numéricas.
 - Cada prioridade tem de nascer de um achado REAL do dossiê. Se o dossiê não diz, não inventes.
 - Não fales de preços no teu texto — o investimento é tratado à parte pela aplicação. Foca-te no valor e no porquê.
+- PROCESSO COMERCIAL PRIMEIRO: se o dossiê disser que o processo comercial é fraco (contactos sem resposta a tempo, sem registo, sem seguimento), NÃO recomendes simplesmente «mais anúncios». Uma prioridade tem de ser organizar o que acontece depois do lead (registo/CRM, tempo de resposta, seguimento). Atrair gente para um funil furado é desperdício — diz isso com honestidade e tato.
 
 ⛔ OS ASSISTENTES DE IA — REGRA ABSOLUTA:
 O «Quinto» é o assistente do PRÓPRIO Nº 5. NUNCA o ofereças ao cliente, nunca o menciones como algo que ele vai ter.
@@ -126,8 +127,22 @@ function linhasBrief(b: Brief): string[] {
   muitos("Tipo de site", "site_tipo", b.site_tipo);
   txt("O site tem de", b.site_funcoes);
   muitos("Quer automatizar", "automacao", b.automacao);
+  muitos("Ferramentas que já usa", "ferramentas", b.ferramentas);
   txt("Tarefa que quer largar", b.tarefa_chata);
+  // Processo comercial (o que acontece depois do lead)
+  muitos("Como chegam os contactos", "leads_como", b.leads_como);
+  um("Tempo de resposta a contactos", "leads_resposta", b.leads_resposta);
+  um("Onde regista os contactos", "leads_registo", b.leads_registo);
+  um("Faz seguimento", "leads_followup", b.leads_followup);
+  txt("Causa comum de perda", b.leads_perda);
+  // Aquisição / anúncios
+  um("Investe em anúncios", "anuncios_investe", b.anuncios_investe);
+  txt("Anúncios — detalhe", b.anuncios_detalhe);
+  txt("Porque ainda não investe em anúncios", b.anuncios_porque_nao);
+  // Ambição / investimento
+  um("O que procura agora", "intencao", b.intencao);
   txt("Ambição a 12 meses", b.ambicao);
+  um("Orçamento de arranque", "orcamento_arranque", b.orcamento_arranque);
   um("Prazo", "prazo", b.prazo);
   txt("Nota final", b.nota_final);
   return L;
@@ -177,6 +192,11 @@ export function montarDossier(d: DossierProposta): string {
     if (linhas.length) {
       L.push("\n— O QUE O CLIENTE SONHA (brief que ELE preencheu — usa-o muito) —");
       L.push(...linhas);
+    }
+    if (processoComercialFraco(d.brief)) {
+      L.push(
+        "\n⚠️ ATENÇÃO — PROCESSO COMERCIAL FRACO: os contactos não são respondidos a tempo, registados ou seguidos. Uma das prioridades TEM de ser organizar o que acontece depois do lead (registo/CRM, tempo de resposta, seguimento) ANTES de propor mais anúncios ou mais tráfego. Investir em atrair gente para um funil furado é deitar dinheiro fora — diz isto com honestidade.",
+      );
     }
   }
 
