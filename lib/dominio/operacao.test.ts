@@ -22,6 +22,8 @@ import {
   sugestoesRentabilidade,
   indiceEsforco,
   sugerirComplexidade,
+  podeEntrarPortefolio,
+  exigeAprovacaoPortefolio,
   diferencasVersao,
   totalOrdem,
   ordemEntraProducao,
@@ -356,6 +358,24 @@ describe("complexidade do cliente (Fase 2, Prioridade 2)", () => {
 
   it("dois decisores + multi-idioma → média", () => {
     expect(sugerirComplexidade({ ...zero, decisores: 2, multiIdioma: true }).nivel).toBe("media");
+  });
+});
+
+describe("autorizações de portefólio (Fase 2, Prioridade 2)", () => {
+  it("sem consentimentos → não entra no portefólio", () => {
+    expect(podeEntrarPortefolio({})).toBe(false);
+    expect(podeEntrarPortefolio(null)).toBe(false);
+    expect(podeEntrarPortefolio({ metricas: true })).toBe(false); // métricas só não chega
+  });
+
+  it("com uma autorização pública → pode entrar", () => {
+    expect(podeEntrarPortefolio({ site: true })).toBe(true);
+    expect(podeEntrarPortefolio({ caso: true, nome: false })).toBe(true);
+  });
+
+  it("aprovação prévia é sinalizada", () => {
+    expect(exigeAprovacaoPortefolio({ aprovacao_previa: true })).toBe(true);
+    expect(exigeAprovacaoPortefolio({})).toBe(false);
   });
 });
 

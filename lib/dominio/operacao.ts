@@ -442,6 +442,34 @@ export function indiceEsforco(s: SinaisEsforco): Esforco {
   return { pontos, nivel, criterios };
 }
 
+// ── Autorizações de portefólio (Parte 40) ────────────────────────────────────
+
+/** Consentimentos separados. Nada entra no portefólio sem autorização expressa. */
+export const CONSENTIMENTOS_PORTEFOLIO: [string, string][] = [
+  ["nome", "Usar o nome"],
+  ["logo", "Usar o logótipo"],
+  ["site", "Mostrar o site"],
+  ["conteudos", "Mostrar conteúdos"],
+  ["metricas", "Divulgar métricas"],
+  ["caso", "Criar caso de estudo"],
+  ["testemunho", "Publicar testemunho"],
+  ["aprovacao_previa", "Exige aprovação prévia antes de publicar"],
+];
+
+/** Chaves que autorizam mostrar o cliente publicamente. */
+const CONSENTIMENTOS_PUBLICOS = ["nome", "logo", "site", "conteudos", "caso", "testemunho"];
+
+/** Pode entrar no portefólio? Só se houver pelo menos uma autorização pública. */
+export function podeEntrarPortefolio(p: Record<string, unknown> | null | undefined): boolean {
+  const c = p ?? {};
+  return CONSENTIMENTOS_PUBLICOS.some((k) => !!c[k]);
+}
+
+/** Precisa de aprovação prévia antes de publicar qualquer coisa? */
+export function exigeAprovacaoPortefolio(p: Record<string, unknown> | null | undefined): boolean {
+  return !!(p ?? {}).aprovacao_previa;
+}
+
 // ── Complexidade do cliente (Parte 30) ───────────────────────────────────────
 
 export type NivelComplexidade = "baixa" | "media" | "alta";
