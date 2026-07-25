@@ -5,7 +5,9 @@ import { Simbolo } from "@/components/marca/Simbolo";
 import { OBJETIVOS, type ChaveObjetivo } from "@/lib/dominio/diagnostico/recomendacoes";
 import {
   AUTOMACAO,
+  CICLO_DECISAO,
   DECISORES,
+  MATERIAIS,
   FAIXAS_ORCAMENTO,
   FAIXAS_ARRANQUE,
   FERRAMENTAS,
@@ -30,6 +32,8 @@ import {
   SITE_TIPO,
   TOM,
   TRATAMENTO,
+  ehB2B,
+  ehB2C,
   investeAnuncios,
   recebeContactos,
   recomendacaoSite,
@@ -107,6 +111,14 @@ const TX = {
     revSite: "Site",
     revOrcamento: "Investimento",
     revVazio: "—",
+    setoresQ: "Que tipo de empresas? (setores, dimensão)",
+    setoresPH: "Ex.: restaurantes, clínicas pequenas, construção…",
+    cicloQ: "Quanto tempo demoram a decidir?",
+    clienteValorQ: "Quem é hoje o cliente com mais valor para ti?",
+    clienteValorPH: "Ex.: o cliente que volta sempre e recomenda…",
+    clienteEvitarQ: "Há algum tipo de cliente que não queiras atrair? (opcional)",
+    clienteEvitarPH: "Ex.: quem só procura o mais barato…",
+    materiaisQ: "O que já tens disponível?",
     siteProblemasQ: "O que precisas de resolver no website?",
     recSite: {
       criar: "Pelo que dizes, faz sentido criar um site de raiz.",
@@ -229,6 +241,14 @@ const TX = {
     revSite: "Website",
     revOrcamento: "Investment",
     revVazio: "—",
+    setoresQ: "What kind of companies? (sectors, size)",
+    setoresPH: "e.g. restaurants, small clinics, construction…",
+    cicloQ: "How long do they take to decide?",
+    clienteValorQ: "Who's your highest-value customer today?",
+    clienteValorPH: "e.g. the one who always comes back and refers others…",
+    clienteEvitarQ: "Any kind of customer you'd rather not attract? (optional)",
+    clienteEvitarPH: "e.g. those who only chase the cheapest…",
+    materiaisQ: "What do you already have?",
     siteProblemasQ: "What do you need to fix on the website?",
     recSite: {
       criar: "From what you say, it makes sense to build a site from scratch.",
@@ -525,9 +545,27 @@ export function FormularioIntake({
           <Pergunta titulo={t.ondeQ}>
             <Chips opcoes={ONDE} L={L} ativo={(k) => brief.onde === k} onSel={(k) => um("onde", k)} />
           </Pergunta>
-          <Pergunta titulo={t.idadesQ} nota={t.varias}>
-            <Chips opcoes={IDADES} L={L} multi ativo={(k) => (brief.idades ?? []).includes(k)} onSel={(k) => varios("idades", k)} />
-          </Pergunta>
+          {ehB2C(brief) && (
+            <Pergunta titulo={t.idadesQ} nota={t.varias}>
+              <Chips opcoes={IDADES} L={L} multi ativo={(k) => (brief.idades ?? []).includes(k)} onSel={(k) => varios("idades", k)} />
+            </Pergunta>
+          )}
+          {ehB2B(brief) && (
+            <>
+              <Campo label={t.setoresQ}>
+                <input value={brief.setores ?? ""} onChange={(e) => setB("setores", e.target.value)} placeholder={t.setoresPH} className={CAMPO} />
+              </Campo>
+              <Pergunta titulo={t.cicloQ}>
+                <Chips opcoes={CICLO_DECISAO} L={L} ativo={(k) => brief.ciclo_decisao === k} onSel={(k) => um("ciclo_decisao", k)} />
+              </Pergunta>
+            </>
+          )}
+          <Campo label={t.clienteValorQ}>
+            <textarea value={brief.cliente_valor ?? ""} onChange={(e) => setB("cliente_valor", e.target.value)} rows={2} placeholder={t.clienteValorPH} className={CAMPO} />
+          </Campo>
+          <Campo label={t.clienteEvitarQ}>
+            <input value={brief.cliente_evitar ?? ""} onChange={(e) => setB("cliente_evitar", e.target.value)} placeholder={t.clienteEvitarPH} className={CAMPO} />
+          </Campo>
           <Campo label={t.publicoTxt}>
             <textarea value={brief.publico_texto ?? ""} onChange={(e) => setB("publico_texto", e.target.value)} rows={2} placeholder={t.publicoTxtPH} className={CAMPO} />
           </Campo>
@@ -609,6 +647,9 @@ export function FormularioIntake({
           </Pergunta>
           <Pergunta titulo={t.renovarQ}>
             <Chips opcoes={RENOVAR} L={L} ativo={(k) => brief.renovar === k} onSel={(k) => um("renovar", k)} />
+          </Pergunta>
+          <Pergunta titulo={t.materiaisQ} nota={t.maisQueUm}>
+            <Chips opcoes={MATERIAIS} L={L} multi ativo={(k) => (brief.materiais ?? []).includes(k)} onSel={(k) => varios("materiais", k)} />
           </Pergunta>
         </>
       ),

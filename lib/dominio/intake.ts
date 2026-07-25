@@ -179,6 +179,28 @@ export const FAIXAS_ARRANQUE = [
   ["nao_sei", "Ainda não sei", "Not sure yet"],
 ] as const;
 
+// ── Público B2B/B2C (Parte 10) ──────────────────────────────────────────────
+export const CICLO_DECISAO = [
+  ["rapido", "Decidem depressa", "They decide fast"],
+  ["medio", "Algumas semanas", "A few weeks"],
+  ["longo", "Meses / há um comité", "Months / a committee"],
+] as const;
+
+// ── Materiais disponíveis (Parte 20) ────────────────────────────────────────
+export const MATERIAIS = [
+  ["logo", "Logótipo", "Logo"],
+  ["manual", "Manual de marca", "Brand guidelines"],
+  ["fotos", "Fotografias", "Photos"],
+  ["videos", "Vídeos", "Videos"],
+  ["textos", "Textos", "Copy"],
+  ["catalogo", "Catálogo", "Catalogue"],
+  ["apresentacao", "Apresentação", "Deck"],
+  ["precos", "Tabela de preços", "Price list"],
+  ["testemunhos", "Testemunhos", "Testimonials"],
+  ["banco", "Banco de conteúdos", "Content library"],
+  ["nada", "Nada organizado", "Nothing organized"],
+] as const;
+
 // ── Website: o que precisa de resolver (Parte 14) ───────────────────────────
 export const SITE_PROBLEMAS = [
   ["sem_site", "Não tenho website", "No website"],
@@ -226,6 +248,13 @@ export type Brief = {
   onde?: string;
   idades?: string[];
   publico_texto?: string;
+  // Público B2B/B2C (Parte 10)
+  setores?: string;
+  ciclo_decisao?: string;
+  cliente_valor?: string;
+  cliente_evitar?: string;
+  // Materiais disponíveis (Parte 20)
+  materiais?: string[];
   tom?: string[];
   sentir?: string;
   tratamento?: string;
@@ -281,6 +310,8 @@ export const LISTAS_BRIEF: Record<string, readonly (readonly [string, string, st
   site_novo: SITE_NOVO,
   site_tipo: SITE_TIPO,
   site_problemas: SITE_PROBLEMAS,
+  ciclo_decisao: CICLO_DECISAO,
+  materiais: MATERIAIS,
   automacao: AUTOMACAO,
   prazo: PRAZO,
   leads_como: LEADS_COMO,
@@ -305,6 +336,16 @@ export function recebeContactos(b: Brief): boolean {
 /** O cliente investe em anúncios? (mostra detalhe vs. «porque ainda não»). */
 export function investeAnuncios(b: Brief): boolean {
   return b.anuncios_investe === "sim";
+}
+
+/** Vende a particulares? (idade só faz sentido no B2C). */
+export function ehB2C(b: Brief): boolean {
+  return b.publico === "b2c" || b.publico === "ambos";
+}
+
+/** Vende a empresas? (ciclo de decisão/setores só fazem sentido no B2B). */
+export function ehB2B(b: Brief): boolean {
+  return b.publico === "b2b" || b.publico === "ambos";
 }
 
 /** O cliente tem site? (senão, não perguntar problemas técnicos do site). */

@@ -131,6 +131,10 @@ function linhasBrief(b: Brief): string[] {
   um("Cliente ideal", "publico", b.publico);
   um("Onde está", "onde", b.onde);
   muitos("Idades", "idades", b.idades);
+  txt("Setores/tipo de empresa (B2B)", b.setores);
+  um("Ciclo de decisão", "ciclo_decisao", b.ciclo_decisao);
+  txt("Cliente de maior valor", b.cliente_valor);
+  txt("Cliente a evitar", b.cliente_evitar);
   txt("Porque o escolhem", b.publico_texto);
   muitos("Tom de voz desejado", "tom", b.tom);
   txt("Como quer que se sintam", b.sentir);
@@ -147,6 +151,7 @@ function linhasBrief(b: Brief): string[] {
   txt("O site tem de", b.site_funcoes);
   muitos("Quer automatizar", "automacao", b.automacao);
   muitos("Ferramentas que já usa", "ferramentas", b.ferramentas);
+  muitos("Materiais que já tem", "materiais", b.materiais);
   txt("Tarefa que quer largar", b.tarefa_chata);
   // Processo comercial (o que acontece depois do lead)
   muitos("Como chegam os contactos", "leads_como", b.leads_como);

@@ -3,6 +3,8 @@ import {
   recebeContactos,
   investeAnuncios,
   temSite,
+  ehB2B,
+  ehB2C,
   processoComercialFraco,
   recomendacaoSite,
   diferencasMapa,
@@ -33,6 +35,15 @@ describe("diagnóstico adaptativo (Parte 6)", () => {
     expect(temSite({ site_estado: "nao" })).toBe(false);
     expect(temSite({ site_estado: "fraco" })).toBe(true);
     expect(temSite({})).toBe(false);
+  });
+
+  it("B2B/B2C: idade só no B2C, ciclo só no B2B", () => {
+    expect(ehB2C({ publico: "b2c" })).toBe(true);
+    expect(ehB2C({ publico: "b2b" })).toBe(false);
+    expect(ehB2C({ publico: "ambos" })).toBe(true);
+    expect(ehB2B({ publico: "b2b" })).toBe(true);
+    expect(ehB2B({ publico: "b2c" })).toBe(false);
+    expect(ehB2B({ publico: "ambos" })).toBe(true);
   });
 
   it("processoComercialFraco: dois ou mais sinais", () => {
