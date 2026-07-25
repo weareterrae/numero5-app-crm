@@ -4,9 +4,15 @@ import { criarClienteServico } from "@/lib/supabase/server";
 import { Simbolo } from "@/components/marca/Simbolo";
 import { mesLegivel } from "@/lib/dominio/producao";
 import { DecisaoPlano } from "@/components/planos/DecisaoPlano";
+import { idiomaDe } from "@/lib/dominio/intake";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
+
+const TX = {
+  pt: { eyebrow: "plano de publicações", plano: "Plano", aPreparar: "O plano está a ser preparado." },
+  en: { eyebrow: "publishing plan", plano: "Plan", aPreparar: "The plan is being prepared." },
+};
 
 export default async function PlanoPublico({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -24,17 +30,25 @@ export default async function PlanoPublico({ params }: { params: Promise<{ token
     nome_marca: string;
   } | null;
 
+  const { data: idiomaRow } = await supabase
+    .from("clientes")
+    .select("idioma")
+    .eq("id", plano.cliente_id)
+    .maybeSingle();
+  const idioma = idiomaDe(idiomaRow?.idioma);
+  const t = TX[idioma];
+
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
       <header className="rounded-2xl bg-ink px-8 py-9 text-cream">
         <Simbolo fundo="escuro" className="mb-5 w-16" titulo="Nº 5" />
-        <p className="rotulo !text-gold">plano de publicações</p>
+        <p className="rotulo !text-gold">{t.eyebrow}</p>
         <h1 className="mt-2 font-display text-4xl font-extrabold leading-tight tracking-tight">
-          {plano.titulo || cliente?.nome_marca || "Plano"}
+          {plano.titulo || cliente?.nome_marca || t.plano}
         </h1>
         <p className="mt-2 text-[15px] text-soft">
           {cliente?.nome_marca ? `${cliente.nome_marca} · ` : ""}
-          {mesLegivel(plano.mes)} 🖐️
+          {mesLegivel(plano.mes, idioma)} 🖐️
         </p>
       </header>
 
@@ -44,11 +58,11 @@ export default async function PlanoPublico({ params }: { params: Promise<{ token
           dangerouslySetInnerHTML={{ __html: plano.conteudo_html }}
         />
       ) : (
-        <p className="mt-6 text-center text-sm text-soft">O plano está a ser preparado.</p>
+        <p className="mt-6 text-center text-sm text-soft">{t.aPreparar}</p>
       )}
 
       <div className="mt-6">
-        <DecisaoPlano token={token} estado={plano.estado} />
+        <DecisaoPlano token={token} estado={plano.estado} idioma={idioma} />
       </div>
 
       <footer className="mt-6 text-center text-[11px] text-soft">

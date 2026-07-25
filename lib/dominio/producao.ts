@@ -138,13 +138,21 @@ export function mesISO(d: Date = new Date()): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
-export function mesLegivel(iso: string): string {
+export function mesLegivel(iso: string, idioma: "pt" | "en" = "pt"): string {
   const [ano, mes] = iso.split("-");
+  const i = Number(mes) - 1;
+  if (idioma === "en") {
+    const en = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December",
+    ];
+    return `${en[i] ?? mes} ${ano}`;
+  }
   const nomes = [
     "janeiro", "fevereiro", "março", "abril", "maio", "junho",
     "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
   ];
-  return `${nomes[Number(mes) - 1] ?? mes} de ${ano}`;
+  return `${nomes[i] ?? mes} de ${ano}`;
 }
 
 /** Desloca um mês para trás ou para a frente. */
