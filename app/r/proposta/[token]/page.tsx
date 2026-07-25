@@ -6,6 +6,7 @@ import { DecisaoProposta } from "@/components/propostas/DecisaoProposta";
 import { EfeitosProposta } from "@/components/propostas/EfeitosProposta";
 import { euros } from "@/lib/dominio/metricas";
 import { calcular, normalizarEscopo, type Preco } from "@/lib/dominio/orcamento";
+import { contratoDatas, planoPagamentoFundacao } from "@/lib/dominio/operacao";
 import { idiomaDe } from "@/lib/dominio/intake";
 import type { ConteudoProposta } from "@/lib/ia/prompts/proposta";
 
@@ -94,6 +95,11 @@ const TX = {
     condArranque: "Arranque",
     condRevisoes: "Revisões",
     condPagamento: "Pagamento",
+    condDuracao: "Duração mínima",
+    condRenova: "Renova a",
+    condFundacaoTitulo: "Pagamento do arranque",
+    fundAdjudicacao: "na adjudicação",
+    fundEntrega: "antes da entrega",
     ritmo: "o ritmo, mês a mês",
     ritmoH: "Como trabalhamos, todos os meses",
     ritmoItens: [
@@ -169,6 +175,11 @@ const TX = {
     condArranque: "Start",
     condRevisoes: "Revisions",
     condPagamento: "Payment",
+    condDuracao: "Minimum term",
+    condRenova: "Renews on",
+    condFundacaoTitulo: "Setup payment",
+    fundAdjudicacao: "on signing",
+    fundEntrega: "before delivery",
     ritmo: "the monthly rhythm",
     ritmoH: "How we work, every month",
     ritmoItens: [
@@ -584,21 +595,42 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
         )}
 
         {(() => {
-          const c = (p.condicoes ?? {}) as Record<string, string | null>;
+          const c = (p.condicoes ?? {}) as Record<string, unknown>;
+          const str = (k: string) => (c[k] == null ? null : String(c[k]));
+          const nmb = (k: string) => (c[k] == null || c[k] === "" ? null : Number(c[k]));
+          const fmtData = (iso: string) =>
+            new Date(iso).toLocaleDateString(idioma === "en" ? "en-GB" : "pt-PT", {
+              day: "2-digit",
+              month: "long",
+              year: "numeric",
+            });
+
           const linhas: [string, string][] = [];
-          if (c.inclui) linhas.push([t.condInclui, c.inclui]);
-          if (c.exclui) linhas.push([t.condExclui, c.exclui]);
-          if (c.prazo_arranque) linhas.push([t.condArranque, c.prazo_arranque]);
-          if (c.politica_revisoes) linhas.push([t.condRevisoes, c.politica_revisoes]);
-          if (c.forma_pagamento) linhas.push([t.condPagamento, c.forma_pagamento]);
-          if (!p.validade && linhas.length === 0) return null;
-          const validadeFmt = p.validade
-            ? new Date(p.validade as string).toLocaleDateString(idioma === "en" ? "en-GB" : "pt-PT", {
-                day: "2-digit",
-                month: "long",
-                year: "numeric",
-              })
-            : null;
+          if (str("inclui")) linhas.push([t.condInclui, str("inclui")!]);
+          if (str("exclui")) linhas.push([t.condExclui, str("exclui")!]);
+          if (str("prazo_arranque")) linhas.push([t.condArranque, str("prazo_arranque")!]);
+          if (str("politica_revisoes")) linhas.push([t.condRevisoes, str("politica_revisoes")!]);
+          if (str("forma_pagamento")) linhas.push([t.condPagamento, str("forma_pagamento")!]);
+
+          const datas = contratoDatas(str("data_inicio"), nmb("duracao_meses"), nmb("aviso_dias"));
+          if (nmb("duracao_meses") != null) {
+            const dur = `${nmb("duracao_meses")} ${t.meses}`;
+            linhas.push([
+              t.condDuracao,
+              datas.renovacao ? `${dur} · ${t.condRenova} ${fmtData(datas.renovacao)}` : dur,
+            ]);
+          }
+
+          // Pagamento da Fundação (só quando há arranque).
+          const setup = Number(p.setup_valor) || 0;
+          const modoFund = str("pagamento_fundacao");
+          const planoFund =
+            setup > 0 && modoFund !== "fases" ? planoPagamentoFundacao(modoFund, setup) : [];
+
+          if (!p.validade && linhas.length === 0 && planoFund.length === 0 && !str("pagamento_fundacao_fases"))
+            return null;
+
+          const validadeFmt = p.validade ? fmtData(p.validade as string) : null;
           return (
             <section className="mb-8">
               <p className="rotulo">{t.condTitulo}</p>
@@ -616,6 +648,26 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
                     </div>
                   ))}
                 </dl>
+
+                {(planoFund.length > 0 || str("pagamento_fundacao_fases")) && (
+                  <div className="mt-3 border-t border-line pt-3">
+                    <p className="mb-1 font-bold">{t.condFundacaoTitulo}</p>
+                    {str("pagamento_fundacao_fases") ? (
+                      <p className="text-grey">{str("pagamento_fundacao_fases")}</p>
+                    ) : (
+                      <ul className="space-y-0.5 text-grey">
+                        {planoFund.map((f, i) => (
+                          <li key={i} className="flex justify-between">
+                            <span>
+                              {f.pct}% {i === 0 ? t.fundAdjudicacao : t.fundEntrega}
+                            </span>
+                            <b className="text-ink">{euros(f.valor)}</b>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
               </div>
             </section>
           );

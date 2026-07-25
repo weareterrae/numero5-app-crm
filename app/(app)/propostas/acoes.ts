@@ -424,12 +424,26 @@ export async function guardarCondicoes(formData: FormData) {
   const id = (formData.get("id") ?? "").toString();
   if (!id) return;
 
+  const numero = (v: FormDataEntryValue | null) => {
+    const s = (v ?? "").toString().trim();
+    if (s === "") return null;
+    const x = Number(s);
+    return Number.isFinite(x) ? Math.round(x) : null;
+  };
   const condicoes = {
     inclui: t(formData.get("inclui")),
     exclui: t(formData.get("exclui")),
     prazo_arranque: t(formData.get("prazo_arranque")),
     politica_revisoes: t(formData.get("politica_revisoes")),
     forma_pagamento: t(formData.get("forma_pagamento")),
+    // Duração e renovação (blocos 5+6).
+    data_inicio: t(formData.get("data_inicio")),
+    duracao_meses: numero(formData.get("duracao_meses")),
+    aviso_dias: numero(formData.get("aviso_dias")),
+    renovacao: t(formData.get("renovacao")), // automatica | manual
+    // Pagamento da Fundação.
+    pagamento_fundacao: t(formData.get("pagamento_fundacao")), // 50_50 | 100 | fases
+    pagamento_fundacao_fases: t(formData.get("pagamento_fundacao_fases")),
   };
 
   const supabase = await criarClienteServidor();

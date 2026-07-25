@@ -18,6 +18,7 @@ import {
   type AvencaMetrica,
   type ClienteMetrica,
 } from "@/lib/dominio/metricas";
+import { ESTADOS_FINANCEIROS_ALERTA, ESTADO_FINANCEIRO_ROTULO } from "@/lib/dominio/operacao";
 
 export const dynamic = "force-dynamic";
 
@@ -128,6 +129,16 @@ export default async function Cockpit() {
     .order("data", { ascending: false });
   type RevFaturar = { cliente_id: string; peca: string; valor: number | null; clientes: ClienteEmbed };
   const revisoesPorFaturar = (revRows ?? []) as unknown as RevFaturar[];
+
+  // Clientes em alerta financeiro (tolerante: 0030).
+  const { data: finRows } = await supabase
+    .from("clientes")
+    .select("id, nome_marca, financeiro")
+    .then((r) => r, () => ({ data: [] }));
+  type FinRow = { id: string; nome_marca: string; financeiro: { estado?: string } | null };
+  const clientesFinanceiroAlerta = ((finRows ?? []) as FinRow[]).filter((c) =>
+    ESTADOS_FINANCEIROS_ALERTA.has(c.financeiro?.estado ?? ""),
+  );
 
   const vazio = clientes.length === 0;
 
@@ -263,6 +274,32 @@ export default async function Cockpit() {
                     <span className="text-soft">
                       {r.peca}
                       {r.valor != null && ` · ${euros(r.valor)}`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {clientesFinanceiroAlerta.length > 0 && (
+            <section className="rounded-xl border-2 border-bad/40 bg-bad/5 p-5">
+              <h2 className="font-display text-lg font-extrabold">
+                Cobrança a acompanhar ({clientesFinanceiroAlerta.length})
+              </h2>
+              <p className="mb-3 text-xs text-soft">Nada suspende sozinho — decide o próximo passo.</p>
+              <ul className="space-y-1.5">
+                {clientesFinanceiroAlerta.map((c) => (
+                  <li
+                    key={c.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-white px-3 py-2 text-sm"
+                  >
+                    <Link href={`/clientes/${c.id}/financeiro`} className="font-bold hover:underline">
+                      {c.nome_marca}
+                    </Link>
+                    <span className="text-soft">
+                      {ESTADO_FINANCEIRO_ROTULO[
+                        (c.financeiro?.estado ?? "regular") as keyof typeof ESTADO_FINANCEIRO_ROTULO
+                      ] ?? c.financeiro?.estado}
                     </span>
                   </li>
                 ))}

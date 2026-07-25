@@ -227,3 +227,121 @@ export function resumoRevisoesPeca(revisoes: Revisao[], incluidasLim: number | n
     porFaturar,
   };
 }
+
+// ── Duração, renovação e pagamentos ──────────────────────────────────────────
+
+export function adicionarMeses(iso: string, meses: number): string {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCMonth(d.getUTCMonth() + meses);
+  return d.toISOString().slice(0, 10);
+}
+export function adicionarDias(iso: string, dias: number): string {
+  const d = new Date(iso + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() + dias);
+  return d.toISOString().slice(0, 10);
+}
+
+export const CONTRATO_DEFEITO = { duracaoMeses: 3, avisoDias: 30 };
+
+export type ContratoDatas = {
+  renovacao: string | null;
+  aviso: string | null;
+  revisaoPreco: string | null;
+};
+
+/** Datas do contrato a partir do início, duração mínima e aviso prévio. */
+export function contratoDatas(
+  inicio: string | null | undefined,
+  duracaoMeses: number | null | undefined,
+  avisoDias: number | null | undefined,
+): ContratoDatas {
+  if (!inicio) return { renovacao: null, aviso: null, revisaoPreco: null };
+  const dur = duracaoMeses ?? CONTRATO_DEFEITO.duracaoMeses;
+  const renovacao = adicionarMeses(inicio, dur);
+  const aviso = adicionarDias(renovacao, -(avisoDias ?? CONTRATO_DEFEITO.avisoDias));
+  const revisaoPreco = adicionarMeses(inicio, 12);
+  return { renovacao, aviso, revisaoPreco };
+}
+
+/** Fases de pagamento da Fundação. Predefinição: 50% adjudicação + 50% entrega. */
+export const PAGAMENTO_FUNDACAO: Record<string, { rotulo: string; pct: number }[]> = {
+  "50_50": [
+    { rotulo: "Na adjudicação", pct: 50 },
+    { rotulo: "Antes da entrega / entrada em produção", pct: 50 },
+  ],
+  "100": [{ rotulo: "Na adjudicação", pct: 100 }],
+};
+
+export function planoPagamentoFundacao(
+  modo: string | null | undefined,
+  total: number,
+): { rotulo: string; valor: number; pct: number }[] {
+  const partes = PAGAMENTO_FUNDACAO[modo ?? "50_50"] ?? PAGAMENTO_FUNDACAO["50_50"];
+  return partes.map((p) => ({ rotulo: p.rotulo, pct: p.pct, valor: Math.round((total * p.pct) / 100) }));
+}
+
+// Pré-requisitos para arrancar uma Fundação (nenhum arranca sem estes).
+export const REQUISITOS_ARRANQUE = [
+  "proposta_aceite",
+  "dados_fiscais",
+  "pagamento_inicial",
+  "acessos",
+  "briefing",
+] as const;
+
+export function arranqueCompleto(arranque: Record<string, unknown> | null | undefined): boolean {
+  const a = arranque ?? {};
+  return REQUISITOS_ARRANQUE.every((k) => !!a[k]);
+}
+
+// ── Estado financeiro do cliente ─────────────────────────────────────────────
+
+export type Cobranca = { mes: string; valor?: number | null; estado?: string | null };
+
+export type ResumoDivida = { valorVencido: number; numVencidas: number };
+
+/** Dívida derivada das cobranças por cobrar de meses já passados. */
+export function resumoDivida(cobrancas: Cobranca[], primeiroDiaMesAtual: string): ResumoDivida {
+  let valorVencido = 0;
+  let numVencidas = 0;
+  for (const c of cobrancas) {
+    if ((c.estado ?? "por_cobrar") === "por_cobrar" && c.mes < primeiroDiaMesAtual) {
+      valorVencido += Number(c.valor) || 0;
+      numVencidas += 1;
+    }
+  }
+  return { valorVencido, numVencidas };
+}
+
+export type EstadoFinanceiro =
+  | "regular"
+  | "pagamento_proximo"
+  | "pagamento_atraso"
+  | "aviso"
+  | "producao_condicionada"
+  | "producao_suspensa"
+  | "acordo_especial";
+
+export const ESTADO_FINANCEIRO_ROTULO: Record<EstadoFinanceiro, string> = {
+  regular: "Regular",
+  pagamento_proximo: "Pagamento próximo",
+  pagamento_atraso: "Pagamento em atraso",
+  aviso: "Aviso",
+  producao_condicionada: "Produção condicionada",
+  producao_suspensa: "Produção suspensa",
+  acordo_especial: "Acordo especial",
+};
+
+/** Estados que exigem atenção no cockpit (não suspendem nada automaticamente). */
+export const ESTADOS_FINANCEIROS_ALERTA = new Set<string>([
+  "pagamento_atraso",
+  "aviso",
+  "producao_condicionada",
+  "producao_suspensa",
+]);
+
+export function corEstadoFinanceiro(estado: string | null | undefined): "good" | "warn" | "bad" {
+  if (estado === "producao_suspensa" || estado === "pagamento_atraso") return "bad";
+  if (ESTADOS_FINANCEIROS_ALERTA.has(estado ?? "")) return "warn";
+  return "good";
+}

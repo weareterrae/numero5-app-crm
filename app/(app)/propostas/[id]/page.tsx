@@ -295,6 +295,7 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
         propostaId={p.id}
         validade={(p.validade as string | null) ?? null}
         condicoes={(p.condicoes as Condicoes) ?? {}}
+        setupValor={p.setup_valor}
       />
 
       {/* Pacote, âmbito e investimento */}

@@ -8,9 +8,15 @@ import {
   consomeRonda,
   eFaturavel,
   resumoRevisoesPeca,
+  contratoDatas,
+  planoPagamentoFundacao,
+  arranqueCompleto,
+  resumoDivida,
+  corEstadoFinanceiro,
   type Reuniao,
   type Aprovacao,
   type Revisao,
+  type Cobranca,
 } from "./operacao";
 
 describe("reuniões (Fase 2, bloco 2)", () => {
@@ -149,5 +155,63 @@ describe("revisões e retrabalho (Fase 2, bloco 4)", () => {
   it("sem limite definido, nunca excede", () => {
     const revs: Revisao[] = [{ tipo: "alteracao" }, { tipo: "alteracao" }, { tipo: "alteracao" }];
     expect(resumoRevisoesPeca(revs, null).sobreLimite).toBe(false);
+  });
+});
+
+describe("duração, pagamentos e financeiro (Fase 2, blocos 5+6)", () => {
+  it("um contrato de 3 meses calcula renovação e aviso", () => {
+    const d = contratoDatas("2026-07-01", 3, 30);
+    expect(d.renovacao).toBe("2026-10-01"); // +3 meses
+    expect(d.aviso).toBe("2026-09-01"); // 30 dias antes
+    expect(d.revisaoPreco).toBe("2027-07-01"); // +12 meses
+  });
+
+  it("sem início, não há datas de contrato", () => {
+    expect(contratoDatas(null, 3, 30).renovacao).toBeNull();
+  });
+
+  it("a Fundação 50/50 divide o total em dois", () => {
+    const plano = planoPagamentoFundacao("50_50", 2000);
+    expect(plano).toHaveLength(2);
+    expect(plano[0].valor).toBe(1000);
+    expect(plano[1].valor).toBe(1000);
+  });
+
+  it("a Fundação 100% é uma só fase", () => {
+    const plano = planoPagamentoFundacao("100", 2000);
+    expect(plano).toHaveLength(1);
+    expect(plano[0].valor).toBe(2000);
+  });
+
+  it("o arranque só está completo com todos os pré-requisitos", () => {
+    expect(arranqueCompleto({ proposta_aceite: true, dados_fiscais: true })).toBe(false);
+    expect(
+      arranqueCompleto({
+        proposta_aceite: true,
+        dados_fiscais: true,
+        pagamento_inicial: true,
+        acessos: true,
+        briefing: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("a dívida conta as cobranças por cobrar de meses passados", () => {
+    const cobrancas: Cobranca[] = [
+      { mes: "2026-05-01", valor: 600, estado: "por_cobrar" }, // vencida
+      { mes: "2026-06-01", valor: 600, estado: "por_cobrar" }, // vencida
+      { mes: "2026-07-01", valor: 600, estado: "por_cobrar" }, // mês atual, ainda não vencida
+      { mes: "2026-04-01", valor: 600, estado: "cobrado" }, // paga
+    ];
+    const r = resumoDivida(cobrancas, "2026-07-01");
+    expect(r.valorVencido).toBe(1200);
+    expect(r.numVencidas).toBe(2);
+  });
+
+  it("as cores dos estados financeiros refletem a gravidade", () => {
+    expect(corEstadoFinanceiro("regular")).toBe("good");
+    expect(corEstadoFinanceiro("producao_condicionada")).toBe("warn");
+    expect(corEstadoFinanceiro("producao_suspensa")).toBe("bad");
+    expect(corEstadoFinanceiro("pagamento_atraso")).toBe("bad");
   });
 });
