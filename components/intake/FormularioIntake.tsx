@@ -20,6 +20,8 @@ import {
   PRESENCA,
   PUBLICO,
   RENOVAR,
+  rotulo,
+  rotuloFaixa,
   SIM_NAO,
   SITE_ESTADO,
   SITE_NOVO,
@@ -91,6 +93,15 @@ const TX = {
     p3s: "A parte importante. Escolhe o que fizer sentido.",
     objQ: "Os teus objetivos",
     escolheQuiseres: "Escolhe os que quiseres.",
+    objPrioridade: "Escolhe até 3, pela ordem que mais importam.",
+    revT: "Antes de enviar",
+    revS: "Uma última vista de olhos. Podes editar o que quiseres.",
+    revEditar: "editar",
+    revPublico: "Cliente",
+    revObjetivos: "Objetivos",
+    revSite: "Site",
+    revOrcamento: "Investimento",
+    revVazio: "—",
     objTxt: "Por tuas palavras: o que querias mesmo que acontecesse?",
     objTxtPH: "Sonha um bocado. Daqui a um ano, o que mudou no negócio?",
     p4t: "A personalidade da tua marca",
@@ -192,6 +203,15 @@ const TX = {
     p3s: "The important part. Pick what fits.",
     objQ: "Your goals",
     escolheQuiseres: "Choose any.",
+    objPrioridade: "Pick up to 3, in order of importance.",
+    revT: "Before you send",
+    revS: "One last look. Edit anything you like.",
+    revEditar: "edit",
+    revPublico: "Customer",
+    revObjetivos: "Goals",
+    revSite: "Website",
+    revOrcamento: "Investment",
+    revVazio: "—",
     objTxt: "In your words: what would you really love to happen?",
     objTxtPH: "Dream a little. A year from now, what changed in the business?",
     p4t: "Your brand's personality",
@@ -346,8 +366,13 @@ export function FormularioIntake({
       return { ...b, [campo]: arr.includes(k) ? arr.filter((x) => x !== k) : [...arr, k] };
     });
 
+  // Máximo 3 objetivos, guardados por ordem de escolha = ordem de prioridade.
   function toggleObjetivo(k: ChaveObjetivo) {
-    setObjetivos((o) => (o.includes(k) ? o.filter((x) => x !== k) : [...o, k]));
+    setObjetivos((o) => {
+      if (o.includes(k)) return o.filter((x) => x !== k);
+      if (o.length >= 3) return o;
+      return [...o, k];
+    });
   }
   function toggleCanal(k: ChaveCanal) {
     setPedido((prev) => {
@@ -482,14 +507,30 @@ export function FormularioIntake({
       sub: t.p3s,
       corpo: (
         <>
-          <Pergunta titulo={t.objQ} nota={t.escolheQuiseres}>
-            <Chips
-              opcoes={OBJETIVOS}
-              L={L}
-              multi
-              ativo={(k) => objetivos.includes(k as ChaveObjetivo)}
-              onSel={(k) => toggleObjetivo(k as ChaveObjetivo)}
-            />
+          <Pergunta titulo={t.objQ} nota={t.objPrioridade}>
+            <div className="flex flex-wrap gap-1.5">
+              {OBJETIVOS.map((o) => {
+                const idx = objetivos.indexOf(o[0] as ChaveObjetivo);
+                const on = idx >= 0;
+                const cheio = objetivos.length >= 3 && !on;
+                return (
+                  <button
+                    key={o[0]}
+                    type="button"
+                    onClick={() => toggleObjetivo(o[0] as ChaveObjetivo)}
+                    disabled={cheio}
+                    className={`${chipClasse(on)} ${cheio ? "opacity-40" : ""}`}
+                  >
+                    {on && (
+                      <span className="mr-1.5 inline-grid size-4 place-items-center rounded-full bg-ink text-[10px] font-bold text-gold">
+                        {idx + 1}
+                      </span>
+                    )}
+                    {L(o)}
+                  </button>
+                );
+              })}
+            </div>
           </Pergunta>
           <Campo label={t.objTxt}>
             <textarea value={objetivosTexto} onChange={(e) => setObjetivosTexto(e.target.value)} rows={3} placeholder={t.objTxtPH} className={CAMPO} />
@@ -656,6 +697,50 @@ export function FormularioIntake({
         </>
       ),
     },
+    {
+      titulo: t.revT,
+      sub: t.revS,
+      corpo: (
+        <div className="space-y-2.5">
+          <ResumoLinha
+            rot={t.revPublico}
+            val={
+              [rotulo("publico", brief.publico, idioma), rotulo("onde", brief.onde, idioma)]
+                .filter(Boolean)
+                .join(" · ") || t.revVazio
+            }
+            onEditar={() => setPasso(1)}
+            editar={t.revEditar}
+          />
+          <ResumoLinha
+            rot={t.revObjetivos}
+            val={
+              objetivos.map((k) => OBJETIVOS.find((o) => o[0] === k)).filter(Boolean).map((o) => (idioma === "en" ? o![2] : o![1])).join(" · ") ||
+              (objetivosTexto.trim() ? objetivosTexto.trim() : t.revVazio)
+            }
+            onEditar={() => setPasso(2)}
+            editar={t.revEditar}
+          />
+          <ResumoLinha
+            rot={t.revSite}
+            val={rotulo("site_estado", brief.site_estado, idioma) ?? t.revVazio}
+            onEditar={() => setPasso(5)}
+            editar={t.revEditar}
+          />
+          <ResumoLinha
+            rot={t.revOrcamento}
+            val={rotuloFaixa(orcamento, idioma) ?? t.revVazio}
+            onEditar={() => setPasso(9)}
+            editar={t.revEditar}
+          />
+          {brief.nota_final?.trim() && (
+            <p className="rounded-lg border border-line bg-cream p-3 text-sm text-grey">
+              {brief.nota_final}
+            </p>
+          )}
+        </div>
+      ),
+    },
   ];
 
   const total = passos.length;
@@ -699,14 +784,24 @@ export function FormularioIntake({
 
   return (
     <main className="mx-auto max-w-2xl px-5 py-8">
-      <header className="rounded-2xl bg-ink px-7 py-7 text-cream">
-        <Simbolo fundo="escuro" className="mb-4 w-12" titulo="Nº 5" />
-        <p className="rotulo !text-gold">{t.eyebrow}</p>
-        <h1 className="mt-1.5 font-display text-2xl font-extrabold leading-tight sm:text-3xl">
-          {t.titulo(nome)}
-        </h1>
-        <p className="mt-2 text-[15px] text-soft">{t.sub}</p>
-      </header>
+      {passo === 0 ? (
+        <header className="rounded-2xl bg-ink px-7 py-7 text-cream">
+          <Simbolo fundo="escuro" className="mb-4 w-12" titulo="Nº 5" />
+          <p className="rotulo !text-gold">{t.eyebrow}</p>
+          <h1 className="mt-1.5 font-display text-2xl font-extrabold leading-tight sm:text-3xl">
+            {t.titulo(nome)}
+          </h1>
+          <p className="mt-2 text-[15px] text-soft">{t.sub}</p>
+        </header>
+      ) : (
+        <header className="flex items-center justify-between gap-3 rounded-xl bg-ink px-4 py-2.5 text-cream">
+          <span className="flex items-center gap-2 truncate">
+            <Simbolo fundo="escuro" className="w-6 shrink-0" titulo="Nº 5" />
+            <b className="truncate font-display text-sm">{nome}</b>
+          </span>
+          <span className="shrink-0 font-mono text-[11px] text-soft">{t.passo(passo + 1, total)}</span>
+        </header>
+      )}
 
       {jaSubmetido && passo === 0 && (
         <p className="mt-4 rounded-lg border border-gold bg-gold/10 p-3 text-sm">{t.jaSubmetido}</p>
@@ -794,6 +889,34 @@ function Chips({
           {L(o)}
         </button>
       ))}
+    </div>
+  );
+}
+
+function ResumoLinha({
+  rot,
+  val,
+  onEditar,
+  editar,
+}: {
+  rot: string;
+  val: string;
+  onEditar: () => void;
+  editar: string;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-3 rounded-lg border border-line bg-white p-3">
+      <div className="min-w-0">
+        <p className="text-[11px] font-bold uppercase tracking-wide text-grey">{rot}</p>
+        <p className="text-sm">{val}</p>
+      </div>
+      <button
+        type="button"
+        onClick={onEditar}
+        className="shrink-0 text-xs font-bold text-gold-dark hover:underline"
+      >
+        {editar}
+      </button>
     </div>
   );
 }

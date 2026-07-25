@@ -4,6 +4,10 @@ import {
   investeAnuncios,
   temSite,
   processoComercialFraco,
+  respostaSubstancial,
+  respostaAdiada,
+  urlValido,
+  emailValido,
   rotulo,
   type Brief,
 } from "./intake";
@@ -40,5 +44,32 @@ describe("diagnóstico adaptativo (Parte 6)", () => {
     expect(rotulo("leads_resposta", b.leads_resposta, "pt")).toBe("Quase na hora");
     expect(rotulo("leads_resposta", b.leads_resposta, "en")).toBe("Almost right away");
     expect(rotulo("ferramentas", "crm", "pt")).toBe("CRM");
+  });
+});
+
+describe("validação inteligente das respostas (Parte 24)", () => {
+  it("rejeita lixo e respostas curtas/aleatórias", () => {
+    expect(respostaSubstancial("teste")).toBe(false);
+    expect(respostaSubstancial("asdf")).toBe(false);
+    expect(respostaSubstancial("aaaa")).toBe(false);
+    expect(respostaSubstancial("  ")).toBe(false);
+    expect(respostaSubstancial("ok")).toBe(false); // < 3 chars
+    expect(respostaSubstancial("Quero mais clientes locais")).toBe(true);
+  });
+
+  it("distingue «não sei» (adiado) de lixo", () => {
+    expect(respostaAdiada("não sei")).toBe(true);
+    expect(respostaAdiada("depois")).toBe(true);
+    expect(respostaAdiada("Quero vender mais")).toBe(false);
+  });
+
+  it("valida URLs e emails", () => {
+    expect(urlValido("padaria.pt")).toBe(true);
+    expect(urlValido("https://x.com/a")).toBe(true);
+    expect(urlValido("semponto")).toBe(false);
+    expect(urlValido("")).toBe(false);
+    expect(emailValido("ola@padaria.pt")).toBe(true);
+    expect(emailValido("ola@x")).toBe(false);
+    expect(emailValido("sem-arroba")).toBe(false);
   });
 });

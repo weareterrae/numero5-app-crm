@@ -265,6 +265,48 @@ export function temSite(b: Brief): boolean {
   return !!b.site_estado && b.site_estado !== "nao";
 }
 
+// ── Validação inteligente das respostas (Parte 24) ──────────────────────────
+
+const RESPOSTAS_LIXO = new Set([
+  "teste", "test", "asdf", "asdfasdf", "qwerty", "xxx", "aaa", "abc",
+  "na", "n/a", "-", ".", "..", "...", "nada", "nenhum", "nenhuma",
+]);
+
+/**
+ * A resposta tem substância? (rejeita «teste», vazios, curtos, aleatórios).
+ * «Não sei» conta como VAZIO — não é lixo, mas alimenta a informação em falta.
+ */
+export function respostaSubstancial(texto: string | null | undefined, minChars = 3): boolean {
+  const t = (texto ?? "").trim().toLowerCase();
+  if (t.length < minChars) return false;
+  if (RESPOSTAS_LIXO.has(t)) return false;
+  if (/^(.)\1{2,}$/.test(t.replace(/\s/g, ""))) return false; // aaaa, xxxx
+  return true;
+}
+
+/** «Não sei / não se aplica / falo disto depois» — informação em falta, não erro. */
+export function respostaAdiada(texto: string | null | undefined): boolean {
+  const t = (texto ?? "").trim().toLowerCase();
+  return ["não sei", "nao sei", "não se aplica", "nao se aplica", "depois", "later", "dunno", "idk"].some(
+    (x) => t === x,
+  );
+}
+
+export function urlValido(u: string | null | undefined): boolean {
+  const s = (u ?? "").trim();
+  if (!s || !s.includes(".")) return false;
+  try {
+    new URL(/^https?:\/\//i.test(s) ? s : `https://${s}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function emailValido(e: string | null | undefined): boolean {
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test((e ?? "").trim());
+}
+
 /**
  * O processo comercial é fraco? Se sim, a proposta deve recomendar primeiro
  * organização/CRM/atendimento, não «mais anúncios». (Parte 16.)
