@@ -388,3 +388,56 @@ export function distribuirFundacao(minutosSetup: number, meses: number): number[
   fatias[m - 1] = Math.round((horas - base * (m - 1)) * 10) / 10;
   return fatias;
 }
+
+// ── Rentabilidade real ───────────────────────────────────────────────────────
+
+export type EntradaRentabilidade = {
+  receitaMensal: number;
+  /** Custo interno + externo (do catálogo), já somado. */
+  custo: number;
+  horasPlaneadas: number;
+  horasReais: number;
+  /** Valor de trabalho executado e ainda não faturado (erode a margem real). */
+  trabalhoNaoFaturado: number;
+};
+
+export type Rentabilidade = {
+  receitaHoraPlaneada: number | null;
+  receitaHoraReal: number | null;
+  margemPrevista: number | null;
+  margemReal: number | null;
+  desvioHoras: number; // reais − planeadas
+};
+
+/**
+ * Rentabilidade prevista vs. real de um cliente. A margem real desconta o
+ * trabalho executado que ficou por faturar; a receita/hora usa as horas reais.
+ */
+export function rentabilidade(e: EntradaRentabilidade): Rentabilidade {
+  const receita = Number(e.receitaMensal) || 0;
+  const custo = Number(e.custo) || 0;
+  const naoFaturado = Math.max(0, Number(e.trabalhoNaoFaturado) || 0);
+
+  return {
+    receitaHoraPlaneada: e.horasPlaneadas > 0 ? receita / e.horasPlaneadas : null,
+    receitaHoraReal: e.horasReais > 0 ? receita / e.horasReais : null,
+    margemPrevista: receita > 0 ? (receita - custo) / receita : null,
+    margemReal: receita > 0 ? (receita - custo - naoFaturado) / receita : null,
+    desvioHoras: (Number(e.horasReais) || 0) - (Number(e.horasPlaneadas) || 0),
+  };
+}
+
+/** Sugestões internas quando a rentabilidade aperta (nunca aplicadas sozinhas). */
+export function sugestoesRentabilidade(cor: string, desvioHoras: number): string[] {
+  const s: string[] = [];
+  if (cor === "vermelho") {
+    s.push("Rever o preço na renovação.");
+    s.push("Cobrar as revisões e o retrabalho fora do incluído.");
+    s.push("Rever o âmbito ou reduzir a produção.");
+  } else if (cor === "amarelo") {
+    s.push("Vigiar as horas — o consumo está acima do previsto.");
+    s.push("Aumentar o fee de coordenação na próxima revisão.");
+  }
+  if (desvioHoras > 0) s.push("Limitar reuniões e consolidar rondas de alterações.");
+  return s;
+}

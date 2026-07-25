@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { semaforo, LIMIARES_DEFEITO } from "./orcamento";
 import {
   minutosReuniao,
   resumoReunioes,
@@ -17,6 +18,8 @@ import {
   ocupacao,
   nivelCapacidade,
   distribuirFundacao,
+  rentabilidade,
+  sugestoesRentabilidade,
   type Reuniao,
   type Aprovacao,
   type Revisao,
@@ -245,5 +248,45 @@ describe("capacidade da operação (Fase 2, bloco 7)", () => {
     const fatias = distribuirFundacao(1800, 3); // 30h em 3 meses
     expect(fatias).toHaveLength(3);
     expect(fatias.reduce((s, x) => s + x, 0)).toBeCloseTo(30);
+  });
+});
+
+describe("rentabilidade real (Fase 2, bloco 8)", () => {
+  it("calcula receita/hora e margem prevista vs real", () => {
+    const r = rentabilidade({
+      receitaMensal: 1000,
+      custo: 300,
+      horasPlaneadas: 10,
+      horasReais: 12,
+      trabalhoNaoFaturado: 100,
+    });
+    expect(r.receitaHoraPlaneada).toBe(100); // 1000/10
+    expect(r.receitaHoraReal).toBeCloseTo(83.33, 1); // 1000/12
+    expect(r.margemPrevista).toBeCloseTo(0.7); // (1000-300)/1000
+    expect(r.margemReal).toBeCloseTo(0.6); // (1000-300-100)/1000
+    expect(r.desvioHoras).toBe(2);
+  });
+
+  it("cliente VERDE: margem e €/h saudáveis", () => {
+    const r = rentabilidade({ receitaMensal: 1000, custo: 300, horasPlaneadas: 10, horasReais: 10, trabalhoNaoFaturado: 0 });
+    expect(semaforo(r.margemReal, r.receitaHoraReal, LIMIARES_DEFEITO).cor).toBe("verde");
+  });
+
+  it("cliente AMARELO: €/hora real abaixo do alvo", () => {
+    // 1000 / 25h = 40 €/h (entre 30 e 45) → amarelo
+    const r = rentabilidade({ receitaMensal: 1000, custo: 300, horasPlaneadas: 10, horasReais: 25, trabalhoNaoFaturado: 0 });
+    expect(semaforo(r.margemReal, r.receitaHoraReal, LIMIARES_DEFEITO).cor).toBe("amarelo");
+  });
+
+  it("cliente VERMELHO: margem real deficitária", () => {
+    // custo 700 + 200 não faturado sobre 1000 → margem real 10% → vermelho
+    const r = rentabilidade({ receitaMensal: 1000, custo: 700, horasPlaneadas: 10, horasReais: 10, trabalhoNaoFaturado: 200 });
+    expect(semaforo(r.margemReal, r.receitaHoraReal, LIMIARES_DEFEITO).cor).toBe("vermelho");
+  });
+
+  it("as sugestões acompanham a cor e o desvio de horas", () => {
+    expect(sugestoesRentabilidade("verde", 0)).toHaveLength(0);
+    expect(sugestoesRentabilidade("vermelho", 5).length).toBeGreaterThan(0);
+    expect(sugestoesRentabilidade("amarelo", 5).some((s) => s.includes("reuniões"))).toBe(true);
   });
 });

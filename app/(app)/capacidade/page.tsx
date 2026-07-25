@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { criarClienteServidor } from "@/lib/supabase/server";
+import { euros } from "@/lib/dominio/metricas";
 import { calcular, normalizarEscopo, type Preco } from "@/lib/dominio/orcamento";
 import {
   horasProdutivas,
@@ -32,7 +33,7 @@ export default async function CapacidadePage() {
     supabase.from("configuracoes").select("chave, valor").in("chave", ["horas_mes_total", "pct_nao_faturavel"]),
     supabase
       .from("propostas")
-      .select("cliente_id, escopo, versao, clientes(nome_marca)")
+      .select("cliente_id, escopo, versao, avenca_valor, clientes(nome_marca)")
       .eq("estado", "aceite")
       .order("versao", { ascending: false }),
     supabase
@@ -56,15 +57,23 @@ export default async function CapacidadePage() {
   // Horas planeadas por cliente (proposta aceite mais recente de cada um).
   const vistos = new Set<string>();
   const porCliente: { nome: string; horas: number }[] = [];
-  for (const p of (propRes.data ?? []) as { cliente_id: string; escopo: unknown; clientes: ClienteEmbed }[]) {
+  let mrr = 0;
+  for (const p of (propRes.data ?? []) as {
+    cliente_id: string;
+    escopo: unknown;
+    avenca_valor: number | null;
+    clientes: ClienteEmbed;
+  }[]) {
     if (vistos.has(p.cliente_id)) continue;
     vistos.add(p.cliente_id);
+    mrr += Number(p.avenca_valor) || 0;
     const orc = calcular(normalizarEscopo(p.escopo), precos);
     const horas = orc.tempoMensalMin / 60;
     if (horas > 0) porCliente.push({ nome: nomeDe(p.clientes), horas });
   }
   porCliente.sort((a, b) => b.horas - a.horas);
   const planeadas = porCliente.reduce((s, c) => s + c.horas, 0);
+  const mrrPorHora = planeadas > 0 ? mrr / planeadas : null;
 
   const reais =
     ((reunioesRes.data ?? []) as Reuniao[]).reduce((s, r) => s + minutosReuniao(r), 0) / 60;
@@ -137,10 +146,16 @@ export default async function CapacidadePage() {
             />
           </section>
 
-          <p className="text-xs text-soft">
-            Horas reais de reuniões este mês: <b>{reais.toFixed(1)}h</b> (a produção real entra pela
-            folha de produção de cada cliente).
-          </p>
+          <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-soft">
+            <span>
+              Horas reais de reuniões este mês: <b className="text-ink">{reais.toFixed(1)}h</b>
+            </span>
+            {mrrPorHora != null && (
+              <span>
+                MRR por hora comprometida: <b className="text-cobalt">{euros(Math.round(mrrPorHora))}/h</b>
+              </span>
+            )}
+          </div>
 
           {/* Por cliente */}
           <section className="rounded-xl border border-line bg-white p-5">
