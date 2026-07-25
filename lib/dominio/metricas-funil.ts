@@ -30,6 +30,24 @@ export type MetricasFunil = {
 
 const rac = (a: number, b: number): number | null => (b > 0 ? a / b : null);
 
+export type ClienteAbandono = {
+  intake_submetido_em?: string | null;
+  intake_passo?: number | null;
+  intake_rascunho?: unknown;
+};
+
+/** Diagnósticos começados e não submetidos, agrupados pelo passo onde pararam. */
+export function abandonoPorEtapa(clientes: ClienteAbandono[]): { passo: number; total: number }[] {
+  const mapa = new Map<number, number>();
+  for (const c of clientes) {
+    if (c.intake_submetido_em) continue; // concluído, não é abandono
+    if (!c.intake_rascunho) continue; // nunca começou
+    const passo = Math.max(0, Number(c.intake_passo) || 0);
+    mapa.set(passo, (mapa.get(passo) ?? 0) + 1);
+  }
+  return [...mapa.entries()].map(([passo, total]) => ({ passo, total })).sort((a, b) => a.passo - b.passo);
+}
+
 export function metricasFunil(clientes: ClienteFunil[], propostas: PropostaFunil[]): MetricasFunil {
   const enviados = clientes.filter((c) => !!c.intake_token).length;
   const submetidos = clientes.filter((c) => !!c.intake_submetido_em).length;

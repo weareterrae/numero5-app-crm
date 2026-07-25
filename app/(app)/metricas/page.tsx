@@ -1,6 +1,6 @@
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { euros } from "@/lib/dominio/metricas";
-import { metricasFunil } from "@/lib/dominio/metricas-funil";
+import { metricasFunil, abandonoPorEtapa } from "@/lib/dominio/metricas-funil";
 import { agregarPorServico, calcular, normalizarEscopo, margem, euroHora, type Preco } from "@/lib/dominio/orcamento";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ export default async function MetricasPage() {
   const supabase = await criarClienteServidor();
 
   const [clientesRes, propostasRes, aceitesRes, precosRes] = await Promise.all([
-    supabase.from("clientes").select("intake_token, intake_submetido_em"),
+    supabase.from("clientes").select("intake_token, intake_submetido_em, intake_passo, intake_rascunho"),
     supabase.from("propostas").select("estado, setup_valor, avenca_valor, motivo_recusa"),
     supabase.from("propostas").select("escopo").eq("estado", "aceite"),
     supabase
@@ -29,6 +29,7 @@ export default async function MetricasPage() {
     return [...o.mensal, ...o.setup];
   });
   const porServico = agregarPorServico(linhas);
+  const abandono = abandonoPorEtapa(clientesRes.data ?? []);
 
   return (
     <div className="space-y-6">
@@ -52,6 +53,21 @@ export default async function MetricasPage() {
         <Kpi valor={m.mrrMedio == null ? "—" : `${euros(Math.round(m.mrrMedio))}/mês`} rotulo="avença média (aceites)" />
         <Kpi valor={String(m.propostasEnviadas)} rotulo="à espera de decisão" />
       </section>
+
+      {abandono.length > 0 && (
+        <section className="rounded-xl border border-line bg-white p-5">
+          <h2 className="mb-1 font-display text-lg font-extrabold">Diagnósticos por concluir</h2>
+          <p className="mb-3 text-xs text-soft">Onde os clientes pararam — bom para saber que passo prende.</p>
+          <ul className="space-y-1 text-sm">
+            {abandono.map((a) => (
+              <li key={a.passo} className="flex items-center justify-between">
+                <span className="text-grey">Passo {a.passo + 1}</span>
+                <b className="tabular-nums">{a.total}</b>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {porServico.length > 0 && (
         <section className="rounded-xl border border-line bg-white p-5">

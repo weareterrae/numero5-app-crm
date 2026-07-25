@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { mensagemSeguimento, situacaoSeguimento } from "./followups";
-import { metricasFunil } from "./metricas-funil";
+import { metricasFunil, abandonoPorEtapa } from "./metricas-funil";
 
 describe("follow-ups preparados (Parte G)", () => {
   it("preenche nome e empresa em PT e EN", () => {
@@ -58,5 +58,21 @@ describe("métricas do funil (Parte H)", () => {
     expect(m.taxaSubmissao).toBeNull();
     expect(m.taxaAceitacao).toBeNull();
     expect(m.setupMedio).toBeNull();
+  });
+});
+
+describe("abandono por etapa (Parte 31)", () => {
+  it("agrupa os nao-submetidos com rascunho pelo passo", () => {
+    const r = abandonoPorEtapa([
+      { intake_submetido_em: "2026-07-01", intake_passo: 5, intake_rascunho: { x: 1 } }, // concluido
+      { intake_submetido_em: null, intake_passo: 3, intake_rascunho: { x: 1 } }, // abandono passo 3
+      { intake_submetido_em: null, intake_passo: 3, intake_rascunho: { x: 1 } }, // abandono passo 3
+      { intake_submetido_em: null, intake_passo: 7, intake_rascunho: { x: 1 } }, // abandono passo 7
+      { intake_submetido_em: null, intake_passo: 0, intake_rascunho: null }, // nunca comecou
+    ]);
+    expect(r).toEqual([
+      { passo: 3, total: 2 },
+      { passo: 7, total: 1 },
+    ]);
   });
 });
