@@ -11,6 +11,7 @@ const LINKS = [
   { href: "/clientes/funil", label: "Funil" },
   { href: "/avencas", label: "Avenças" },
   { href: "/faturacao", label: "Faturação" },
+  { href: "/capacidade", label: "Capacidade" },
   { href: "/definicoes/precos", label: "Preços" },
 ];
 

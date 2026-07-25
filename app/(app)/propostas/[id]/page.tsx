@@ -13,6 +13,7 @@ import { DescontoProposta, type Desconto } from "@/components/propostas/Desconto
 import { CondicoesProposta, type Condicoes } from "@/components/propostas/CondicoesProposta";
 import { CasosPicker, type Caso } from "@/components/propostas/CasosPicker";
 import { calcular, descreverEscopo, normalizarEscopo, type Preco } from "@/lib/dominio/orcamento";
+import { horasProdutivas, ocupacao, nivelCapacidade } from "@/lib/dominio/operacao";
 import { rotuloFaixa } from "@/lib/dominio/intake";
 import { EnviarLink } from "@/components/crm/EnviarLink";
 
@@ -92,6 +93,8 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
       "limiar_vermelho_hora",
       "limiar_amarelo_margem",
       "limiar_vermelho_margem",
+      "horas_mes_total",
+      "pct_nao_faturavel",
     ]);
   const cfg = Object.fromEntries((cfgRows ?? []).map((r) => [r.chave, Number(r.valor)]));
   const passo = cfg.passo_arredondamento || 50;
@@ -117,6 +120,28 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
       custo_externo: externos.get(p.chave) ?? null,
     }));
   }
+
+  // Impacto na capacidade: horas desta proposta vs. as já contratadas (outros clientes).
+  const horasEsta = calcular(normalizarEscopo(p.escopo ?? {}), precosComExterno).tempoMensalMin / 60;
+  const { data: aceitesData } = await supabase
+    .from("propostas")
+    .select("cliente_id, escopo, versao")
+    .eq("estado", "aceite")
+    .order("versao", { ascending: false });
+  const vistosCap = new Set<string>();
+  let horasOutros = 0;
+  for (const ac of (aceitesData ?? []) as { cliente_id: string; escopo: unknown }[]) {
+    if (vistosCap.has(ac.cliente_id)) continue;
+    vistosCap.add(ac.cliente_id);
+    if (cliente && ac.cliente_id === cliente.id) continue; // este cliente conta pela proposta atual
+    horasOutros += calcular(normalizarEscopo(ac.escopo), precosComExterno).tempoMensalMin / 60;
+  }
+  const capProdutivas = horasProdutivas(
+    cfg.horas_mes_total || null,
+    Number.isFinite(cfg.pct_nao_faturavel) ? cfg.pct_nao_faturavel : null,
+  );
+  const ocupDepois = ocupacao(horasOutros + horasEsta, capProdutivas);
+  const nivelDepois = nivelCapacidade(ocupDepois);
 
   // Descontos ativos (tolerante: vazio se a migração 0023 não correu).
   const { data: descontosData } = cliente
@@ -289,6 +314,34 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
           setupValor={p.setup_valor}
           descontos={descontos}
         />
+      )}
+
+      {capProdutivas != null && horasEsta > 0 && (
+        <section
+          className={`rounded-xl border-2 p-5 ${
+            nivelDepois === "sobrecarga" ? "border-bad bg-bad/5" : "border-line bg-white"
+          }`}
+        >
+          <h2 className="font-display text-lg font-extrabold">Impacto na capacidade</h2>
+          <p className="mt-1 text-sm text-grey">
+            Esta proposta adiciona <b className="text-ink">{horasEsta.toFixed(1)}h/mês</b>. A ocupação
+            passa a{" "}
+            <b className={nivelDepois === "sobrecarga" ? "text-bad" : "text-ink"}>
+              {ocupDepois == null ? "—" : `${Math.round(ocupDepois * 100)}%`}
+            </b>{" "}
+            das {capProdutivas.toFixed(0)}h produtivas.
+          </p>
+          {nivelDepois === "sobrecarga" && (
+            <p className="mt-2 text-sm font-bold text-bad">
+              ⚠️ A adjudicação desta proposta leva a operação acima da capacidade configurada para
+              este período. Não bloqueia — mas decide com consciência (prazos, subcontratar,
+              contratar).
+            </p>
+          )}
+          <Link href="/capacidade" className="mt-2 inline-block text-xs font-bold text-gold-dark">
+            ver capacidade →
+          </Link>
+        </section>
       )}
 
       <CondicoesProposta

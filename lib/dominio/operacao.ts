@@ -345,3 +345,46 @@ export function corEstadoFinanceiro(estado: string | null | undefined): "good" |
   if (ESTADOS_FINANCEIROS_ALERTA.has(estado ?? "")) return "warn";
   return "good";
 }
+
+// ── Capacidade da operação ───────────────────────────────────────────────────
+
+/** Horas produtivas (faturáveis) = totais menos a fatia reservada. */
+export function horasProdutivas(
+  horasTotais: number | null,
+  pctNaoFaturavel: number | null,
+): number | null {
+  if (horasTotais == null || horasTotais <= 0) return null;
+  const pct = pctNaoFaturavel == null ? 0 : Math.min(100, Math.max(0, pctNaoFaturavel));
+  return horasTotais * (1 - pct / 100);
+}
+
+/** Fração de ocupação (planeadas / produtivas). Null se não há base. */
+export function ocupacao(planeadas: number, produtivas: number | null): number | null {
+  if (produtivas == null || produtivas <= 0) return null;
+  return planeadas / produtivas;
+}
+
+export type NivelCapacidade = "folgada" | "saudavel" | "cheia" | "sobrecarga";
+
+/** Nível de ocupação: <70% folgada, <90% saudável, <=100% cheia, >100% sobrecarga. */
+export function nivelCapacidade(ocupacaoFrac: number | null): NivelCapacidade | null {
+  if (ocupacaoFrac == null) return null;
+  if (ocupacaoFrac > 1) return "sobrecarga";
+  if (ocupacaoFrac >= 0.9) return "cheia";
+  if (ocupacaoFrac >= 0.7) return "saudavel";
+  return "folgada";
+}
+
+/**
+ * Distribui as horas de setup de uma Fundação pelos meses de implementação.
+ * Distribuição uniforme (a última fatia absorve o resto), em horas.
+ */
+export function distribuirFundacao(minutosSetup: number, meses: number): number[] {
+  const m = Math.max(1, Math.round(meses));
+  const horas = (Number(minutosSetup) || 0) / 60;
+  if (horas <= 0) return Array(m).fill(0);
+  const base = Math.floor((horas / m) * 10) / 10; // 1 casa decimal
+  const fatias = Array(m).fill(base);
+  fatias[m - 1] = Math.round((horas - base * (m - 1)) * 10) / 10;
+  return fatias;
+}

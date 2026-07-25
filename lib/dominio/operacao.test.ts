@@ -13,6 +13,10 @@ import {
   arranqueCompleto,
   resumoDivida,
   corEstadoFinanceiro,
+  horasProdutivas,
+  ocupacao,
+  nivelCapacidade,
+  distribuirFundacao,
   type Reuniao,
   type Aprovacao,
   type Revisao,
@@ -213,5 +217,33 @@ describe("duração, pagamentos e financeiro (Fase 2, blocos 5+6)", () => {
     expect(corEstadoFinanceiro("producao_condicionada")).toBe("warn");
     expect(corEstadoFinanceiro("producao_suspensa")).toBe("bad");
     expect(corEstadoFinanceiro("pagamento_atraso")).toBe("bad");
+  });
+});
+
+describe("capacidade da operação (Fase 2, bloco 7)", () => {
+  it("as horas produtivas descontam a fatia não faturável", () => {
+    expect(horasProdutivas(160, 30)).toBeCloseTo(112); // 160 × 0.7
+    expect(horasProdutivas(160, 0)).toBe(160);
+    expect(horasProdutivas(null, 30)).toBeNull();
+  });
+
+  it("a ocupação é planeadas sobre produtivas", () => {
+    expect(ocupacao(56, 112)).toBeCloseTo(0.5);
+    expect(ocupacao(56, null)).toBeNull();
+    expect(ocupacao(56, 0)).toBeNull();
+  });
+
+  it("o nível reflete a ocupação", () => {
+    expect(nivelCapacidade(0.5)).toBe("folgada");
+    expect(nivelCapacidade(0.8)).toBe("saudavel");
+    expect(nivelCapacidade(0.95)).toBe("cheia");
+    expect(nivelCapacidade(1.2)).toBe("sobrecarga");
+    expect(nivelCapacidade(null)).toBeNull();
+  });
+
+  it("a Fundação distribui as horas pelos meses de implementação", () => {
+    const fatias = distribuirFundacao(1800, 3); // 30h em 3 meses
+    expect(fatias).toHaveLength(3);
+    expect(fatias.reduce((s, x) => s + x, 0)).toBeCloseTo(30);
   });
 });
