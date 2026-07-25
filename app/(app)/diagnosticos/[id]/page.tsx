@@ -6,12 +6,36 @@ import { alternarPartilha, concluirDiagnostico } from "../acoes";
 import { criarPropostaDeDiagnostico } from "@/app/(app)/propostas/acoes";
 import { dataCurta } from "@/lib/dominio/metricas";
 import { descreverEscopo, normalizarEscopo } from "@/lib/dominio/orcamento";
-import { rotuloFaixa } from "@/lib/dominio/intake";
+import { rotulo, rotuloFaixa, diferencasMapa } from "@/lib/dominio/intake";
+import { OBJETIVOS } from "@/lib/dominio/diagnostico/recomendacoes";
 import { BriefCliente } from "@/components/diagnostico/BriefCliente";
+import { DiffDiagnostico } from "@/components/diagnostico/DiffDiagnostico";
 import { EnviarLink } from "@/components/crm/EnviarLink";
 import { AnaliseInterna } from "@/components/diagnostico/AnaliseInterna";
 import { informacaoEmFalta, podeGerarProposta, type EntradaAnalise } from "@/lib/dominio/diagnostico/analise";
 import type { Brief } from "@/lib/dominio/intake";
+
+/** Mapa campo→valor legível (PT) de um diagnóstico, para comparar versões. */
+function mapaDiagnostico(brief: Brief | null, objetivosSel: string[], orcamento: string | null | undefined): Record<string, string> {
+  const b = brief ?? {};
+  const m: Record<string, string> = {};
+  const objs = (objetivosSel ?? [])
+    .map((k) => OBJETIVOS.find((o) => o[0] === k)?.[1])
+    .filter(Boolean)
+    .join(", ");
+  if (objs) m["Objetivos"] = objs;
+  const put = (campo: string, v: string | null | undefined) => {
+    if (v) m[campo] = v;
+  };
+  put("Orçamento", rotuloFaixa(orcamento));
+  put("Público", rotulo("publico", b.publico));
+  put("Prazo", rotulo("prazo", b.prazo));
+  put("Intenção", rotulo("intencao", b.intencao));
+  put("Quem decide", rotulo("quem_decide", b.quem_decide));
+  const sitep = (b.site_problemas ?? []).map((k) => rotulo("site_problemas", k)).filter(Boolean).join(", ");
+  if (sitep) m["Site — problemas"] = sitep;
+  return m;
+}
 
 export const dynamic = "force-dynamic";
 
@@ -61,6 +85,30 @@ export default async function DiagnosticoPage({ params }: { params: Promise<{ id
     siteScore: d.site_score ?? null,
   };
   const faltaCritica = !podeGerarProposta(informacaoEmFalta(entradaAnalise));
+
+  // Comparação com a versão anterior (Parte 6) — só se houver v anterior.
+  let diffVersao = null;
+  if (d.versao > 1) {
+    const { data: anterior } = await supabase
+      .from("diagnosticos")
+      .select("brief, objetivos, pedido")
+      .eq("cliente_id", d.cliente_id)
+      .eq("versao", d.versao - 1)
+      .maybeSingle();
+    if (anterior) {
+      const mapaAnt = mapaDiagnostico(
+        anterior.brief as Brief,
+        (anterior.objetivos?.selecionados as string[]) ?? [],
+        (anterior.pedido as { orcamento?: string } | null)?.orcamento ?? null,
+      );
+      const mapaNovo = mapaDiagnostico(
+        d.brief as Brief,
+        entradaAnalise.objetivos,
+        entradaAnalise.orcamento,
+      );
+      diffVersao = diferencasMapa(mapaAnt, mapaNovo);
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -130,6 +178,9 @@ export default async function DiagnosticoPage({ params }: { params: Promise<{ id
           </p>
         </div>
       )}
+
+      {/* Comparação com a versão anterior */}
+      {diffVersao && <DiffDiagnostico versaoAtual={d.versao} diferencas={diffVersao} />}
 
       {/* Análise interna — oportunidades, adequação, lacunas (só para o operador) */}
       <AnaliseInterna

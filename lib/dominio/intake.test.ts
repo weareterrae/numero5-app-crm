@@ -5,6 +5,8 @@ import {
   temSite,
   processoComercialFraco,
   recomendacaoSite,
+  diferencasMapa,
+  temDiferencas,
   respostaSubstancial,
   respostaAdiada,
   urlValido,
@@ -72,6 +74,21 @@ describe("validação inteligente das respostas (Parte 24)", () => {
     expect(recomendacaoSite(["nao_representa", "lento"])).toBe("reconstruir");
     expect(recomendacaoSite(["desatualizado", "nao_gera"])).toBe("melhorar");
     expect(recomendacaoSite([])).toBeNull();
+  });
+
+  it("compara versões do diagnóstico (Parte 6)", () => {
+    const v1 = { Objetivos: "Leads", Orçamento: "500–1000 €", Prazo: "Nos próximos meses" };
+    const v2 = { Objetivos: "Leads, Vendas", Prazo: "O quanto antes", Público: "Empresas" };
+    const d = diferencasMapa(v1, v2);
+    expect(temDiferencas(d)).toBe(true);
+    expect(d.alteradas.find((m) => m.campo === "Objetivos")?.para).toBe("Leads, Vendas");
+    expect(d.alteradas.find((m) => m.campo === "Prazo")).toBeTruthy();
+    expect(d.novas.find((m) => m.campo === "Público")?.para).toBe("Empresas");
+    expect(d.removidas.find((m) => m.campo === "Orçamento")?.de).toBe("500–1000 €");
+  });
+
+  it("mapas iguais → sem diferenças", () => {
+    expect(temDiferencas(diferencasMapa({ a: "x" }, { a: "x" }))).toBe(false);
   });
 
   it("valida URLs e emails", () => {

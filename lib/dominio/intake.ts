@@ -312,6 +312,42 @@ export function temSite(b: Brief): boolean {
   return !!b.site_estado && b.site_estado !== "nao";
 }
 
+// ── Comparação entre versões do diagnóstico (Parte 6) ───────────────────────
+
+export type Mudanca = { campo: string; de: string; para: string };
+export type DiferencasDiagnostico = {
+  novas: Mudanca[];
+  alteradas: Mudanca[];
+  removidas: Mudanca[];
+};
+
+/**
+ * Diferenças entre duas versões (mapas campo→valor legível já traduzidos pelo
+ * chamador). Puro e testável. Vazio → sem alterações.
+ */
+export function diferencasMapa(
+  a: Record<string, string>,
+  b: Record<string, string>,
+): DiferencasDiagnostico {
+  const campos = new Set([...Object.keys(a), ...Object.keys(b)]);
+  const novas: Mudanca[] = [];
+  const alteradas: Mudanca[] = [];
+  const removidas: Mudanca[] = [];
+  for (const c of [...campos]) {
+    const va = (a[c] ?? "").trim();
+    const vb = (b[c] ?? "").trim();
+    if (va === vb) continue;
+    if (!va && vb) novas.push({ campo: c, de: "", para: vb });
+    else if (va && !vb) removidas.push({ campo: c, de: va, para: "" });
+    else alteradas.push({ campo: c, de: va, para: vb });
+  }
+  return { novas, alteradas, removidas };
+}
+
+export function temDiferencas(d: DiferencasDiagnostico): boolean {
+  return d.novas.length > 0 || d.alteradas.length > 0 || d.removidas.length > 0;
+}
+
 // ── Validação inteligente das respostas (Parte 24) ──────────────────────────
 
 const RESPOSTAS_LIXO = new Set([
