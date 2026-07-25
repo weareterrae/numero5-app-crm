@@ -43,10 +43,20 @@ export default async function ExtrasPage({ params }: { params: Promise<{ id: str
 
   const { data: cliente } = await supabase
     .from("clientes")
-    .select("id, nome_marca, telefone, email, idioma")
+    .select("id, nome_marca, idioma")
     .eq("id", id)
     .maybeSingle();
   if (!cliente) notFound();
+
+  // Telefone/email vêm dos contactos (o contacto principal), não da ficha.
+  const { data: contactos } = await supabase
+    .from("contactos")
+    .select("telefone, email, principal")
+    .eq("cliente_id", id);
+  const contacto =
+    (contactos ?? []).find((c) => c.principal && (c.telefone || c.email)) ??
+    (contactos ?? []).find((c) => c.telefone || c.email) ??
+    null;
 
   const { data: ordensData } = await supabase
     .from("ordens_alteracao")
@@ -163,8 +173,8 @@ export default async function ExtrasPage({ params }: { params: Promise<{ id: str
                         ? `Hi! Here's the change order for "${o.titulo}". Take a look and confirm:`
                         : `Olá! Aqui está a ordem de alteração para "${o.titulo}". Vê e confirma:`
                     }
-                    telefone={cliente.telefone}
-                    email={cliente.email}
+                    telefone={contacto?.telefone}
+                    email={contacto?.email}
                     clienteId={cliente.id}
                   />
                 </div>
