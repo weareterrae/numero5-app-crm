@@ -64,6 +64,20 @@ export const CHAVES_ESTRUTURADAS = new Set([
   "site_novo", "site_melhorias", "loja_online", "identidade", "perfis",
 ]);
 
+/** Parâmetros de âmbito — o que fica combinado dentro de cada serviço. */
+export type Ambitos = {
+  /** Nº máximo de slides por carrossel. */
+  carrossel_slides?: number;
+  /** Duração máxima do reel, em segundos. */
+  reel_duracao?: number;
+  /** Âmbito da loja online (produtos, pagamentos, entregas). */
+  loja?: string;
+  /** Âmbito do assistente (documentos, fluxos, integrações). */
+  assistente?: string;
+  /** Limite de interações/mês na moderação. */
+  moderacao_limite?: number;
+};
+
 export type Escopo = {
   producao: Producao;
   canais: Partial<Record<ChaveCanal, Canal>>;
@@ -72,6 +86,8 @@ export type Escopo = {
   verba_anuncios: number;
   /** Serviços à medida acrescentados a partir do catálogo. */
   servicos: ServicoExtra[];
+  /** Parâmetros de âmbito combinados com o cliente. */
+  ambitos: Ambitos;
   extras: {
     anuncios: boolean;
     /** Respostas a comentários, menções e mensagens, com aprovação humana. */
@@ -90,6 +106,7 @@ export const ESCOPO_VAZIO: Escopo = {
   site: { tipo: "nenhum", paginas: 0 },
   verba_anuncios: 0,
   servicos: [],
+  ambitos: {},
   extras: {
     anuncios: false,
     moderacao: false,
@@ -169,6 +186,7 @@ export function normalizarEscopo(bruto: unknown): Escopo {
       ...(e as unknown as Escopo),
       producao: { ...PRODUCAO_VAZIA, ...(e.producao as Producao) },
       servicos: Array.isArray(e.servicos) ? (e.servicos as ServicoExtra[]) : [],
+      ambitos: { ...ESCOPO_VAZIO.ambitos, ...((e.ambitos as Ambitos) ?? {}) },
     };
   }
   // Modelo antigo: somar as peças que estavam espalhadas pelos canais.
@@ -189,6 +207,7 @@ export function normalizarEscopo(bruto: unknown): Escopo {
     producao,
     canais,
     servicos: Array.isArray(e.servicos) ? (e.servicos as ServicoExtra[]) : [],
+    ambitos: { ...ESCOPO_VAZIO.ambitos, ...((e.ambitos as Ambitos) ?? {}) },
   };
 }
 
@@ -329,6 +348,13 @@ export function descreverEscopo(e: Escopo): string[] {
   if (e.producao.stories) partes.push(`${e.producao.stories} histórias`);
   if (partes.length) linhas.push(`${partes.join(" + ")} por mês, com a cara da tua marca`);
 
+  const detalhe: string[] = [];
+  if (e.producao.carrosseis && e.ambitos.carrossel_slides)
+    detalhe.push(`carrosséis até ${e.ambitos.carrossel_slides} slides`);
+  if (e.producao.reels && e.ambitos.reel_duracao)
+    detalhe.push(`reels até ${e.ambitos.reel_duracao}s`);
+  if (detalhe.length) linhas.push(`Cada peça no seu formato: ${detalhe.join(", ")}`);
+
   if (ativos.length) {
     const nomes = ativos.map(([k]) => CANAIS.find(([c]) => c === k)?.[1] ?? k);
     linhas.push(`Publicação e gestão em ${nomes.join(", ")} — publicar, responder e acompanhar`);
@@ -339,16 +365,27 @@ export function descreverEscopo(e: Escopo): string[] {
   if (e.site.tipo === "novo")
     linhas.push(`Site novo${e.site.paginas ? ` (${e.site.paginas} páginas)` : ""}`);
   if (e.site.tipo === "melhorias") linhas.push("Melhorias ao site atual");
-  if (e.site.tipo === "loja") linhas.push("Loja online com catálogo e pagamentos");
+  if (e.site.tipo === "loja")
+    linhas.push(
+      e.ambitos.loja
+        ? `Loja online: ${e.ambitos.loja}`
+        : "Loja online com catálogo e pagamentos",
+    );
 
   if (e.extras.identidade) linhas.push("Identidade e estratégia documentadas");
   if (e.extras.montar_perfis) linhas.push("Perfis das redes montados e otimizados");
   if (e.extras.moderacao)
     linhas.push(
-      "Respostas a comentários, menções e mensagens: o assistente sugere no tom da tua marca e tu aprovas num clique — ninguém fica sem resposta, e nada sai sem o teu aval",
+      `Respostas a comentários, menções e mensagens: o assistente sugere no tom da tua marca e tu aprovas num clique — ninguém fica sem resposta, e nada sai sem o teu aval${
+        e.ambitos.moderacao_limite ? ` (até ${e.ambitos.moderacao_limite} interações/mês)` : ""
+      }`,
     );
   if (e.extras.assistente)
-    linhas.push("Assistente de IA com nome próprio no teu site, à medida da tua marca");
+    linhas.push(
+      e.ambitos.assistente
+        ? `Assistente de IA com nome próprio no teu site: ${e.ambitos.assistente}`
+        : "Assistente de IA com nome próprio no teu site, à medida da tua marca",
+    );
   if (e.extras.anuncios)
     linhas.push(
       e.verba_anuncios > 0
@@ -363,4 +400,38 @@ export function descreverEscopo(e: Escopo): string[] {
   }
 
   return linhas;
+}
+
+export type Alerta = { nivel: "aviso" | "info"; texto: string };
+
+/**
+ * Avisos que o operador deve ver antes de fechar a proposta — âmbito por
+ * definir, verba em falta, serviços sem preço. Não bloqueiam; alertam.
+ */
+export function alertas(e: Escopo, orc: Orcamento): Alerta[] {
+  const a: Alerta[] = [];
+  const ativos = canaisAtivos(e);
+  const proprios = ativos.filter(([, c]) => c.proprio).length;
+
+  if (proprios > 0)
+    a.push({
+      nivel: "info",
+      texto: `${proprios} canal(is) com conteúdo próprio — cada um paga gestão completa e a produção exclusiva conta à parte.`,
+    });
+  if (e.producao.carrosseis > 0 && !e.ambitos.carrossel_slides)
+    a.push({ nivel: "aviso", texto: "Carrosséis sem nº de slides definido — combina o limite antes de propor." });
+  if (e.producao.reels > 0 && !e.ambitos.reel_duracao)
+    a.push({ nivel: "aviso", texto: "Reels sem duração máxima definida." });
+  if (e.site.tipo === "loja" && !e.ambitos.loja)
+    a.push({ nivel: "aviso", texto: "Loja online sem âmbito (produtos, pagamentos, entregas) definido." });
+  if (e.extras.assistente && !e.ambitos.assistente)
+    a.push({ nivel: "aviso", texto: "Assistente sem âmbito (documentos, fluxos, integrações) definido." });
+  if (e.extras.moderacao && !e.ambitos.moderacao_limite)
+    a.push({ nivel: "aviso", texto: "Moderação sem limite de interações/mês — risco de âmbito aberto." });
+  if (e.extras.anuncios && !(e.verba_anuncios > 0))
+    a.push({ nivel: "aviso", texto: "Anúncios ligados mas sem verba mensal definida." });
+  if (orc.porDefinir.length > 0)
+    a.push({ nivel: "aviso", texto: `${orc.porDefinir.length} serviço(s) ainda [A DEFINIR] no catálogo.` });
+
+  return a;
 }

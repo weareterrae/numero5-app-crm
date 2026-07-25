@@ -6,6 +6,7 @@ import {
   CANAIS,
   CHAVES_ESTRUTURADAS,
   ESCOPO_VAZIO,
+  alertas,
   arredondarComercial,
   calcular,
   canaisAtivos,
@@ -14,6 +15,7 @@ import {
   margem,
   normalizarEscopo,
   pecasPorMes,
+  type Ambitos,
   type ChaveCanal,
   type Escopo,
   type Preco,
@@ -69,6 +71,7 @@ export function Configurador({
   const [motivoDesc, setMotivoDesc] = useState("");
 
   const orc = useMemo(() => calcular(e, precos), [e, precos]);
+  const avisos = useMemo(() => alertas(e, orc), [e, orc]);
   const pecas = pecasPorMes(e);
   const ativos = canaisAtivos(e);
   const semPrecos = precos.every((p) => p.preco === null);
@@ -99,6 +102,15 @@ export function Configurador({
         ...prev,
         servicos: quantidade > 0 ? [...outrosServicos, { chave, rotulo, quantidade }] : outrosServicos,
       };
+    });
+  }
+
+  function setAmbito<K extends keyof Ambitos>(campo: K, valor: Ambitos[K]) {
+    setE((prev) => {
+      const ambitos = { ...prev.ambitos };
+      if (valor === undefined || valor === "" || valor === 0) delete ambitos[campo];
+      else ambitos[campo] = valor;
+      return { ...prev, ambitos };
     });
   }
 
@@ -174,6 +186,36 @@ export function Configurador({
           </div>
         ))}
       </div>
+      {(e.producao.carrosseis > 0 || e.producao.reels > 0) && (
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          {e.producao.carrosseis > 0 && (
+            <div>
+              <label className="mb-0.5 block text-[11px] text-grey">Slides por carrossel (máx.)</label>
+              <input
+                type="number"
+                min={0}
+                value={e.ambitos.carrossel_slides ?? ""}
+                onChange={(ev) => setAmbito("carrossel_slides", Math.max(0, +ev.target.value || 0))}
+                placeholder="ex.: 6"
+                className="w-full rounded-lg border border-line px-2.5 py-1.5 text-sm tabular-nums"
+              />
+            </div>
+          )}
+          {e.producao.reels > 0 && (
+            <div>
+              <label className="mb-0.5 block text-[11px] text-grey">Duração do reel (seg., máx.)</label>
+              <input
+                type="number"
+                min={0}
+                value={e.ambitos.reel_duracao ?? ""}
+                onChange={(ev) => setAmbito("reel_duracao", Math.max(0, +ev.target.value || 0))}
+                placeholder="ex.: 30"
+                className="w-full rounded-lg border border-line px-2.5 py-1.5 text-sm tabular-nums"
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 2. Canais */}
       <h3 className="mt-5 mb-1 text-sm font-bold">2. Onde é publicado</h3>
@@ -252,6 +294,19 @@ export function Configurador({
           />
         </div>
       )}
+      {e.site.tipo === "loja" && (
+        <div className="mt-2">
+          <label className="mb-0.5 block text-[11px] text-grey">
+            Âmbito da loja (produtos, pagamentos, entregas)
+          </label>
+          <input
+            value={e.ambitos.loja ?? ""}
+            onChange={(ev) => setAmbito("loja", ev.target.value)}
+            placeholder="ex.: até 30 produtos, MB WAY + cartão, envio CTT"
+            className="w-full rounded-lg border border-line px-2.5 py-1.5 text-sm"
+          />
+        </div>
+      )}
 
       {/* 4. Extras */}
       <h3 className="mt-5 mb-2 text-sm font-bold">4. Também incluído</h3>
@@ -292,6 +347,39 @@ export function Configurador({
             Esta verba <b>não é receita nossa</b> — é o que ele paga às plataformas. Serve para
             calcular a gestão: cobramos o valor fixo ou a percentagem, o que for maior.
           </p>
+        </div>
+      )}
+
+      {(e.extras.moderacao || e.extras.assistente) && (
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {e.extras.moderacao && (
+            <div>
+              <label className="mb-0.5 block text-[11px] text-grey">
+                Moderação — limite de interações/mês
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={e.ambitos.moderacao_limite ?? ""}
+                onChange={(ev) => setAmbito("moderacao_limite", Math.max(0, +ev.target.value || 0))}
+                placeholder="ex.: 200"
+                className="w-full rounded-lg border border-line px-2.5 py-1.5 text-sm tabular-nums"
+              />
+            </div>
+          )}
+          {e.extras.assistente && (
+            <div>
+              <label className="mb-0.5 block text-[11px] text-grey">
+                Assistente — âmbito (documentos, fluxos, integrações)
+              </label>
+              <input
+                value={e.ambitos.assistente ?? ""}
+                onChange={(ev) => setAmbito("assistente", ev.target.value)}
+                placeholder="ex.: FAQ + marcações, sem integração externa"
+                className="w-full rounded-lg border border-line px-2.5 py-1.5 text-sm"
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -425,6 +513,22 @@ export function Configurador({
                   </div>
                 )}
               </div>
+            )}
+
+            {avisos.filter((a) => !a.texto.includes("[A DEFINIR]")).length > 0 && (
+              <ul className="mt-3 space-y-1 border-t border-white/15 pt-3 text-xs">
+                {avisos
+                  .filter((a) => !a.texto.includes("[A DEFINIR]"))
+                  .map((a, i) => (
+                    <li
+                      key={i}
+                      className={`flex gap-1.5 ${a.nivel === "aviso" ? "text-warn" : "text-soft"}`}
+                    >
+                      <span>{a.nivel === "aviso" ? "⚠️" : "ℹ️"}</span>
+                      <span>{a.texto}</span>
+                    </li>
+                  ))}
+              </ul>
             )}
 
             {orc.porDefinir.length > 0 && (

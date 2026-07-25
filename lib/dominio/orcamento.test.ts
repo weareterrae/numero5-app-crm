@@ -1,10 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
   ESCOPO_VAZIO,
+  alertas,
   arredondarComercial,
   calcular,
   euroHora,
   margem,
+  normalizarEscopo,
   type Escopo,
   type Preco,
 } from "./orcamento";
@@ -34,12 +36,14 @@ const esc = (over: {
   servicos?: Escopo["servicos"];
   verba_anuncios?: number;
   site?: Escopo["site"];
+  ambitos?: Escopo["ambitos"];
 }): Escopo => ({
   ...ESCOPO_VAZIO,
   ...over,
   producao: { ...ESCOPO_VAZIO.producao, ...(over.producao ?? {}) },
   extras: { ...ESCOPO_VAZIO.extras, ...(over.extras ?? {}) },
   canais: over.canais ?? {},
+  ambitos: { ...ESCOPO_VAZIO.ambitos, ...(over.ambitos ?? {}) },
 });
 
 describe("arredondamento comercial (ceil ao múltiplo de 50)", () => {
@@ -128,5 +132,55 @@ describe("cálculo de propostas", () => {
     expect(o.custoMensal).toBe(80);
     expect(euroHora(320, o.tempoMensalMin)).toBeCloseTo(64); // 320 / 5h
     expect(margem(320, o.custoMensal)).toBeCloseTo((320 - 80) / 320);
+  });
+});
+
+describe("âmbitos e alertas", () => {
+  it("normalizarEscopo funde os âmbitos e mantém defeito vazio", () => {
+    const e = normalizarEscopo({ producao: { reels: 2 }, ambitos: { reel_duracao: 30 } });
+    expect(e.ambitos.reel_duracao).toBe(30);
+    expect(e.ambitos.carrossel_slides).toBeUndefined();
+  });
+
+  it("avisa quando o âmbito fica por definir", () => {
+    const e = esc({
+      producao: { posts: 0, carrosseis: 2, reels: 1, stories: 0 },
+      extras: { moderacao: true, assistente: true, anuncios: true },
+      site: { tipo: "loja", paginas: 0 },
+    });
+    const textos = alertas(e, calcular(e, P)).map((a) => a.texto);
+    expect(textos.some((t) => t.includes("Carrosséis sem"))).toBe(true);
+    expect(textos.some((t) => t.includes("Reels sem"))).toBe(true);
+    expect(textos.some((t) => t.includes("Loja online sem"))).toBe(true);
+    expect(textos.some((t) => t.includes("Assistente sem"))).toBe(true);
+    expect(textos.some((t) => t.includes("Moderação sem"))).toBe(true);
+    expect(textos.some((t) => t.includes("verba"))).toBe(true);
+  });
+
+  it("não avisa quando o âmbito está preenchido", () => {
+    const e = esc({
+      producao: { posts: 0, carrosseis: 2, reels: 1, stories: 0 },
+      extras: { moderacao: true, assistente: true, anuncios: true },
+      verba_anuncios: 300,
+      site: { tipo: "loja", paginas: 0 },
+      ambitos: {
+        carrossel_slides: 6,
+        reel_duracao: 30,
+        loja: "até 30 produtos",
+        assistente: "FAQ + marcações",
+        moderacao_limite: 200,
+      },
+    });
+    const avisos = alertas(e, calcular(e, P)).filter((a) => a.nivel === "aviso");
+    expect(avisos.length).toBe(0);
+  });
+
+  it("canal com conteúdo próprio gera nota informativa", () => {
+    const e = esc({
+      producao: { posts: 4, carrosseis: 0, reels: 0, stories: 0 },
+      canais: { instagram: { ativo: true, proprio: true } },
+    });
+    const info = alertas(e, calcular(e, P)).filter((a) => a.nivel === "info");
+    expect(info.some((a) => a.texto.includes("conteúdo próprio"))).toBe(true);
   });
 });
