@@ -5,8 +5,12 @@ import {
   reuniaoExcedePercentagem,
   aprovacaoAtrasada,
   indicadorAprovacao,
+  consomeRonda,
+  eFaturavel,
+  resumoRevisoesPeca,
   type Reuniao,
   type Aprovacao,
+  type Revisao,
 } from "./operacao";
 
 describe("reuniões (Fase 2, bloco 2)", () => {
@@ -100,5 +104,50 @@ describe("aprovações (Fase 2, bloco 3)", () => {
     expect(ind.tempoMedioDias).toBeNull();
     expect(ind.pctNoPrazo).toBeNull();
     expect(ind.bloqueados).toBe(0);
+  });
+});
+
+describe("revisões e retrabalho (Fase 2, bloco 4)", () => {
+  it("uma correção NÃO consome a ronda incluída", () => {
+    expect(consomeRonda({ tipo: "correcao" })).toBe(false);
+    expect(eFaturavel({ tipo: "correcao" })).toBe(false);
+  });
+
+  it("uma alteração consome a ronda", () => {
+    expect(consomeRonda({ tipo: "alteracao" })).toBe(true);
+    expect(eFaturavel({ tipo: "alteracao" })).toBe(false);
+  });
+
+  it("o retrabalho é faturável", () => {
+    expect(consomeRonda({ tipo: "retrabalho" })).toBe(false);
+    expect(eFaturavel({ tipo: "retrabalho" })).toBe(true);
+  });
+
+  it("resume rondas por peça e deteta o excesso", () => {
+    const revs: Revisao[] = [
+      { tipo: "correcao" }, // não conta
+      { tipo: "alteracao" }, // ronda 1
+      { tipo: "alteracao" }, // ronda 2
+      { tipo: "alteracao" }, // ronda 3 → excede 2
+      { tipo: "retrabalho", valor: 120, faturada: false },
+    ];
+    const s = resumoRevisoesPeca(revs, 2);
+    expect(s.correcoes).toBe(1);
+    expect(s.rondas).toBe(3);
+    expect(s.retrabalhos).toBe(1);
+    expect(s.sobreLimite).toBe(true);
+    expect(s.valorPorFaturar).toBe(120);
+    expect(s.porFaturar).toBe(1);
+  });
+
+  it("retrabalho já faturado não conta para por faturar", () => {
+    const s = resumoRevisoesPeca([{ tipo: "retrabalho", valor: 90, faturada: true }], 2);
+    expect(s.valorPorFaturar).toBe(0);
+    expect(s.porFaturar).toBe(0);
+  });
+
+  it("sem limite definido, nunca excede", () => {
+    const revs: Revisao[] = [{ tipo: "alteracao" }, { tipo: "alteracao" }, { tipo: "alteracao" }];
+    expect(resumoRevisoesPeca(revs, null).sobreLimite).toBe(false);
   });
 });

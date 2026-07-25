@@ -157,3 +157,73 @@ export const MICROCOPY_ATRASO_APROVACAO = {
   pt: "Este conteúdo continua à espera da tua aprovação. O atraso pode obrigar ao ajustamento da data de publicação.",
   en: "This content is still waiting for your approval. The delay may require adjusting the publication date.",
 } as const;
+
+// ── Revisões e retrabalho ────────────────────────────────────────────────────
+
+export type TipoRevisao = "correcao" | "alteracao" | "retrabalho";
+
+export type Revisao = {
+  tipo?: string | null; // correcao | alteracao | retrabalho
+  incluido?: boolean | null;
+  horas?: number | null;
+  valor?: number | null;
+  faturada?: boolean | null;
+};
+
+/** Só a alteração (mudança do cliente dentro do briefing) consome a ronda incluída. */
+export function consomeRonda(r: Revisao): boolean {
+  return (r.tipo ?? "alteracao") === "alteracao";
+}
+
+/** O retrabalho (ou qualquer coisa marcada como extra) é trabalho faturável. */
+export function eFaturavel(r: Revisao): boolean {
+  return (r.tipo ?? "alteracao") === "retrabalho" || r.incluido === false;
+}
+
+export type ResumoRevisoes = {
+  correcoes: number;
+  rondas: number; // alterações que consomem ronda
+  retrabalhos: number;
+  horas: number;
+  /** Sobre o limite de rondas incluídas nesta peça? */
+  sobreLimite: boolean;
+  /** Valor de extras/retrabalho ainda por faturar. */
+  valorPorFaturar: number;
+  porFaturar: number;
+};
+
+/**
+ * Resume as revisões de UMA peça face ao limite de rondas incluídas.
+ * `incluidasLim` a null = sem limite definido ([A DEFINIR]).
+ */
+export function resumoRevisoesPeca(revisoes: Revisao[], incluidasLim: number | null): ResumoRevisoes {
+  let correcoes = 0;
+  let rondas = 0;
+  let retrabalhos = 0;
+  let horas = 0;
+  let valorPorFaturar = 0;
+  let porFaturar = 0;
+
+  for (const r of revisoes) {
+    const tipo = r.tipo ?? "alteracao";
+    horas += Number(r.horas) || 0;
+    if (tipo === "correcao") correcoes += 1;
+    else if (tipo === "alteracao") rondas += 1;
+    else if (tipo === "retrabalho") retrabalhos += 1;
+
+    if (eFaturavel(r) && !r.faturada) {
+      porFaturar += 1;
+      valorPorFaturar += Number(r.valor) || 0;
+    }
+  }
+
+  return {
+    correcoes,
+    rondas,
+    retrabalhos,
+    horas,
+    sobreLimite: incluidasLim != null && incluidasLim >= 0 && rondas > incluidasLim,
+    valorPorFaturar,
+    porFaturar,
+  };
+}

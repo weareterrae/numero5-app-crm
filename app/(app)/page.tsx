@@ -119,6 +119,16 @@ export default async function Cockpit() {
   };
   const aprovacoesBloqueadas = (apRows ?? []) as unknown as ApBloqueada[];
 
+  // Revisões extra/retrabalho por faturar (tolerante: 0029).
+  const { data: revRows } = await supabase
+    .from("revisoes")
+    .select("cliente_id, peca, valor, clientes(nome_marca)")
+    .eq("incluido", false)
+    .eq("faturada", false)
+    .order("data", { ascending: false });
+  type RevFaturar = { cliente_id: string; peca: string; valor: number | null; clientes: ClienteEmbed };
+  const revisoesPorFaturar = (revRows ?? []) as unknown as RevFaturar[];
+
   const vazio = clientes.length === 0;
 
   return (
@@ -228,6 +238,31 @@ export default async function Cockpit() {
                     </Link>
                     <span className="text-soft">
                       {a.titulo} · prazo {dataCurta(a.prazo)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {revisoesPorFaturar.length > 0 && (
+            <section className="rounded-xl border-2 border-warn bg-warn/10 p-5">
+              <h2 className="font-display text-lg font-extrabold">
+                Revisões extra por faturar ({revisoesPorFaturar.length})
+              </h2>
+              <p className="mb-3 text-xs text-soft">Alterações fora do incluído e retrabalho ainda por cobrar.</p>
+              <ul className="space-y-1.5">
+                {revisoesPorFaturar.slice(0, 8).map((r, i) => (
+                  <li
+                    key={i}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-white px-3 py-2 text-sm"
+                  >
+                    <Link href={`/clientes/${r.cliente_id}/revisoes`} className="font-bold hover:underline">
+                      {nomeDe(r.clientes)}
+                    </Link>
+                    <span className="text-soft">
+                      {r.peca}
+                      {r.valor != null && ` · ${euros(r.valor)}`}
                     </span>
                   </li>
                 ))}
