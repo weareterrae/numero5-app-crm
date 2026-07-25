@@ -8,10 +8,15 @@ import {
   corEstadoFinanceiro,
   ESTADO_FINANCEIRO_ROTULO,
   REQUISITOS_ARRANQUE,
+  PAUSA_TIPOS,
+  pausaAtiva,
+  pausaExpirada,
   type Cobranca,
   type EstadoFinanceiro,
+  type Pausa,
 } from "@/lib/dominio/operacao";
-import { guardarFinanceiro, guardarArranque } from "./acoes";
+import { dataCurta } from "@/lib/dominio/metricas";
+import { guardarFinanceiro, guardarArranque, guardarPausa, terminarPausa } from "./acoes";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +43,7 @@ export default async function FinanceiroPage({ params }: { params: Promise<{ id:
   if (!cliente) notFound();
 
   const [{ data: jsonRow }, cobrancasRes] = await Promise.all([
-    supabase.from("clientes").select("financeiro, arranque").eq("id", id).maybeSingle().then(
+    supabase.from("clientes").select("financeiro, arranque, pausa").eq("id", id).maybeSingle().then(
       (r) => r,
       () => ({ data: null }),
     ),
@@ -50,7 +55,11 @@ export default async function FinanceiroPage({ params }: { params: Promise<{ id:
 
   const fin = (jsonRow?.financeiro ?? {}) as Record<string, string | null>;
   const arr = (jsonRow?.arranque ?? {}) as Record<string, unknown>;
+  const pausa = (jsonRow?.pausa ?? null) as Pausa | null;
   const cobrancas = (cobrancasRes.data ?? []) as Cobranca[];
+  const hojeISO = new Date().toISOString().slice(0, 10);
+  const emPausa = pausaAtiva(pausa, hojeISO);
+  const pausaVencida = pausaExpirada(pausa, hojeISO);
 
   const inicioMes = new Date();
   inicioMes.setDate(1);
@@ -126,6 +135,84 @@ export default async function FinanceiroPage({ params }: { params: Promise<{ id:
             Guardar estado
           </button>
         </form>
+      </section>
+
+      {/* Pausa de contrato */}
+      <section className="rounded-xl border border-line bg-white p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-display text-lg font-extrabold">Pausa</h2>
+          {emPausa && (
+            <span
+              className={`rounded-full px-3 py-1 text-xs font-bold ${
+                pausaVencida ? "bg-bad/15 text-bad" : "bg-warn/15 text-warn"
+              }`}
+            >
+              {pausaVencida ? "pausa vencida — decidir" : "em pausa"}
+            </span>
+          )}
+        </div>
+
+        {emPausa ? (
+          <div className="mt-2 text-sm">
+            <p className="text-grey">
+              {PAUSA_TIPOS.find(([k]) => k === pausa?.tipo)?.[1] ?? "Pausa"}
+              {pausa?.fim && <> · até <b>{dataCurta(pausa.fim)}</b></>}
+              {pausa?.fee_minimo != null && pausa.fee_minimo > 0 && (
+                <> · fee mínimo <b>{euros(pausa.fee_minimo)}/mês</b></>
+              )}
+            </p>
+            {pausa?.motivo && <p className="mt-1 text-xs text-soft">{pausa.motivo}</p>}
+            {pausaVencida && (
+              <p className="mt-2 text-xs font-bold text-bad">
+                A pausa chegou ao fim — retoma a operação ou combina uma nova pausa.
+              </p>
+            )}
+            <form action={terminarPausa.bind(null, cliente.id)} className="mt-3">
+              <button className="rounded-full bg-ink px-4 py-2 text-sm font-bold text-cream">
+                Retomar (terminar pausa)
+              </button>
+            </form>
+          </div>
+        ) : (
+          <>
+            <p className="mb-3 mt-1 text-xs text-soft">
+              Uma pausa tem sempre fim — nada de pausas indefinidas. Podes definir um fee mínimo para
+              o período.
+            </p>
+            <form action={guardarPausa} className="grid gap-3 sm:grid-cols-2">
+              <input type="hidden" name="cliente_id" value={cliente.id} />
+              <div>
+                <label className={lab}>Tipo</label>
+                <select name="tipo" className={inp}>
+                  {PAUSA_TIPOS.map(([k, r]) => (
+                    <option key={k} value={k}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={lab}>Fee mínimo (€/mês)</label>
+                <input name="fee_minimo" type="number" step="0.01" min="0" className={`${inp} tabular-nums`} />
+              </div>
+              <div>
+                <label className={lab}>Início</label>
+                <input name="inicio" type="date" className={inp} />
+              </div>
+              <div>
+                <label className={lab}>Até (obrigatório)</label>
+                <input name="fim" type="date" required className={inp} />
+              </div>
+              <div className="sm:col-span-2">
+                <label className={lab}>Motivo</label>
+                <input name="motivo" placeholder="ex.: obras no espaço, sazonalidade…" className={inp} />
+              </div>
+              <button className="rounded-full bg-gold px-5 py-2 text-sm font-bold text-ink sm:col-span-2">
+                Iniciar pausa
+              </button>
+            </form>
+          </>
+        )}
       </section>
 
       {/* Arranque da Fundação */}

@@ -24,6 +24,9 @@ import {
   sugerirComplexidade,
   podeEntrarPortefolio,
   exigeAprovacaoPortefolio,
+  pausaAtiva,
+  pausaExpirada,
+  pausaValida,
   diferencasVersao,
   totalOrdem,
   ordemEntraProducao,
@@ -376,6 +379,25 @@ describe("autorizações de portefólio (Fase 2, Prioridade 2)", () => {
   it("aprovação prévia é sinalizada", () => {
     expect(exigeAprovacaoPortefolio({ aprovacao_previa: true })).toBe(true);
     expect(exigeAprovacaoPortefolio({})).toBe(false);
+  });
+});
+
+describe("pausas de contrato (Fase 2, Prioridade 2)", () => {
+  const HOJE = "2026-07-25";
+  it("pausa a decorrer hoje", () => {
+    expect(pausaAtiva({ ativa: true, inicio: "2026-07-01", fim: "2026-08-01" }, HOJE)).toBe(true);
+    expect(pausaAtiva({ ativa: true, inicio: "2026-08-01", fim: "2026-09-01" }, HOJE)).toBe(false); // futura
+    expect(pausaAtiva({ ativa: false }, HOJE)).toBe(false);
+  });
+
+  it("pausa expirada precisa de decisão", () => {
+    expect(pausaExpirada({ ativa: true, fim: "2026-07-20" }, HOJE)).toBe(true);
+    expect(pausaExpirada({ ativa: true, fim: "2026-08-01" }, HOJE)).toBe(false);
+  });
+
+  it("sem fim não é válida (nada de pausas indefinidas)", () => {
+    expect(pausaValida({ tipo: "producao", inicio: "2026-07-01" })).toBe(false);
+    expect(pausaValida({ tipo: "producao", fim: "2026-08-01" })).toBe(true);
   });
 });
 

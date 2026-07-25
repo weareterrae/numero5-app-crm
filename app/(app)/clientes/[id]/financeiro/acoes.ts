@@ -62,3 +62,40 @@ export async function guardarArranque(formData: FormData) {
 
   revalidatePath(`/clientes/${clienteId}/financeiro`);
 }
+
+const n2 = (v: FormDataEntryValue | null) => {
+  const s = (v ?? "").toString().trim().replace(",", ".");
+  if (s === "") return null;
+  const x = Number(s);
+  return Number.isFinite(x) ? x : null;
+};
+
+/** Inicia uma pausa. Exige data de fim — sem pausas indefinidas. */
+export async function guardarPausa(formData: FormData) {
+  const clienteId = t(formData.get("cliente_id"));
+  const fim = t(formData.get("fim"));
+  if (!clienteId || !fim) return; // sem fim não avança
+
+  const pausa = {
+    tipo: t(formData.get("tipo")) ?? "producao",
+    inicio: t(formData.get("inicio")) ?? new Date().toISOString().slice(0, 10),
+    fim,
+    fee_minimo: n2(formData.get("fee_minimo")),
+    motivo: t(formData.get("motivo")),
+    ativa: true,
+  };
+  const supabase = await criarClienteServidor();
+  await supabase.from("clientes").update({ pausa }).eq("id", clienteId);
+  revalidatePath(`/clientes/${clienteId}/financeiro`);
+  revalidatePath("/");
+}
+
+/** Termina a pausa (retoma). */
+export async function terminarPausa(clienteId: string, _fd: FormData) {
+  const supabase = await criarClienteServidor();
+  const { data } = await supabase.from("clientes").select("pausa").eq("id", clienteId).maybeSingle();
+  const pausa = { ...((data?.pausa as Record<string, unknown>) ?? {}), ativa: false };
+  await supabase.from("clientes").update({ pausa }).eq("id", clienteId);
+  revalidatePath(`/clientes/${clienteId}/financeiro`);
+  revalidatePath("/");
+}

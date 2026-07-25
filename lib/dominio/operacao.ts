@@ -442,6 +442,40 @@ export function indiceEsforco(s: SinaisEsforco): Esforco {
   return { pontos, nivel, criterios };
 }
 
+// ── Pausas de contrato (Parte 33) ─────────────────────────────────────────────
+
+export const PAUSA_TIPOS: [string, string][] = [
+  ["contrato", "Pausa de contrato"],
+  ["producao", "Pausa de produção"],
+  ["reducao", "Redução temporária"],
+];
+
+export type Pausa = {
+  tipo?: string | null;
+  inicio?: string | null;
+  fim?: string | null;
+  fee_minimo?: number | null;
+  motivo?: string | null;
+  ativa?: boolean | null;
+};
+
+/** A pausa está a decorrer hoje? */
+export function pausaAtiva(p: Pausa | null | undefined, hojeISO: string): boolean {
+  if (!p?.ativa) return false;
+  if (p.inicio && p.inicio > hojeISO) return false; // ainda não começou
+  return !p.fim || p.fim >= hojeISO;
+}
+
+/** A pausa já passou da data de fim (deve ser retomada/decidida)? */
+export function pausaExpirada(p: Pausa | null | undefined, hojeISO: string): boolean {
+  return !!p?.ativa && !!p.fim && p.fim < hojeISO;
+}
+
+/** Sem pausas indefinidas: só é válida com um fim. */
+export function pausaValida(p: Pausa): boolean {
+  return !!p.fim;
+}
+
 // ── Autorizações de portefólio (Parte 40) ────────────────────────────────────
 
 /** Consentimentos separados. Nada entra no portefólio sem autorização expressa. */
