@@ -4,6 +4,7 @@ import {
   alertas,
   arredondarComercial,
   calcular,
+  descreverEscopo,
   euroHora,
   margem,
   normalizarEscopo,
@@ -218,5 +219,50 @@ describe("rentabilidade — custos externos e semáforo", () => {
 
   it("sem dados de margem nem tempo → verde neutro", () => {
     expect(semaforo(null, null, LIMIARES_DEFEITO)).toEqual({ cor: "verde", motivos: [] });
+  });
+});
+
+describe("regressão — fluxo comercial completo", () => {
+  // Uma PME típica: produção + 2 canais + moderação + relatório + anúncios,
+  // com todos os âmbitos preenchidos. Verifica que o motor é coerente de
+  // ponta a ponta (cálculo → arredondamento → descrição → alertas → semáforo).
+  const e = esc({
+    producao: { posts: 8, carrosseis: 4, reels: 2, stories: 8 },
+    canais: {
+      instagram: { ativo: true, proprio: false },
+      facebook: { ativo: true, proprio: false },
+    },
+    extras: { moderacao: true, relatorio: true, anuncios: true },
+    verba_anuncios: 300,
+    ambitos: { carrossel_slides: 6, reel_duracao: 30, moderacao_limite: 200 },
+  });
+  const o = calcular(e, P);
+
+  it("o total mensal soma produção + gestão + extras", () => {
+    // 8×32 + 4×58 + 2×80 + 8×13 = 752 (produção, uma vez)
+    // gestão: 1×130 + 1×60 = 190 · moderação 100 · relatório 60
+    // anúncios: max(150 fixo, 10% de 300 = 30) = 150
+    expect(o.totalMensal).toBe(752 + 190 + 100 + 60 + 150); // 1252
+  });
+
+  it("o valor comercial arredonda ao múltiplo de 50 acima", () => {
+    const comercial = arredondarComercial(o.totalMensal, 50);
+    expect(comercial).toBe(1300);
+    expect(comercial % 50).toBe(0);
+    expect(comercial).toBeGreaterThanOrEqual(o.totalMensal);
+  });
+
+  it("a descrição para o cliente reflete produção e âmbito", () => {
+    const linhas = descreverEscopo(e);
+    expect(linhas.some((l) => l.includes("8 post"))).toBe(true);
+    expect(linhas.some((l) => l.includes("até 6 slides"))).toBe(true);
+    expect(linhas.some((l) => l.includes("até 30s"))).toBe(true);
+    expect(linhas.some((l) => l.includes("200 interações/mês"))).toBe(true);
+  });
+
+  it("com tudo preenchido não há avisos por resolver", () => {
+    const avisos = alertas(e, o).filter((a) => a.nivel === "aviso");
+    expect(avisos).toHaveLength(0);
+    expect(o.porDefinir).toHaveLength(0);
   });
 });

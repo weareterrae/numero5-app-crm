@@ -87,6 +87,13 @@ const TX = {
     descInicial: "Investimento inicial",
     descDepois: "Depois",
     meses: "meses",
+    condTitulo: "Condições",
+    condValida: "Proposta válida até",
+    condInclui: "Inclui",
+    condExclui: "Não inclui",
+    condArranque: "Arranque",
+    condRevisoes: "Revisões",
+    condPagamento: "Pagamento",
     ritmo: "o ritmo, mês a mês",
     ritmoH: "Como trabalhamos, todos os meses",
     ritmoItens: [
@@ -155,6 +162,13 @@ const TX = {
     descInicial: "Initial investment",
     descDepois: "Afterwards",
     meses: "months",
+    condTitulo: "Terms",
+    condValida: "Proposal valid until",
+    condInclui: "Includes",
+    condExclui: "Does not include",
+    condArranque: "Start",
+    condRevisoes: "Revisions",
+    condPagamento: "Payment",
     ritmo: "the monthly rhythm",
     ritmoH: "How we work, every month",
     ritmoItens: [
@@ -568,6 +582,44 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
             <p className="mt-2 text-xs font-bold text-grey">{t.iva}</p>
           </section>
         )}
+
+        {(() => {
+          const c = (p.condicoes ?? {}) as Record<string, string | null>;
+          const linhas: [string, string][] = [];
+          if (c.inclui) linhas.push([t.condInclui, c.inclui]);
+          if (c.exclui) linhas.push([t.condExclui, c.exclui]);
+          if (c.prazo_arranque) linhas.push([t.condArranque, c.prazo_arranque]);
+          if (c.politica_revisoes) linhas.push([t.condRevisoes, c.politica_revisoes]);
+          if (c.forma_pagamento) linhas.push([t.condPagamento, c.forma_pagamento]);
+          if (!p.validade && linhas.length === 0) return null;
+          const validadeFmt = p.validade
+            ? new Date(p.validade as string).toLocaleDateString(idioma === "en" ? "en-GB" : "pt-PT", {
+                day: "2-digit",
+                month: "long",
+                year: "numeric",
+              })
+            : null;
+          return (
+            <section className="mb-8">
+              <p className="rotulo">{t.condTitulo}</p>
+              <div className="mt-2 rounded-xl border border-line bg-white p-4 text-sm">
+                {validadeFmt && (
+                  <p className="mb-2 font-bold">
+                    {t.condValida} <span className="text-gold-dark">{validadeFmt}</span>
+                  </p>
+                )}
+                <dl className="space-y-1.5">
+                  {linhas.map(([rot, val]) => (
+                    <div key={rot} className="grid grid-cols-[7rem_1fr] gap-2">
+                      <dt className="text-grey">{rot}</dt>
+                      <dd>{val}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            </section>
+          );
+        })()}
 
         {Number(p.avenca_valor) > 0 && (
           <section className="mb-8">

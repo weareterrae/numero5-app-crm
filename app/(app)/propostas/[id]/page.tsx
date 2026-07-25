@@ -10,6 +10,7 @@ import type { DossierProposta } from "@/lib/ia/prompts/proposta";
 import { idiomaDe } from "@/lib/dominio/intake";
 import { Configurador } from "@/components/propostas/Configurador";
 import { DescontoProposta, type Desconto } from "@/components/propostas/DescontoProposta";
+import { CondicoesProposta, type Condicoes } from "@/components/propostas/CondicoesProposta";
 import { CasosPicker, type Caso } from "@/components/propostas/CasosPicker";
 import { calcular, descreverEscopo, normalizarEscopo, type Preco } from "@/lib/dominio/orcamento";
 import { rotuloFaixa } from "@/lib/dominio/intake";
@@ -177,6 +178,14 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
     avisosFinanceiros.push(
       "Esta proposta ainda não tem valores (nem setup nem avença) — o bloco de investimento vai aparecer vazio.",
     );
+  if (!p.validade)
+    avisosFinanceiros.push(
+      "A proposta não tem data de validade. Define-a nas Condições antes de partilhar — sem prazo, fica em aberto.",
+    );
+  else if ((p.validade as string) < new Date().toISOString().slice(0, 10))
+    avisosFinanceiros.push(
+      "A validade da proposta já passou. Atualiza a data nas Condições antes de voltar a partilhar.",
+    );
 
   return (
     <div className="space-y-5">
@@ -281,6 +290,12 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
           descontos={descontos}
         />
       )}
+
+      <CondicoesProposta
+        propostaId={p.id}
+        validade={(p.validade as string | null) ?? null}
+        condicoes={(p.condicoes as Condicoes) ?? {}}
+      />
 
       {/* Pacote, âmbito e investimento */}
       <form action={guardarProposta} className="rounded-xl border border-line bg-white p-5">

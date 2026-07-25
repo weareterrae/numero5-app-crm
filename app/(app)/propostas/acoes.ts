@@ -401,6 +401,29 @@ export async function mudarEstadoProposta(formData: FormData) {
   revalidatePath("/clientes/funil");
 }
 
+/** Guarda as condições comerciais obrigatórias da proposta (validade, inclui/
+ *  exclui, prazo de arranque, política de revisões, forma de pagamento). */
+export async function guardarCondicoes(formData: FormData) {
+  const id = (formData.get("id") ?? "").toString();
+  if (!id) return;
+
+  const condicoes = {
+    inclui: t(formData.get("inclui")),
+    exclui: t(formData.get("exclui")),
+    prazo_arranque: t(formData.get("prazo_arranque")),
+    politica_revisoes: t(formData.get("politica_revisoes")),
+    forma_pagamento: t(formData.get("forma_pagamento")),
+  };
+
+  const supabase = await criarClienteServidor();
+  await supabase
+    .from("propostas")
+    .update({ validade: t(formData.get("validade")), condicoes })
+    .eq("id", id);
+
+  revalidatePath(`/propostas/${id}`);
+}
+
 export async function alternarPartilhaProposta(formData: FormData) {
   const id = (formData.get("id") ?? "").toString();
   const ativar = formData.get("ativar") === "1";
