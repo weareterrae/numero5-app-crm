@@ -7,6 +7,8 @@ import {
   euroHora,
   margem,
   normalizarEscopo,
+  semaforo,
+  LIMIARES_DEFEITO,
   type Escopo,
   type Preco,
 } from "./orcamento";
@@ -182,5 +184,39 @@ describe("âmbitos e alertas", () => {
     });
     const info = alertas(e, calcular(e, P)).filter((a) => a.nivel === "info");
     expect(info.some((a) => a.texto.includes("conteúdo próprio"))).toBe(true);
+  });
+});
+
+describe("rentabilidade — custos externos e semáforo", () => {
+  it("os custos externos entram no custo da linha e baixam a margem", () => {
+    const preco: Preco[] = [
+      { chave: "post", rotulo: "Post", tipo: "mensal", unidade: "unidade", preco: 32, minutos: null, custo_interno: 8, custo_externo: 4 },
+    ];
+    const o = calcular(esc({ producao: { posts: 10, carrosseis: 0, reels: 0, stories: 0 } }), preco);
+    // custo = (8 + 4) × 10 = 120
+    expect(o.custoMensal).toBe(120);
+  });
+
+  it("semáforo verde quando margem e €/h estão acima dos alvos", () => {
+    expect(semaforo(0.6, 80, LIMIARES_DEFEITO).cor).toBe("verde");
+  });
+
+  it("semáforo amarelo quando o €/hora fica abaixo do alvo", () => {
+    const s = semaforo(0.6, 40, LIMIARES_DEFEITO); // 40 < 45 alvo, > 30 mínimo
+    expect(s.cor).toBe("amarelo");
+    expect(s.motivos.some((m) => m.includes("€/h"))).toBe(true);
+  });
+
+  it("semáforo vermelho quando a margem fica abaixo do mínimo", () => {
+    expect(semaforo(0.2, 80, LIMIARES_DEFEITO).cor).toBe("vermelho");
+  });
+
+  it("fica pela pior das duas dimensões", () => {
+    // margem ótima, mas €/h vermelho → vermelho
+    expect(semaforo(0.7, 20, LIMIARES_DEFEITO).cor).toBe("vermelho");
+  });
+
+  it("sem dados de margem nem tempo → verde neutro", () => {
+    expect(semaforo(null, null, LIMIARES_DEFEITO)).toEqual({ cor: "verde", motivos: [] });
   });
 });

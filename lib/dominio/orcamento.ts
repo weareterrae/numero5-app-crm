@@ -126,6 +126,8 @@ export type Preco = {
   minutos: number | null;
   /** Campos comerciais (catálogo 0022), opcionais. */
   custo_interno?: number | null;
+  /** Custos externos por unidade (licenças, stock, fornecedores) — 0024. */
+  custo_externo?: number | null;
   tempo_planeado_min?: number | null;
   preco_minimo?: number | null;
   percentagem?: number | null;
@@ -135,6 +137,13 @@ export type Preco = {
 export function arredondarComercial(valor: number, passo = 50): number {
   if (!(valor > 0) || !(passo > 0)) return Math.max(0, Math.round(valor));
   return Math.ceil(valor / passo) * passo;
+}
+
+/** Custo total da linha: (custo interno + custos externos) × quantidade. */
+function custoLinha(p: Preco, quantidade: number): number | null {
+  if (p.custo_interno == null && p.custo_externo == null) return null;
+  const unit = (Number(p.custo_interno) || 0) + (Number(p.custo_externo) || 0);
+  return unit * quantidade;
 }
 
 /** Margem prevista (0–1) de um total face ao custo interno. Null se não dá. */
@@ -147,6 +156,68 @@ export function margem(total: number, custo: number): number | null {
 export function euroHora(total: number, minutos: number): number | null {
   if (!(minutos > 0)) return null;
   return total / (minutos / 60);
+}
+
+/** Limiares de rentabilidade (da tabela `configuracoes`). */
+export type Limiares = {
+  valorHoraAlvo: number;
+  amareloHora: number;
+  vermelhoHora: number;
+  /** Fração 0–1: abaixo disto a margem fica amarela. */
+  amareloMargem: number;
+  /** Fração 0–1: abaixo disto a margem fica vermelha. */
+  vermelhoMargem: number;
+};
+
+export const LIMIARES_DEFEITO: Limiares = {
+  valorHoraAlvo: 65,
+  amareloHora: 45,
+  vermelhoHora: 30,
+  amareloMargem: 0.4,
+  vermelhoMargem: 0.25,
+};
+
+export type CorSemaforo = "verde" | "amarelo" | "vermelho";
+export type Semaforo = { cor: CorSemaforo; motivos: string[] };
+
+const ORDEM: Record<CorSemaforo, number> = { verde: 0, amarelo: 1, vermelho: 2 };
+
+/**
+ * Semáforo de rentabilidade a partir da margem e do €/hora, contra os limiares.
+ * Fica pela pior das duas dimensões. Null em ambas → sem dados (verde neutro).
+ */
+export function semaforo(
+  margemFrac: number | null,
+  euroH: number | null,
+  lim: Limiares = LIMIARES_DEFEITO,
+): Semaforo {
+  let cor: CorSemaforo = "verde";
+  const motivos: string[] = [];
+  const piora = (c: CorSemaforo) => {
+    if (ORDEM[c] > ORDEM[cor]) cor = c;
+  };
+
+  if (euroH != null) {
+    if (euroH < lim.vermelhoHora) {
+      piora("vermelho");
+      motivos.push(`${Math.round(euroH)} €/h — abaixo do mínimo (${lim.vermelhoHora})`);
+    } else if (euroH < lim.amareloHora) {
+      piora("amarelo");
+      motivos.push(`${Math.round(euroH)} €/h — abaixo do alvo (${lim.valorHoraAlvo})`);
+    }
+  }
+  if (margemFrac != null) {
+    const pct = Math.round(margemFrac * 100);
+    if (margemFrac < lim.vermelhoMargem) {
+      piora("vermelho");
+      motivos.push(`margem ${pct}% — abaixo do mínimo (${Math.round(lim.vermelhoMargem * 100)}%)`);
+    } else if (margemFrac < lim.amareloMargem) {
+      piora("amarelo");
+      motivos.push(`margem ${pct}% — abaixo do confortável (${Math.round(lim.amareloMargem * 100)}%)`);
+    }
+  }
+
+  return { cor, motivos };
 }
 
 export type LinhaOrcamento = {
@@ -286,7 +357,7 @@ export function calcular(e: Escopo, precos: Preco[]): Orcamento {
       precoUnitario: p.preco,
       total,
       minutos: p.minutos ? p.minutos * quantidade : null,
-      custo: p.custo_interno != null ? Number(p.custo_interno) * quantidade : null,
+      custo: custoLinha(p, quantidade),
       tempoMin: (Number(p.tempo_planeado_min ?? p.minutos ?? 0) || 0) * quantidade,
     });
   }
@@ -307,7 +378,7 @@ export function calcular(e: Escopo, precos: Preco[]): Orcamento {
       precoUnitario: p.preco,
       total,
       minutos: p.minutos ? p.minutos * quantidade : null,
-      custo: p.custo_interno != null ? Number(p.custo_interno) * quantidade : null,
+      custo: custoLinha(p, quantidade),
       tempoMin: (Number(p.tempo_planeado_min ?? p.minutos ?? 0) || 0) * quantidade,
     });
   }

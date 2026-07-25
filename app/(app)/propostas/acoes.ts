@@ -331,6 +331,7 @@ export async function guardarServico(formData: FormData) {
       percentagem: num("percentagem"),
       minutos: int("minutos"),
       custo_interno: num("custo_interno"),
+      custo_externo: num("custo_externo"),
       tempo_planeado_min: int("tempo_planeado_min"),
       limite_revisoes: int("limite_revisoes"),
       descricao_interna: t(formData.get("descricao_interna")),

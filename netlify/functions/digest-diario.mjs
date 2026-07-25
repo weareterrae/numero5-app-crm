@@ -47,6 +47,7 @@ export default async function handler() {
   const limiteFrio = new Date(Date.now() - DIAS_ARREFECER * 86_400_000)
     .toISOString()
     .slice(0, 10);
+  const daqui7 = new Date(Date.now() + 7 * 86_400_000).toISOString().slice(0, 10);
 
   // Carteira ativa (id -> nome/estado/última interação).
   const { data: clientes } = await db
@@ -55,8 +56,9 @@ export default async function handler() {
     .neq("estado", "perdido");
   const nome = new Map((clientes ?? []).map((c) => [c.id, c.nome_marca]));
 
-  // Consultas em paralelo. relatorios é tolerante (pode não existir a tabela).
-  const [followups, propostas, planos, relatorios] = await Promise.all([
+  // Consultas em paralelo. relatorios e descontos são tolerantes (a tabela
+  // pode ainda não existir).
+  const [followups, propostas, planos, relatorios, descontosRes] = await Promise.all([
     db
       .from("atividades")
       .select("cliente_id, descricao, followup_nota, followup_em")
@@ -69,6 +71,13 @@ export default async function handler() {
       (r) => r,
       () => ({ data: [] }),
     ),
+    db
+      .from("descontos")
+      .select("cliente_id, alvo, preco_durante, preco_apos, fim")
+      .eq("estado", "ativo")
+      .not("fim", "is", null)
+      .lte("fim", daqui7)
+      .then((r) => r, () => ({ data: [] })),
   ]);
 
   // ── Secção 1: hoje / atrasado ──────────────────────────────────────────
@@ -115,8 +124,22 @@ export default async function handler() {
     .sort((a, b) => b.dias - a.dias)
     .slice(0, 8);
 
-  const nada = hoje.length === 0 && espera.length === 0;
-  const { html, texto } = render({ hoje, espera, arrefecer, nada });
+  // ── Secção 4: descontos a terminar (7 dias) ────────────────────────────
+  const eur = (v) => (v == null ? "—" : `${Math.round(v)}€`);
+  const descontos = (descontosRes.data ?? [])
+    .filter((d) => nome.has(d.cliente_id))
+    .map((d) => {
+      const [, m, dia] = d.fim.split("-");
+      return {
+        marca: nome.get(d.cliente_id),
+        texto: `${d.alvo === "avenca" ? "avença" : "arranque"} volta a ${eur(d.preco_apos)}${
+          d.alvo === "avenca" ? "/mês" : ""
+        } a ${dia}/${m} — fala com o cliente antes`,
+      };
+    });
+
+  const nada = hoje.length === 0 && espera.length === 0 && descontos.length === 0;
+  const { html, texto } = render({ hoje, espera, arrefecer, descontos, nada });
 
   // Envio pelo Resend.
   const r = await fetch("https://api.resend.com/emails", {
@@ -134,7 +157,7 @@ export default async function handler() {
   return resposta(`Digest enviado para ${para}.`);
 }
 
-function render({ hoje, espera, arrefecer, nada }) {
+function render({ hoje, espera, arrefecer, descontos, nada }) {
   const linhasTxt = [];
   const blocos = [];
 
@@ -158,6 +181,7 @@ function render({ hoje, espera, arrefecer, nada }) {
     "#B4761A",
   );
   bloco(`👀 À espera de ti (${espera.length})`, espera, "#2B44E7");
+  bloco(`🏷️ Descontos a terminar (${(descontos ?? []).length})`, descontos ?? [], "#B4761A");
   bloco(
     `❄️ A arrefecer (${arrefecer.length})`,
     arrefecer.map((a) => ({ marca: a.marca, texto: `sem mexer há ${a.dias} dias` })),

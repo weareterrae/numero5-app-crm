@@ -69,6 +69,29 @@ export default async function Cockpit() {
     .sort((a, b) => (b.ultima_interacao_at ?? "").localeCompare(a.ultima_interacao_at ?? ""))
     .slice(0, 6);
 
+  // Descontos a terminar nos próximos 30 dias (tolerante: 0023 pode não ter corrido).
+  const daqui30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+  const { data: descRows } = await supabase
+    .from("descontos")
+    .select("id, cliente_id, alvo, preco_durante, preco_apos, fim, clientes(nome_marca)")
+    .eq("estado", "ativo")
+    .not("fim", "is", null)
+    .lte("fim", daqui30)
+    .order("fim", { ascending: true });
+  type DescontoFim = {
+    id: string;
+    cliente_id: string;
+    alvo: string;
+    preco_durante: number | null;
+    preco_apos: number | null;
+    fim: string;
+    clientes: ClienteEmbed;
+  };
+  const descontosFim = (descRows ?? []) as unknown as DescontoFim[];
+  const upliftMensal = descontosFim
+    .filter((d) => d.alvo === "avenca")
+    .reduce((s, d) => s + Math.max(0, (d.preco_apos ?? 0) - (d.preco_durante ?? 0)), 0);
+
   const vazio = clientes.length === 0;
 
   return (
@@ -99,6 +122,40 @@ export default async function Cockpit() {
             <Kpi valor={euros(mrr)} rotulo="receita recorrente / mês" />
             <Kpi valor={euros(pipeline)} rotulo="valor em pipeline" />
           </section>
+
+          {descontosFim.length > 0 && (
+            <section className="rounded-xl border-2 border-gold/40 bg-gold/5 p-5">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className="font-display text-lg font-extrabold">Descontos a terminar (30 dias)</h2>
+                {upliftMensal > 0 && (
+                  <span className="text-sm text-grey">
+                    quando terminarem: <b className="text-cobalt">+{euros(upliftMensal)}/mês</b>
+                  </span>
+                )}
+              </div>
+              <p className="mb-3 text-xs text-soft">
+                Fala com o cliente antes da data — nada muda sem aviso.
+              </p>
+              <ul className="space-y-1.5">
+                {descontosFim.map((d) => (
+                  <li
+                    key={d.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-white px-3 py-2 text-sm"
+                  >
+                    <Link href={`/clientes/${d.cliente_id}`} className="font-bold hover:underline">
+                      {nomeDe(d.clientes)}
+                    </Link>
+                    <span className="text-grey">
+                      {d.alvo === "avenca" ? "avença" : "arranque"}:{" "}
+                      {d.preco_durante != null ? euros(d.preco_durante) : "—"} →{" "}
+                      <b>{d.preco_apos != null ? euros(d.preco_apos) : "—"}</b>
+                      <span className="ml-2 text-soft">até {dataCurta(d.fim)}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           {/* Funil */}
           <section>

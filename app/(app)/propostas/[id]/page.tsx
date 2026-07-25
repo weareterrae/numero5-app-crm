@@ -80,14 +80,42 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
     : { data: null };
   const idiomaCliente = idiomaDe(idiomaRow?.idioma);
 
-  // Configurações comerciais (passo de arredondamento, valor-alvo/hora).
+  // Configurações comerciais (passo, valor-alvo/hora, limiares do semáforo).
   const { data: cfgRows } = await supabase
     .from("configuracoes")
     .select("chave, valor")
-    .in("chave", ["passo_arredondamento", "valor_hora_alvo"]);
+    .in("chave", [
+      "passo_arredondamento",
+      "valor_hora_alvo",
+      "limiar_amarelo_hora",
+      "limiar_vermelho_hora",
+      "limiar_amarelo_margem",
+      "limiar_vermelho_margem",
+    ]);
   const cfg = Object.fromEntries((cfgRows ?? []).map((r) => [r.chave, Number(r.valor)]));
   const passo = cfg.passo_arredondamento || 50;
   const valorHoraAlvo = cfg.valor_hora_alvo || 65;
+  const limiares = {
+    valorHoraAlvo,
+    amareloHora: cfg.limiar_amarelo_hora || 45,
+    vermelhoHora: cfg.limiar_vermelho_hora || 30,
+    amareloMargem: (cfg.limiar_amarelo_margem || 40) / 100,
+    vermelhoMargem: (cfg.limiar_vermelho_margem || 25) / 100,
+  };
+
+  // Custos externos por serviço (tolerante: coluna só existe após 0024).
+  let precosComExterno = (precos ?? []) as Preco[];
+  const { data: extRows } = await supabase
+    .from("precos_unitarios")
+    .select("chave, custo_externo")
+    .neq("estado", "inativo");
+  if (extRows) {
+    const externos = new Map(extRows.map((r) => [r.chave, r.custo_externo]));
+    precosComExterno = precosComExterno.map((p) => ({
+      ...p,
+      custo_externo: externos.get(p.chave) ?? null,
+    }));
+  }
 
   // Descontos ativos (tolerante: vazio se a migração 0023 não correu).
   const { data: descontosData } = cliente
@@ -238,9 +266,10 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
       <Configurador
         propostaId={p.id}
         inicial={p.escopo ?? {}}
-        precos={(precos ?? []) as Preco[]}
+        precos={precosComExterno}
         passo={passo}
         valorHoraAlvo={valorHoraAlvo}
+        limiares={limiares}
       />
 
       {cliente && (

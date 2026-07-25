@@ -14,6 +14,7 @@ export type Servico = {
   percentagem: number | null;
   minutos: number | null;
   custo_interno: number | null;
+  custo_externo: number | null;
   tempo_planeado_min: number | null;
   limite_revisoes: number | null;
   descricao_interna: string | null;
@@ -44,8 +45,12 @@ function Campo({ id, label, children }: { id?: string; label: string; children: 
 export function EditorServico({ s }: { s: Servico }) {
   const custom = s.chave.startsWith("svc_");
   const aDefinir = s.estado === "a_definir" || s.preco === null;
+  const custoTotal =
+    s.custo_interno != null || s.custo_externo != null
+      ? (s.custo_interno ?? 0) + (s.custo_externo ?? 0)
+      : null;
   const margem =
-    s.preco && s.custo_interno != null ? Math.round(((s.preco - s.custo_interno) / s.preco) * 100) : null;
+    s.preco && custoTotal != null ? Math.round(((s.preco - custoTotal) / s.preco) * 100) : null;
   const eurHora =
     s.preco && s.tempo_planeado_min ? Math.round((s.preco / s.tempo_planeado_min) * 60) : null;
 
@@ -138,6 +143,9 @@ export function EditorServico({ s }: { s: Servico }) {
             </Campo>
             <Campo label="Custo interno (€)">
               <input name="custo_interno" type="number" step="0.01" min="0" defaultValue={s.custo_interno ?? ""} className={`${inp} tabular-nums`} />
+            </Campo>
+            <Campo label="Custos externos (€)">
+              <input name="custo_externo" type="number" step="0.01" min="0" defaultValue={s.custo_externo ?? ""} placeholder="licenças, stock…" className={`${inp} tabular-nums`} />
             </Campo>
             <Campo label="Tempo planeado (min)">
               <input name="tempo_planeado_min" type="number" min="0" defaultValue={s.tempo_planeado_min ?? ""} className={`${inp} tabular-nums`} />

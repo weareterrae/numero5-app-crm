@@ -15,7 +15,10 @@ import {
   margem,
   normalizarEscopo,
   pecasPorMes,
+  semaforo,
+  LIMIARES_DEFEITO,
   type Ambitos,
+  type Limiares,
   type ChaveCanal,
   type Escopo,
   type Preco,
@@ -54,12 +57,14 @@ export function Configurador({
   precos,
   passo = 50,
   valorHoraAlvo = 65,
+  limiares = LIMIARES_DEFEITO,
 }: {
   propostaId: string;
   inicial: unknown;
   precos: Preco[];
   passo?: number;
   valorHoraAlvo?: number;
+  limiares?: Limiares;
 }) {
   const [e, setE] = useState<Escopo>(() => normalizarEscopo(inicial));
   const [estado, setEstado] = useState("");
@@ -81,6 +86,8 @@ export function Configurador({
   const setupComercial = arredondarComercial(orc.totalSetup, passo);
   const margemMensal = margem(mensalComercial, orc.custoMensal);
   const ehMensal = euroHora(mensalComercial, orc.tempoMensalMin);
+  const luz = semaforo(margemMensal, ehMensal, limiares);
+  const temSinal = margemMensal !== null || ehMensal !== null;
 
   const setupFinal = override ? Math.max(0, Number(setupProp) || 0) : setupComercial;
   const mensalFinal = override ? Math.max(0, Number(mensalProp) || 0) : mensalComercial;
@@ -511,6 +518,41 @@ export function Configurador({
                       )}
                     </span>
                   </div>
+                )}
+                {temSinal && (
+                  <div className="flex items-center justify-between pt-1">
+                    <span className="text-soft">Rentabilidade</span>
+                    <span className="flex items-center gap-1.5">
+                      <span
+                        aria-hidden
+                        className={`inline-block size-2.5 rounded-full ${
+                          luz.cor === "verde"
+                            ? "bg-good"
+                            : luz.cor === "amarelo"
+                              ? "bg-warn"
+                              : "bg-bad"
+                        }`}
+                      />
+                      <b
+                        className={
+                          luz.cor === "verde"
+                            ? "text-good"
+                            : luz.cor === "amarelo"
+                              ? "text-warn"
+                              : "text-bad"
+                        }
+                      >
+                        {luz.cor === "verde"
+                          ? "Saudável"
+                          : luz.cor === "amarelo"
+                            ? "A vigiar"
+                            : "Apertada"}
+                      </b>
+                    </span>
+                  </div>
+                )}
+                {luz.motivos.length > 0 && (
+                  <p className="text-[11px] text-soft">{luz.motivos.join(" · ")}</p>
                 )}
               </div>
             )}
