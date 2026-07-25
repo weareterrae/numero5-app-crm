@@ -28,6 +28,8 @@ import {
 } from "../acoes";
 import { criarDiagnostico } from "@/app/(app)/diagnosticos/acoes";
 import { criarProposta } from "@/app/(app)/propostas/acoes";
+import { SeguimentoSugerido } from "@/components/crm/SeguimentoSugerido";
+import { situacaoSeguimento, mensagemSeguimento } from "@/lib/dominio/followups";
 import { criarPlano } from "@/app/(app)/clientes/[id]/planos/acoes";
 import { criarRelatorio } from "@/app/(app)/clientes/[id]/relatorios/acoes";
 import { mesLegivel } from "@/lib/dominio/producao";
@@ -134,6 +136,23 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
     contactos.find((c) => c.telefone || c.email) ??
     null;
 
+  // Seguimento sugerido (Fase 7) — mensagem preparada para o estado atual.
+  const idiomaCli = (metricoolRes.data?.idioma === "en" ? "en" : "pt") as "pt" | "en";
+  const seg = situacaoSeguimento({
+    intakeSubmetido: !!intake?.intake_submetido_em,
+    temRascunho: false,
+    propostaEnviada: propostas.some((p) => p.estado === "enviada"),
+    propostaVista: false,
+    propostaDecidida: propostas.some((p) => p.estado === "aceite" || p.estado === "recusada"),
+  });
+  const msgSeguimento = seg
+    ? mensagemSeguimento(
+        seg,
+        { nome: contactoPrincipal?.nome ?? cliente.nome_marca, empresa: cliente.nome_marca },
+        idiomaCli,
+      )
+    : null;
+
   return (
     <div className="space-y-5">
       {/* Cabeçalho */}
@@ -238,6 +257,11 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
             </div>
           ))}
         </section>
+      )}
+
+      {/* Seguimento sugerido para o estado atual (nunca envia sozinho) */}
+      {msgSeguimento && (
+        <SeguimentoSugerido mensagem={msgSeguimento} telefone={contactoPrincipal?.telefone} />
       )}
 
       {/* Link de diagnóstico para o cliente preencher */}
