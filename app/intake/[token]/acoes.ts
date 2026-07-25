@@ -89,5 +89,45 @@ export async function submeterIntake(dados: SubmissaoIntake) {
     descricao: "O cliente preencheu o diagnóstico pelo link. 🖐️",
   });
 
+  // Limpar o rascunho — o diagnóstico final passa a ser a fonte (tolerante).
+  await supabase
+    .from("clientes")
+    .update({ intake_rascunho: null, intake_passo: 0 })
+    .eq("id", cliente.id)
+    .then(
+      (r) => r,
+      () => ({ data: null }),
+    );
+
   return { ok: true as const, nome: cliente.nome_marca, jaTinha: !!cliente.intake_submetido_em };
+}
+
+/**
+ * Guarda o diagnóstico em curso (a cada passo). Público, protegido pelo token.
+ * Tolerante: se a migração 0034 ainda não correu, não faz nada e não parte.
+ */
+export async function guardarRascunhoIntake(dados: {
+  token: string;
+  passo: number;
+  website?: string;
+  redes?: Record<string, string>;
+  temHoje?: string;
+  objetivos?: ChaveObjetivo[];
+  objetivosTexto?: string;
+  pedido?: Escopo;
+  orcamento?: string;
+  brief?: Brief;
+}) {
+  const supabase = criarClienteServico();
+  const { token, passo, ...rascunho } = dados;
+  await supabase
+    .from("clientes")
+    .update({ intake_rascunho: rascunho, intake_passo: Math.max(0, Math.round(passo) || 0) })
+    .eq("intake_token", token)
+    .is("intake_submetido_em", null)
+    .then(
+      (r) => r,
+      () => ({ data: null }),
+    );
+  return { ok: true as const };
 }

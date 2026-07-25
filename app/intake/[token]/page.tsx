@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { criarClienteServico } from "@/lib/supabase/server";
-import { FormularioIntake } from "@/components/intake/FormularioIntake";
+import { FormularioIntake, type RascunhoIntake } from "@/components/intake/FormularioIntake";
 import { idiomaDe } from "@/lib/dominio/intake";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +29,17 @@ export default async function IntakePage({ params }: { params: Promise<{ token: 
     .eq("intake_token", token)
     .maybeSingle();
 
+  // Rascunho para retomar, tolerante (migração 0034).
+  const { data: rascunhoRow } = await supabase
+    .from("clientes")
+    .select("intake_rascunho, intake_passo")
+    .eq("intake_token", token)
+    .maybeSingle()
+    .then(
+      (r) => r,
+      () => ({ data: null }),
+    );
+
   return (
     <FormularioIntake
       token={token}
@@ -38,6 +49,8 @@ export default async function IntakePage({ params }: { params: Promise<{ token: 
       redesIniciais={(cliente.redes ?? {}) as Record<string, string>}
       jaSubmetido={!!cliente.intake_submetido_em}
       idioma={idiomaDe(idiomaRow?.idioma)}
+      rascunhoInicial={(rascunhoRow?.intake_rascunho ?? null) as RascunhoIntake | null}
+      passoInicial={rascunhoRow?.intake_passo ?? 0}
     />
   );
 }

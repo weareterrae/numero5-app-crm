@@ -22,7 +22,7 @@ import {
   type Idioma,
 } from "@/lib/dominio/intake";
 import { CANAIS, ESCOPO_VAZIO, type ChaveCanal, type Escopo } from "@/lib/dominio/orcamento";
-import { submeterIntake } from "@/app/intake/[token]/acoes";
+import { submeterIntake, guardarRascunhoIntake } from "@/app/intake/[token]/acoes";
 
 type Opcao = readonly [string, string, string];
 
@@ -40,6 +40,8 @@ const TX = {
     eyebrow: "diagnóstico gratuito",
     titulo: (n: string) => `Vamos sonhar com a ${n}`,
     sub: "Umas perguntas rápidas — a maioria é só tocar. Quanto mais nos contas, mais à tua medida fica a proposta. 🖐️",
+    guardado: "As tuas respostas ficam guardadas — podes fechar e continuar mais tarde. É confidencial.",
+    retomado: "Bem-vindo de volta — retomámos onde paraste.",
     jaSubmetido: "Já nos tinhas enviado isto — se preencheres outra vez, ficamos com a versão mais recente.",
     passo: (a: number, b: number) => `Passo ${a} de ${b}`,
     voltar: "← Voltar",
@@ -201,7 +203,20 @@ const TX = {
     prazoQ: "When are you looking to start?",
     notaFinalQ: "Anything else you'd like us to know?",
     notaFinalPH: "Anything you like. We're listening. 🖐️",
+    guardado: "Your answers are saved — you can close and continue later. It's confidential.",
+    retomado: "Welcome back — we picked up where you left off.",
   },
+};
+
+export type RascunhoIntake = {
+  website?: string;
+  redes?: Record<string, string>;
+  temHoje?: string;
+  objetivos?: ChaveObjetivo[];
+  objetivosTexto?: string;
+  orcamento?: string;
+  pedido?: Escopo;
+  brief?: Brief;
 };
 
 export function FormularioIntake({
@@ -212,6 +227,8 @@ export function FormularioIntake({
   redesIniciais,
   jaSubmetido,
   idioma = "pt",
+  rascunhoInicial = null,
+  passoInicial = 0,
 }: {
   token: string;
   nome: string;
@@ -220,23 +237,27 @@ export function FormularioIntake({
   redesIniciais: Record<string, string>;
   jaSubmetido: boolean;
   idioma?: Idioma;
+  rascunhoInicial?: RascunhoIntake | null;
+  passoInicial?: number;
 }) {
   const t = TX[idioma];
   const L = (o: Opcao) => (idioma === "en" ? o[2] : o[1]);
 
-  const [passo, setPasso] = useState(0);
-  const [website, setWebsite] = useState(websiteInicial);
-  const [redes, setRedes] = useState<Record<string, string>>(redesIniciais);
-  const [temHoje, setTemHoje] = useState("");
-  const [objetivos, setObjetivos] = useState<ChaveObjetivo[]>([]);
-  const [objetivosTexto, setObjetivosTexto] = useState("");
-  const [orcamento, setOrcamento] = useState("");
-  const [pedido, setPedido] = useState<Escopo>({ ...ESCOPO_VAZIO });
-  const [brief, setBrief] = useState<Brief>({});
+  const r0 = rascunhoInicial ?? {};
+  const [passo, setPasso] = useState(passoInicial || 0);
+  const [website, setWebsite] = useState(r0.website ?? websiteInicial);
+  const [redes, setRedes] = useState<Record<string, string>>(r0.redes ?? redesIniciais);
+  const [temHoje, setTemHoje] = useState(r0.temHoje ?? "");
+  const [objetivos, setObjetivos] = useState<ChaveObjetivo[]>(r0.objetivos ?? []);
+  const [objetivosTexto, setObjetivosTexto] = useState(r0.objetivosTexto ?? "");
+  const [orcamento, setOrcamento] = useState(r0.orcamento ?? "");
+  const [pedido, setPedido] = useState<Escopo>(r0.pedido ?? { ...ESCOPO_VAZIO });
+  const [brief, setBrief] = useState<Brief>(r0.brief ?? {});
   const [estado, setEstado] = useState<"a-preencher" | "a-enviar" | "enviado" | "erro">(
     "a-preencher",
   );
   const [erro, setErro] = useState("");
+  const [retomado] = useState((passoInicial || 0) > 0);
 
   const setB = (campo: keyof Brief, valor: unknown) => setBrief((b) => ({ ...b, [campo]: valor }));
   const um = (campo: keyof Brief, k: string) =>
@@ -477,18 +498,38 @@ export function FormularioIntake({
   const atual = passos[passo];
   const ultimo = passo === total - 1;
 
+  // Guarda o rascunho para o cliente poder retomar (fire-and-forget).
+  function guardarRascunho(novoPasso: number) {
+    void guardarRascunhoIntake({
+      token,
+      passo: novoPasso,
+      website,
+      redes,
+      temHoje,
+      objetivos,
+      objetivosTexto,
+      pedido,
+      orcamento,
+      brief,
+    });
+  }
+
   function avancar() {
     if (passo === 2 && semObjetivos) {
       setErro(t.erroObj);
       return;
     }
     setErro("");
-    setPasso((p) => Math.min(p + 1, total - 1));
+    const novo = Math.min(passo + 1, total - 1);
+    setPasso(novo);
+    guardarRascunho(novo);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
   function voltar() {
     setErro("");
-    setPasso((p) => Math.max(0, p - 1));
+    const novo = Math.max(0, passo - 1);
+    setPasso(novo);
+    guardarRascunho(novo);
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -507,6 +548,12 @@ export function FormularioIntake({
         <p className="mt-4 rounded-lg border border-gold bg-gold/10 p-3 text-sm">{t.jaSubmetido}</p>
       )}
 
+      {retomado && (
+        <p className="mt-4 rounded-lg border border-good/40 bg-good/10 p-3 text-sm text-good">
+          {t.retomado}
+        </p>
+      )}
+
       <div className="mt-6 mb-4">
         <div className="mb-1.5 flex items-center justify-between text-xs font-bold text-grey">
           <span>{t.passo(passo + 1, total)}</span>
@@ -515,6 +562,7 @@ export function FormularioIntake({
         <div className="h-2 overflow-hidden rounded-full bg-line">
           <div className="h-full rounded-full bg-gold transition-all duration-300" style={{ width: `${((passo + 1) / total) * 100}%` }} />
         </div>
+        <p className="mt-1.5 text-[11px] text-soft">{t.guardado}</p>
       </div>
 
       <section className="rounded-xl border border-line bg-white p-5 sm:p-6">
