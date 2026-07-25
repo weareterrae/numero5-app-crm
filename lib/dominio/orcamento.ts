@@ -449,6 +449,38 @@ export function compararEscopos(pedido: Escopo, nosso: Escopo): Comparacao {
   };
 }
 
+/** Agregado de um serviço na carteira (Parte 25 — rentabilidade por serviço). */
+export type AgregadoServico = {
+  chave: string;
+  rotulo: string;
+  quantidade: number;
+  receita: number;
+  custo: number;
+  tempoMin: number;
+};
+
+/** Soma as linhas de todas as propostas por serviço, para ver o que rende. */
+export function agregarPorServico(linhas: LinhaOrcamento[]): AgregadoServico[] {
+  const mapa = new Map<string, AgregadoServico>();
+  for (const l of linhas) {
+    if (l.total == null) continue;
+    const a = mapa.get(l.chave) ?? {
+      chave: l.chave,
+      rotulo: l.rotulo,
+      quantidade: 0,
+      receita: 0,
+      custo: 0,
+      tempoMin: 0,
+    };
+    a.quantidade += l.quantidade;
+    a.receita += l.total;
+    a.custo += l.custo ?? 0;
+    a.tempoMin += l.tempoMin ?? 0;
+    mapa.set(l.chave, a);
+  }
+  return [...mapa.values()].sort((x, y) => y.receita - x.receita);
+}
+
 /** As linhas que o cliente lê na proposta — derivadas do que se orçamentou. */
 export function descreverEscopo(e: Escopo): string[] {
   const linhas: string[] = [];

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   ESCOPO_VAZIO,
   alertas,
+  agregarPorServico,
   arredondarComercial,
   calcular,
   compararEscopos,
@@ -326,5 +327,18 @@ describe("comparação de escopos (Parte 46)", () => {
     expect(c.canais).toEqual([0, 1]);
     expect(c.site).toEqual(["nenhum", "novo"]);
     expect(c.relatorio).toEqual([false, true]);
+  });
+});
+
+describe("rentabilidade por serviço (Parte 25)", () => {
+  it("agrega linhas de várias propostas por serviço", () => {
+    const o1 = calcular(esc({ producao: { posts: 4, carrosseis: 0, reels: 0, stories: 0 }, canais: { instagram: { ativo: true, proprio: false } } }), P);
+    const o2 = calcular(esc({ producao: { posts: 6, carrosseis: 0, reels: 0, stories: 0 }, canais: { instagram: { ativo: true, proprio: false } } }), P);
+    const ag = agregarPorServico([...o1.mensal, ...o1.setup, ...o2.mensal, ...o2.setup]);
+    const post = ag.find((a) => a.chave === "post");
+    expect(post?.quantidade).toBe(10); // 4 + 6
+    expect(post?.receita).toBe(320); // 10 × 32
+    // ordenado por receita desc
+    expect(ag[0].receita).toBeGreaterThanOrEqual(ag[ag.length - 1].receita);
   });
 });

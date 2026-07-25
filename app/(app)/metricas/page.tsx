@@ -1,6 +1,7 @@
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { euros } from "@/lib/dominio/metricas";
 import { metricasFunil } from "@/lib/dominio/metricas-funil";
+import { agregarPorServico, calcular, normalizarEscopo, margem, euroHora, type Preco } from "@/lib/dominio/orcamento";
 
 export const dynamic = "force-dynamic";
 
@@ -9,12 +10,25 @@ const pct = (v: number | null) => (v == null ? "—" : `${Math.round(v * 100)}%`
 export default async function MetricasPage() {
   const supabase = await criarClienteServidor();
 
-  const [clientesRes, propostasRes] = await Promise.all([
+  const [clientesRes, propostasRes, aceitesRes, precosRes] = await Promise.all([
     supabase.from("clientes").select("intake_token, intake_submetido_em"),
     supabase.from("propostas").select("estado, setup_valor, avenca_valor, motivo_recusa"),
+    supabase.from("propostas").select("escopo").eq("estado", "aceite"),
+    supabase
+      .from("precos_unitarios")
+      .select("chave, rotulo, tipo, unidade, preco, minutos, custo_interno, tempo_planeado_min")
+      .neq("estado", "inativo"),
   ]);
 
   const m = metricasFunil(clientesRes.data ?? [], propostasRes.data ?? []);
+
+  // Rentabilidade por serviço — agrega as linhas de todas as propostas aceites.
+  const precos = (precosRes.data ?? []) as Preco[];
+  const linhas = ((aceitesRes.data ?? []) as { escopo: unknown }[]).flatMap((p) => {
+    const o = calcular(normalizarEscopo(p.escopo), precos);
+    return [...o.mensal, ...o.setup];
+  });
+  const porServico = agregarPorServico(linhas);
 
   return (
     <div className="space-y-6">
@@ -38,6 +52,47 @@ export default async function MetricasPage() {
         <Kpi valor={m.mrrMedio == null ? "—" : `${euros(Math.round(m.mrrMedio))}/mês`} rotulo="avença média (aceites)" />
         <Kpi valor={String(m.propostasEnviadas)} rotulo="à espera de decisão" />
       </section>
+
+      {porServico.length > 0 && (
+        <section className="rounded-xl border border-line bg-white p-5">
+          <h2 className="mb-1 font-display text-lg font-extrabold">Rentabilidade por serviço</h2>
+          <p className="mb-3 text-xs text-soft">
+            Somado das propostas aceites. Interno · o que cada serviço rende de facto.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[36rem] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-line text-left text-xs text-grey">
+                  <th className="py-2 pr-3 font-bold">Serviço</th>
+                  <th className="py-2 px-2 text-right font-bold">Qtd</th>
+                  <th className="py-2 px-2 text-right font-bold">Receita</th>
+                  <th className="py-2 px-2 text-right font-bold">Preço médio</th>
+                  <th className="py-2 px-2 text-right font-bold">Margem</th>
+                  <th className="py-2 pl-2 text-right font-bold">€/h</th>
+                </tr>
+              </thead>
+              <tbody className="tabular-nums">
+                {porServico.map((s) => {
+                  const mg = margem(s.receita, s.custo);
+                  const eh = euroHora(s.receita, s.tempoMin);
+                  return (
+                    <tr key={s.chave} className="border-b border-line/50">
+                      <td className="py-2 pr-3">{s.rotulo}</td>
+                      <td className="py-2 px-2 text-right">{s.quantidade}</td>
+                      <td className="py-2 px-2 text-right font-bold">{euros(s.receita)}</td>
+                      <td className="py-2 px-2 text-right text-soft">
+                        {s.quantidade > 0 ? euros(Math.round(s.receita / s.quantidade)) : "—"}
+                      </td>
+                      <td className="py-2 px-2 text-right">{mg == null ? "—" : `${Math.round(mg * 100)}%`}</td>
+                      <td className="py-2 pl-2 text-right">{eh == null ? "—" : `${euros(Math.round(eh))}`}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
 
       {m.motivosRecusa.length > 0 && (
         <section className="rounded-xl border border-line bg-white p-5">
