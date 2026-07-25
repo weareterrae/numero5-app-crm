@@ -535,9 +535,24 @@ export async function alternarPartilhaProposta(formData: FormData) {
   const supabase = await criarClienteServidor();
   await supabase.from("propostas").update({ partilha_ativa: ativar }).eq("id", id);
 
-  // Ao PARTILHAR pela primeira vez, congela automaticamente uma versão se ainda
-  // não houver nenhuma — para o que o cliente vê ficar imutável.
   if (ativar) {
+    // Partilhar o link É apresentar a proposta: se ainda está em rascunho, passa
+    // a «enviada» — o gatilho da BD move o cliente para «proposta» no funil.
+    const { data: p } = await supabase
+      .from("propostas")
+      .select("estado, cliente_id")
+      .eq("id", id)
+      .maybeSingle();
+    if (p?.estado === "rascunho") {
+      await supabase.from("propostas").update({ estado: "enviada" }).eq("id", id);
+      if (p.cliente_id) {
+        revalidatePath(`/clientes/${p.cliente_id}`);
+        revalidatePath("/");
+        revalidatePath("/clientes/funil");
+      }
+    }
+
+    // Congela a v1 se ainda não houver — o que o cliente vê fica imutável.
     const { data: existe } = await supabase
       .from("proposta_versoes")
       .select("id")
