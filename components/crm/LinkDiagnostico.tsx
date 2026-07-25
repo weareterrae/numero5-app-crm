@@ -29,7 +29,7 @@ export function LinkDiagnostico({
   const mensagem =
     idioma === "en"
       ? `Hi! 🖐️ This is Sandro, from Nº 5. Before we move ahead with ${nome}, I'd love to understand your business properly — and no one tells it better than you. I've put together a quick diagnostic (takes 3 minutes). Fill it in whenever you can, right here:`
-      : `Boas! 🖐️ Aqui é o Sandro, do Nº 5. Antes de avançarmos com o ${nome}, gostava de perceber bem o teu negócio — e ninguém o conta melhor do que tu. Preparei-te um raio-x rápido (leva 3 minutos). Preenche quando puderes, é por aqui:`;
+      : `Boas! 🖐️ Aqui é o Sandro, do Nº 5. Antes de avançarmos com a ${nome}, gostava de perceber bem o teu negócio — e ninguém o conta melhor do que tu. Preparei-te um raio-x rápido (leva 3 minutos). Preenche quando puderes, é por aqui:`;
   const assunto = idioma === "en" ? "Your diagnostic — Nº 5" : "O teu diagnóstico — Nº 5";
 
   return (

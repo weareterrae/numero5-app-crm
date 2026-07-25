@@ -337,7 +337,7 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
               mensagem={
                 idiomaCliente === "en"
                   ? `Hi${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ Here's the proposal we've put together for ${cliente?.nome_marca ?? "your business"}. Take a look — at the bottom you can accept or tell us what you think:`
-                  : `Olá${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ Aqui está a proposta que preparámos para o ${cliente?.nome_marca ?? "teu negócio"}. Podes vê-la, e ao fundo aceitas ou dizes-nos o que achas:`
+                  : `Olá${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ Aqui está a proposta que preparámos para a ${cliente?.nome_marca ?? "tua marca"}. Podes vê-la, e ao fundo aceitas ou dizes-nos o que achas:`
               }
               telefone={contacto?.telefone}
               email={contacto?.email}

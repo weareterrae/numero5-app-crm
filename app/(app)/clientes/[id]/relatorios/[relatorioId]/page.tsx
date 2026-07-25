@@ -194,7 +194,7 @@ export default async function RelatorioPage({
               mensagem={
                 idiomaCliente === "en"
                   ? `Hi${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ We've wrapped up ${mesLegivel(relatorio.mes, "en")} — here's what happened with ${cliente.nome_marca}, in numbers. Take a look:`
-                  : `Olá${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ Fechámos ${mesLegivel(relatorio.mes)} e aqui está o que aconteceu com o ${cliente.nome_marca}, em números. Dá uma olhada:`
+                  : `Olá${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ Fechámos ${mesLegivel(relatorio.mes)} e aqui está o que aconteceu com a ${cliente.nome_marca}, em números. Dá uma olhada:`
               }
               telefone={contacto?.telefone}
               email={contacto?.email}

@@ -165,7 +165,7 @@ export default async function PlanoPage({
               mensagem={
                 idiomaCliente === "en"
                   ? `Hi${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ Here's the ${mesLegivel(plano.mes, "en")} publishing plan for ${cliente.nome_marca}. Take a look and let us know if it's all good or what you'd like to adjust — you have 5 days:`
-                  : `Olá${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ Aqui está o plano de publicações de ${mesLegivel(plano.mes)} para o ${cliente.nome_marca}. Dá uma olhada e diz-nos se está tudo bem ou o que queres ajustar — tens até 5 dias:`
+                  : `Olá${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ Aqui está o plano de publicações de ${mesLegivel(plano.mes)} para a ${cliente.nome_marca}. Dá uma olhada e diz-nos se está tudo bem ou o que queres ajustar — tens até 5 dias:`
               }
               telefone={contacto?.telefone}
               email={contacto?.email}

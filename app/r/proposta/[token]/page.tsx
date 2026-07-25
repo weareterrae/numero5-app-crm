@@ -46,7 +46,7 @@ const TX = {
     construir: "o que vamos construir para ti",
     construirH: "Não é conversa. É o que vais ter.",
     assistenteE: "o teu assistente, só teu",
-    conhece: (n: string) => `Conhece o ${n}`,
+    conhece: (n: string) => `Conhece ${n}`,
     responder: "sempre a responder — no site e no WhatsApp",
     assistenteNota:
       "O nome é a nossa sugestão — o definitivo escolhemo-lo contigo. Feito à medida da tua marca, nunca repetido noutra. 🖐️",

@@ -131,7 +131,7 @@ export default async function DiagnosticoPage({ params }: { params: Promise<{ id
             mensagem={
               idiomaCliente === "en"
                 ? `Hi${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ We've put together an X-ray of ${cliente?.nome_marca ?? "your business"}'s digital presence. See what we found and where we can help:`
-                : `Olá${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ Preparámos um Raio-X à presença digital do ${cliente?.nome_marca ?? "teu negócio"}. Vê aqui o que encontrámos e onde podemos ajudar:`
+                : `Olá${contacto?.nome ? ` ${contacto.nome.split(" ")[0]}` : ""}! 🖐️ Preparámos um Raio-X à presença digital da ${cliente?.nome_marca ?? "tua marca"}. Vê aqui o que encontrámos e onde podemos ajudar:`
             }
             telefone={contacto?.telefone}
             email={contacto?.email}

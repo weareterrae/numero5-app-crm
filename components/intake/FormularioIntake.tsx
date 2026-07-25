@@ -38,7 +38,7 @@ const REDES_LINK: [string, string][] = [
 const TX = {
   pt: {
     eyebrow: "diagnóstico gratuito",
-    titulo: (n: string) => `Vamos sonhar com o ${n}`,
+    titulo: (n: string) => `Vamos sonhar com a ${n}`,
     sub: "Umas perguntas rápidas — a maioria é só tocar. Quanto mais nos contas, mais à tua medida fica a proposta. 🖐️",
     jaSubmetido: "Já nos tinhas enviado isto — se preencheres outra vez, ficamos com a versão mais recente.",
     passo: (a: number, b: number) => `Passo ${a} de ${b}`,
@@ -51,7 +51,7 @@ const TX = {
       `${setor ? `${setor} · ` : ""}Os teus dados servem só para prepararmos a tua proposta.`,
     okTitulo: "Recebido. Obrigado! 🖐️",
     okTexto: (n: string) =>
-      `Já temos com que sonhar para o ${n}. Vamos preparar-te uma proposta à medida — falamos em breve.`,
+      `Já temos com que sonhar para a ${n}. Vamos preparar-te uma proposta à medida — falamos em breve.`,
     politica: "política de privacidade",
     ver: "Ver a",
     p1t: "A tua marca hoje",
