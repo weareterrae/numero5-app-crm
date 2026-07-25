@@ -60,7 +60,7 @@ export const CHAVES_ESTRUTURADAS = new Set([
   "post", "carrossel", "reel", "story",
   "gestao_canal", "gestao_canal_extra",
   "anuncios", "anuncios_pct", "moderacao", "moderacao_setup",
-  "assistente", "assistente_setup", "relatorio",
+  "assistente", "assistente_setup", "relatorio", "direcao",
   "site_novo", "site_melhorias", "loja_online", "identidade", "perfis",
 ]);
 
@@ -97,6 +97,8 @@ export type Escopo = {
     relatorio: boolean;
     identidade: boolean;
     montar_perfis: boolean;
+    /** Direção e coordenação de marketing — obrigatório em qualquer avença. */
+    direcao: boolean;
   };
 };
 
@@ -114,6 +116,7 @@ export const ESCOPO_VAZIO: Escopo = {
     relatorio: false,
     identidade: false,
     montar_perfis: false,
+    direcao: false,
   },
 };
 
@@ -308,6 +311,7 @@ export function quantidades(e: Escopo): Record<string, number> {
     moderacao_setup: e.extras.moderacao ? 1 : 0,
     assistente: e.extras.assistente ? 1 : 0,
     relatorio: e.extras.relatorio ? 1 : 0,
+    direcao: e.extras.direcao ? 1 : 0,
     site_novo: e.site.tipo === "novo" ? Math.max(0, Number(e.site.paginas) || 0) : 0,
     site_melhorias: e.site.tipo === "melhorias" ? 1 : 0,
     loja_online: e.site.tipo === "loja" ? 1 : 0,
@@ -406,6 +410,21 @@ export function pecasPorMes(e: Escopo): number {
   return p.posts + p.carrosseis + p.reels + p.stories;
 }
 
+/**
+ * A proposta é uma avença mensal? (produção, canais ou extras recorrentes).
+ * A própria direção não conta — é o que se está a exigir.
+ */
+export function ehAvencaMensal(e: Escopo): boolean {
+  return (
+    pecasPorMes(e) > 0 ||
+    canaisAtivos(e).length > 0 ||
+    e.extras.moderacao ||
+    e.extras.assistente ||
+    e.extras.anuncios ||
+    e.extras.relatorio
+  );
+}
+
 /** As linhas que o cliente lê na proposta — derivadas do que se orçamentou. */
 export function descreverEscopo(e: Escopo): string[] {
   const linhas: string[] = [];
@@ -484,6 +503,11 @@ export function alertas(e: Escopo, orc: Orcamento): Alerta[] {
   const ativos = canaisAtivos(e);
   const proprios = ativos.filter(([, c]) => c.proprio).length;
 
+  if (ehAvencaMensal(e) && !e.extras.direcao)
+    a.push({
+      nivel: "aviso",
+      texto: "Avença sem direção e coordenação — uma operação mensal exige tempo de planeamento e acompanhamento.",
+    });
   if (proprios > 0)
     a.push({
       nivel: "info",

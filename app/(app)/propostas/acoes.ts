@@ -169,7 +169,12 @@ export async function guardarEscopo(
   ambito: string[],
   totalMensal: number,
   totalSetup: number,
-  aud?: { motivo?: string | null; mensalCalculado?: number; setupCalculado?: number },
+  aud?: {
+    motivo?: string | null;
+    mensalCalculado?: number;
+    setupCalculado?: number;
+    direcaoExcecao?: string | null;
+  },
 ) {
   const supabase = await criarClienteServidor();
   const {
@@ -198,6 +203,18 @@ export async function guardarEscopo(
         valor_anterior: `mensal ${aud.mensalCalculado ?? "—"} · setup ${aud.setupCalculado ?? "—"}`,
         valor_novo: `mensal ${totalMensal} · setup ${totalSetup}`,
         motivo: aud.motivo ?? null,
+        autor_id: user?.id ?? null,
+      });
+    }
+    // Auditoria: avença fechada sem direção e coordenação (exceção justificada).
+    if (aud.direcaoExcecao) {
+      await supabase.from("auditoria").insert({
+        tabela: "propostas",
+        registo_id: id,
+        campo: "avenca_sem_direcao",
+        valor_anterior: "direção obrigatória",
+        valor_novo: "exceção autorizada",
+        motivo: aud.direcaoExcecao,
         autor_id: user?.id ?? null,
       });
     }

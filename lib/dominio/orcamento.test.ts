@@ -5,6 +5,7 @@ import {
   arredondarComercial,
   calcular,
   descreverEscopo,
+  ehAvencaMensal,
   euroHora,
   margem,
   normalizarEscopo,
@@ -163,7 +164,7 @@ describe("âmbitos e alertas", () => {
   it("não avisa quando o âmbito está preenchido", () => {
     const e = esc({
       producao: { posts: 0, carrosseis: 2, reels: 1, stories: 0 },
-      extras: { moderacao: true, assistente: true, anuncios: true },
+      extras: { moderacao: true, assistente: true, anuncios: true, direcao: true },
       verba_anuncios: 300,
       site: { tipo: "loja", paginas: 0 },
       ambitos: {
@@ -232,7 +233,7 @@ describe("regressão — fluxo comercial completo", () => {
       instagram: { ativo: true, proprio: false },
       facebook: { ativo: true, proprio: false },
     },
-    extras: { moderacao: true, relatorio: true, anuncios: true },
+    extras: { moderacao: true, relatorio: true, anuncios: true, direcao: true },
     verba_anuncios: 300,
     ambitos: { carrossel_slides: 6, reel_duracao: 30, moderacao_limite: 200 },
   });
@@ -264,5 +265,48 @@ describe("regressão — fluxo comercial completo", () => {
     const avisos = alertas(e, o).filter((a) => a.nivel === "aviso");
     expect(avisos).toHaveLength(0);
     expect(o.porDefinir).toHaveLength(0);
+  });
+});
+
+describe("direção e coordenação obrigatória (Fase 2, bloco 1)", () => {
+  it("uma avença mensal sem direção gera aviso", () => {
+    const e = esc({
+      producao: { posts: 8, carrosseis: 0, reels: 0, stories: 0 },
+      canais: { instagram: { ativo: true, proprio: false } },
+    });
+    expect(ehAvencaMensal(e)).toBe(true);
+    const avisos = alertas(e, calcular(e, P)).map((a) => a.texto);
+    expect(avisos.some((t) => t.includes("direção e coordenação"))).toBe(true);
+  });
+
+  it("com direção ligada, não há aviso de direção", () => {
+    const e = esc({
+      producao: { posts: 8, carrosseis: 0, reels: 0, stories: 0 },
+      canais: { instagram: { ativo: true, proprio: false } },
+      extras: { direcao: true },
+    });
+    const avisos = alertas(e, calcular(e, P)).map((a) => a.texto);
+    expect(avisos.some((t) => t.includes("direção e coordenação"))).toBe(false);
+  });
+
+  it("um projeto só de arranque (não mensal) não exige direção", () => {
+    const e = esc({ site: { tipo: "novo", paginas: 5 } });
+    expect(ehAvencaMensal(e)).toBe(false);
+    const avisos = alertas(e, calcular(e, P)).map((a) => a.texto);
+    expect(avisos.some((t) => t.includes("direção e coordenação"))).toBe(false);
+  });
+
+  it("a direção é uma chave estruturada (não entra em «outros serviços»)", () => {
+    const e = esc({
+      producao: { posts: 4, carrosseis: 0, reels: 0, stories: 0 },
+      extras: { direcao: true },
+    });
+    const o = calcular(e, [
+      ...P,
+      { chave: "direcao", rotulo: "Direção", tipo: "mensal", unidade: "mês", preco: 200, minutos: null },
+    ]);
+    const linha = o.mensal.find((l) => l.chave === "direcao");
+    expect(linha?.quantidade).toBe(1);
+    expect(linha?.total).toBe(200);
   });
 });

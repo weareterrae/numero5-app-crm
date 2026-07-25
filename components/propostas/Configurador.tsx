@@ -11,6 +11,7 @@ import {
   calcular,
   canaisAtivos,
   descreverEscopo,
+  ehAvencaMensal,
   euroHora,
   margem,
   normalizarEscopo,
@@ -74,6 +75,7 @@ export function Configurador({
   const [setupProp, setSetupProp] = useState("");
   const [mensalProp, setMensalProp] = useState("");
   const [motivoDesc, setMotivoDesc] = useState("");
+  const [motivoDir, setMotivoDir] = useState("");
 
   const orc = useMemo(() => calcular(e, precos), [e, precos]);
   const avisos = useMemo(() => alertas(e, orc), [e, orc]);
@@ -88,6 +90,10 @@ export function Configurador({
   const ehMensal = euroHora(mensalComercial, orc.tempoMensalMin);
   const luz = semaforo(margemMensal, ehMensal, limiares);
   const temSinal = margemMensal !== null || ehMensal !== null;
+
+  // Regra central da Fase 2: uma avença mensal exige direção e coordenação.
+  const exigeDirecao = ehAvencaMensal(e);
+  const faltaDirecao = exigeDirecao && !e.extras.direcao;
 
   const setupFinal = override ? Math.max(0, Number(setupProp) || 0) : setupComercial;
   const mensalFinal = override ? Math.max(0, Number(mensalProp) || 0) : mensalComercial;
@@ -142,11 +148,18 @@ export function Configurador({
       setEstado("⚠️ Estás abaixo do valor do catálogo — diz o motivo para guardar.");
       return;
     }
+    if (faltaDirecao && !motivoDir.trim()) {
+      setEstado(
+        "⚠️ Uma avença mensal exige tempo de direção, planeamento e coordenação. Adiciona esta componente ou justifica a exceção.",
+      );
+      return;
+    }
     setAGuardar(true);
     const r = await guardarEscopo(propostaId, e, descreverEscopo(e), mensalFinal, setupFinal, {
       motivo: abaixoCatalogo ? motivoDesc : null,
       mensalCalculado: orc.totalMensal,
       setupCalculado: orc.totalSetup,
+      direcaoExcecao: faltaDirecao ? motivoDir : null,
     });
     setAGuardar(false);
     setEstado(r.ok ? "Guardado ✓ — é este o valor que vai na proposta." : `⚠️ ${r.erro}`);
@@ -333,6 +346,45 @@ export function Configurador({
           </button>
         ))}
       </div>
+
+      {/* 4b. Direção e coordenação — obrigatório em qualquer avença */}
+      {exigeDirecao && (
+        <div
+          className={`mt-3 rounded-lg border-2 p-3 ${
+            e.extras.direcao ? "border-gold bg-gold/5" : "border-bad bg-bad/10"
+          }`}
+        >
+          <label className="flex cursor-pointer items-start gap-2">
+            <input
+              type="checkbox"
+              checked={e.extras.direcao}
+              onChange={(ev) => setE({ ...e, extras: { ...e.extras, direcao: ev.target.checked } })}
+              className="mt-0.5 size-4 accent-[#E8A13C]"
+            />
+            <span>
+              <b className="text-sm">Direção e coordenação de marketing</b>
+              <span className="block text-xs text-soft">
+                Planeamento, prioridades, calendário, coordenação da produção, reuniões e
+                acompanhamento. Obrigatório em qualquer avença — pode ficar agregado ao Motor, sem
+                linha separada para o cliente.
+              </span>
+            </span>
+          </label>
+          {faltaDirecao && (
+            <div className="mt-2 border-t border-bad/30 pt-2">
+              <p className="text-xs font-bold text-bad">
+                Sem esta componente, só concluis com uma exceção justificada — que fica no histórico.
+              </p>
+              <input
+                value={motivoDir}
+                onChange={(ev) => setMotivoDir(ev.target.value)}
+                placeholder="Motivo da exceção (obrigatório para guardar sem direção)"
+                className="mt-2 w-full rounded-lg border border-line px-2.5 py-1.5 text-sm"
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {e.extras.anuncios && (
         <div className="mt-3 rounded-lg border border-line bg-cream p-3">
