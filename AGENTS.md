@@ -48,8 +48,21 @@ RLS: política `authenticated → all` (só o operador entra). Páginas pública
 - Commitar + `git push` → a Netlify publica sozinha (~1-2 min). Fechar commits com `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
 - Testar a base via script temporário na raiz do projeto (lê `.env.local`, usa `@supabase/supabase-js`), correr com `node ficheiro.mjs` e apagar a seguir.
 
+## Sistema comercial (Fases 1–7, `lib/dominio/orcamento.ts` + testes)
+Catálogo parametrizável → configurador → arredondamento comercial (múltiplo de
+50) → descontos transparentes → âmbitos → rentabilidade (semáforo + custos
+externos) → condições obrigatórias. Fonte única do preço no Configurador.
+Funções-chave: `calcular`, `arredondarComercial`, `margem`, `euroHora`,
+`semaforo(margem, €/h, limiares)`, `alertas(escopo, orc)`, `descreverEscopo`.
+Limiares e passo vivem na tabela `configuracoes` (key/value). Auditoria em
+`auditoria` (preço alterado, abaixo do catálogo, desconto). 29 testes (`npm test`).
+
 ## Pendências do Sandro (fora do código)
-- **Correr no Supabase** as migrações que faltam: 0016, 0017, 0018, 0019, 0020.
+- **Correr no Supabase** as migrações que faltam: 0016–0020 e **0023, 0024, 0025**
+  (0022 já corrido). Sem elas, descontos/custos externos/condições ficam inertes
+  (o código é tolerante — não parte).
+- **Definir os preços [A DEFINIR]** do catálogo em Definições → Preços (custo
+  interno, custos externos, tempo planeado) para a margem e o semáforo terem base.
 - **Env** `DIGEST_EMAIL` no Netlify (para o digest da manhã).
 - Confirmar **backups automáticos** do Supabase (plano).
 - Por decidir: integração de **faturação certificada** (InvoiceXpress/Moloni/Vendus) vs. o tracker atual; motor de **captação de tráfego** para o próprio Nº 5.
