@@ -101,8 +101,9 @@ from (values
 where precos_unitarios.chave = x.chave;
 
 -- ── 5. Serviços ainda [A DEFINIR] (preço null, não entram no orçamento) ─
-insert into precos_unitarios (chave, rotulo, rotulo_en, tipo, cobranca, categoria, estado, ativo, preco)
-select v.chave, v.rotulo, v.en, v.tipo, v.cobranca, v.categoria, 'a_definir', false, null
+insert into precos_unitarios (chave, rotulo, rotulo_en, tipo, cobranca, categoria, unidade, estado, ativo, preco)
+select v.chave, v.rotulo, v.en, v.tipo, v.cobranca, v.categoria,
+  case when v.tipo = 'mensal' then 'mês' else 'projeto' end, 'a_definir', false, null
 from (values
   ('foto_presencial','Fotografia presencial','On-site photography','setup','extra','Produção'),
   ('video_presencial','Vídeo presencial (captação)','On-site video shoot','setup','extra','Produção'),
