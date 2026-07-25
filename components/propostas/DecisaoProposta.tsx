@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { decidirProposta } from "@/app/r/proposta/[token]/acoes";
+import { decidirProposta, pedirAtualizacaoProposta } from "@/app/r/proposta/[token]/acoes";
 import type { Idioma } from "@/lib/dominio/intake";
 
 const TX = {
@@ -21,6 +21,10 @@ const TX = {
     confirmar: "Confirmar — aceito 🖐️",
     enviar: "Enviar resposta",
     voltar: "Voltar",
+    expiradaT: "Esta proposta expirou",
+    expiradaS: "Os valores e o âmbito podem ter mudado. Pede-nos uma versão atualizada e voltamos a falar.",
+    pedirAtual: "Pedir proposta atualizada",
+    pedidoFeito: "Pedido registado. Voltamos a falar em breve. 🖐️",
   },
   en: {
     aceiteT: "Accepted. High five! 🖐️",
@@ -38,6 +42,10 @@ const TX = {
     confirmar: "Confirm — I accept 🖐️",
     enviar: "Send response",
     voltar: "Back",
+    expiradaT: "This proposal has expired",
+    expiradaS: "Pricing and scope may have changed. Ask us for an updated version and we'll talk again.",
+    pedirAtual: "Request an updated proposal",
+    pedidoFeito: "Request noted. We'll be in touch soon. 🖐️",
   },
 };
 
@@ -45,15 +53,19 @@ export function DecisaoProposta({
   token,
   estado,
   idioma = "pt",
+  expirada = false,
 }: {
   token: string;
   estado: string;
   idioma?: Idioma;
+  expirada?: boolean;
 }) {
   const t = TX[idioma];
   const [decidido, setDecidido] = useState<string | null>(
     estado === "aceite" || estado === "recusada" ? estado : null,
   );
+  const [pedido, setPedido] = useState(false);
+  const [aPedir, setAPedir] = useState(false);
   const [escolha, setEscolha] = useState<"aceite" | "recusada" | null>(null);
   const [nota, setNota] = useState("");
   const [aEnviar, setAEnviar] = useState(false);
@@ -72,6 +84,34 @@ export function DecisaoProposta({
       <div className="rounded-2xl border border-line bg-white px-8 py-7 text-center">
         <p className="font-display text-xl font-extrabold">{t.recusaT}</p>
         <p className="mt-2 text-sm text-grey">{t.recusaS}</p>
+      </div>
+    );
+  }
+
+  // Expirada: não se aceita; pede-se uma versão atualizada.
+  if (expirada) {
+    return (
+      <div className="rounded-2xl border-2 border-warn bg-warn/10 px-8 py-7 text-center">
+        <p className="font-display text-xl font-extrabold text-warn">{t.expiradaT}</p>
+        {pedido ? (
+          <p className="mt-2 text-sm font-bold text-good">{t.pedidoFeito}</p>
+        ) : (
+          <>
+            <p className="mt-2 text-sm text-grey">{t.expiradaS}</p>
+            <button
+              onClick={async () => {
+                setAPedir(true);
+                await pedirAtualizacaoProposta(token, "");
+                setAPedir(false);
+                setPedido(true);
+              }}
+              disabled={aPedir}
+              className="mt-4 rounded-full bg-gold px-6 py-2.5 font-bold text-ink disabled:opacity-60"
+            >
+              {aPedir ? t.aRegistar : t.pedirAtual}
+            </button>
+          </>
+        )}
       </div>
     );
   }

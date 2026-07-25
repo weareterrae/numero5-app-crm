@@ -425,6 +425,30 @@ export function ehAvencaMensal(e: Escopo): boolean {
   );
 }
 
+/**
+ * Comparação elemento-a-elemento entre o que o cliente pediu e a nossa
+ * recomendação (Parte 46). Valores neutros de idioma — a página formata.
+ */
+export type Comparacao = {
+  producao: [number, number];
+  canais: [number, number];
+  site: [TipoSite, TipoSite];
+  assistente: [boolean, boolean];
+  anuncios: [boolean, boolean];
+  relatorio: [boolean, boolean];
+};
+
+export function compararEscopos(pedido: Escopo, nosso: Escopo): Comparacao {
+  return {
+    producao: [pecasPorMes(pedido), pecasPorMes(nosso)],
+    canais: [canaisAtivos(pedido).length, canaisAtivos(nosso).length],
+    site: [pedido.site.tipo, nosso.site.tipo],
+    assistente: [pedido.extras.assistente, nosso.extras.assistente],
+    anuncios: [pedido.extras.anuncios, nosso.extras.anuncios],
+    relatorio: [pedido.extras.relatorio, nosso.extras.relatorio],
+  };
+}
+
 /** As linhas que o cliente lê na proposta — derivadas do que se orçamentou. */
 export function descreverEscopo(e: Escopo): string[] {
   const linhas: string[] = [];

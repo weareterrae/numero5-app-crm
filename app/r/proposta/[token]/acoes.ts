@@ -43,3 +43,29 @@ export async function decidirProposta(
 
   return { ok: true as const, estado: decisao };
 }
+
+/**
+ * Proposta expirada: o cliente pede uma atualização. Não aceita nada — só
+ * deixa rasto para o operador voltar a falar. (Parte 48.)
+ */
+export async function pedirAtualizacaoProposta(token: string, nota: string) {
+  if (!token) return { ok: false as const, erro: "Pedido inválido." };
+  const supabase = criarClienteServico();
+  const { data: p } = await supabase
+    .from("propostas")
+    .select("cliente_id, estado")
+    .eq("partilha_token", token)
+    .eq("partilha_ativa", true)
+    .maybeSingle();
+  if (!p) return { ok: false as const, erro: "Proposta não encontrada." };
+  if (p.estado === "aceite" || p.estado === "recusada")
+    return { ok: true as const, jaDecidida: true };
+
+  const comentario = (nota ?? "").trim();
+  await supabase.from("atividades").insert({
+    cliente_id: p.cliente_id,
+    tipo: "nota",
+    descricao: `O cliente pediu uma atualização da proposta expirada.${comentario ? ` «${comentario}»` : ""} 🖐️`,
+  });
+  return { ok: true as const };
+}

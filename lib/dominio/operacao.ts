@@ -484,6 +484,18 @@ export function ordemEntraProducao(estado: string | null | undefined): boolean {
   return estado === "aceite" || estado === "produzida" || estado === "faturada";
 }
 
+// ── Validade da proposta ─────────────────────────────────────────────────────
+
+/** A proposta expirou? (validade no passado e ainda não decidida). */
+export function propostaExpirada(
+  validade: string | null | undefined,
+  hojeISO: string,
+  estado?: string | null,
+): boolean {
+  if (estado === "aceite" || estado === "recusada") return false;
+  return !!validade && validade < hojeISO;
+}
+
 /** Sugestões internas quando a rentabilidade aperta (nunca aplicadas sozinhas). */
 export function sugestoesRentabilidade(cor: string, desvioHoras: number): string[] {
   const s: string[] = [];

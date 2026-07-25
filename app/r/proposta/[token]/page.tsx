@@ -5,8 +5,8 @@ import { Simbolo } from "@/components/marca/Simbolo";
 import { DecisaoProposta } from "@/components/propostas/DecisaoProposta";
 import { EfeitosProposta } from "@/components/propostas/EfeitosProposta";
 import { euros } from "@/lib/dominio/metricas";
-import { calcular, normalizarEscopo, type Preco } from "@/lib/dominio/orcamento";
-import { contratoDatas, planoPagamentoFundacao } from "@/lib/dominio/operacao";
+import { calcular, compararEscopos, normalizarEscopo, type Preco } from "@/lib/dominio/orcamento";
+import { contratoDatas, planoPagamentoFundacao, propostaExpirada } from "@/lib/dominio/operacao";
 import { idiomaDe } from "@/lib/dominio/intake";
 import type { ConteudoProposta } from "@/lib/ia/prompts/proposta";
 
@@ -100,6 +100,19 @@ const TX = {
     condFundacaoTitulo: "Pagamento do arranque",
     fundAdjudicacao: "na adjudicação",
     fundEntrega: "antes da entrega",
+    compT: "Lado a lado",
+    compElemento: "Elemento",
+    compPediste: "O que pediste",
+    compNos: "A nossa recomendação",
+    compProducao: "Conteúdos/mês",
+    compCanais: "Canais",
+    compSite: "Site",
+    compAssistente: "Assistente",
+    compAnuncios: "Anúncios",
+    compRelatorio: "Relatório",
+    compSim: "Sim",
+    compNao: "—",
+    siteLbl: { nenhum: "—", melhorias: "Melhorias", novo: "Site novo", loja: "Loja online" } as Record<string, string>,
     percebemosT: "O que percebemos",
     factosT: "O que nos disseste",
     leituraT: "A nossa leitura",
@@ -187,6 +200,19 @@ const TX = {
     condFundacaoTitulo: "Setup payment",
     fundAdjudicacao: "on signing",
     fundEntrega: "before delivery",
+    compT: "Side by side",
+    compElemento: "Item",
+    compPediste: "What you asked for",
+    compNos: "Our recommendation",
+    compProducao: "Content/month",
+    compCanais: "Channels",
+    compSite: "Website",
+    compAssistente: "Assistant",
+    compAnuncios: "Ads",
+    compRelatorio: "Report",
+    compSim: "Yes",
+    compNao: "—",
+    siteLbl: { nenhum: "—", melhorias: "Improvements", novo: "New website", loja: "Online store" } as Record<string, string>,
     percebemosT: "What we understood",
     factosT: "What you told us",
     leituraT: "Our reading",
@@ -298,6 +324,11 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
   const temMensal = orcPedido.totalMensal > 0 || nossoMensal > 0;
   const temSetup = orcPedido.totalSetup > 0 || nossoSetup > 0;
   const comparar = !!p.mostrar_comparacao && temPedido && nossoMensal > 0;
+  const nossoEscopo = normalizarEscopo(p.escopo ?? {});
+  const compEscopos = comparar ? compararEscopos(pedido, nossoEscopo) : null;
+
+  const hojeISO = new Date().toISOString().slice(0, 10);
+  const expirada = propostaExpirada(p.validade as string | null, hojeISO, p.estado);
 
   const paras = (txt?: string) =>
     (txt ?? "").split(/\n\n+/).map((x) => x.trim()).filter(Boolean);
@@ -585,6 +616,44 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
           </section>
         )}
 
+        {compEscopos && (
+          <section className="mb-8">
+            <p className="rotulo">{t.compT}</p>
+            <div className="mt-2 overflow-x-auto">
+              <table className="w-full min-w-[28rem] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-line text-left">
+                    <th className="py-2 pr-3 font-bold text-grey">{t.compElemento}</th>
+                    <th className="py-2 px-3 font-bold text-grey">{t.compPediste}</th>
+                    <th className="py-2 pl-3 font-bold text-gold-dark">{t.compNos}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(() => {
+                    const simNao = (v: boolean) => (v ? t.compSim : t.compNao);
+                    const num = (n: number) => (n > 0 ? String(n) : t.compNao);
+                    const linhas: [string, string, string][] = [
+                      [t.compProducao, num(compEscopos.producao[0]), num(compEscopos.producao[1])],
+                      [t.compCanais, num(compEscopos.canais[0]), num(compEscopos.canais[1])],
+                      [t.compSite, t.siteLbl[compEscopos.site[0]] ?? "—", t.siteLbl[compEscopos.site[1]] ?? "—"],
+                      [t.compAssistente, simNao(compEscopos.assistente[0]), simNao(compEscopos.assistente[1])],
+                      [t.compAnuncios, simNao(compEscopos.anuncios[0]), simNao(compEscopos.anuncios[1])],
+                      [t.compRelatorio, simNao(compEscopos.relatorio[0]), simNao(compEscopos.relatorio[1])],
+                    ];
+                    return linhas.map(([el, a, b], i) => (
+                      <tr key={i} className="border-b border-line/50">
+                        <td className="py-2 pr-3 text-grey">{el}</td>
+                        <td className="py-2 px-3">{a}</td>
+                        <td className="py-2 pl-3 font-bold">{b}</td>
+                      </tr>
+                    ));
+                  })()}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
         {(p.setup_valor || p.avenca_valor) && (
           <section className="mb-8">
             <p className="rotulo">{t.investimento}</p>
@@ -805,7 +874,7 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
         </section>
 
         <div className="mb-4">
-          <DecisaoProposta token={token} estado={p.estado} idioma={idioma} />
+          <DecisaoProposta token={token} estado={p.estado} idioma={idioma} expirada={expirada} />
         </div>
 
         <footer className="mt-4 text-center text-[11px] text-soft">{t.footer}</footer>

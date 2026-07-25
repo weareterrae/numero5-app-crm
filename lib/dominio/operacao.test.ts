@@ -23,6 +23,7 @@ import {
   diferencasVersao,
   totalOrdem,
   ordemEntraProducao,
+  propostaExpirada,
   type Reuniao,
   type Aprovacao,
   type Revisao,
@@ -346,5 +347,16 @@ describe("ordens de alteração (Fase 2, bloco 10)", () => {
     expect(ordemEntraProducao("recusada")).toBe(false);
     expect(ordemEntraProducao("aceite")).toBe(true);
     expect(ordemEntraProducao("produzida")).toBe(true);
+  });
+});
+
+describe("experiência da proposta (Fase 6)", () => {
+  const HOJE = "2026-07-25";
+  it("propostaExpirada: validade no passado e não decidida", () => {
+    expect(propostaExpirada("2026-07-20", HOJE)).toBe(true);
+    expect(propostaExpirada("2026-07-30", HOJE)).toBe(false);
+    expect(propostaExpirada(null, HOJE)).toBe(false);
+    expect(propostaExpirada("2026-07-20", HOJE, "aceite")).toBe(false); // já aceite não expira
+    expect(propostaExpirada("2026-07-20", HOJE, "recusada")).toBe(false);
   });
 });

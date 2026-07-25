@@ -4,6 +4,7 @@ import {
   alertas,
   arredondarComercial,
   calcular,
+  compararEscopos,
   descreverEscopo,
   ehAvencaMensal,
   euroHora,
@@ -308,5 +309,22 @@ describe("direção e coordenação obrigatória (Fase 2, bloco 1)", () => {
     const linha = o.mensal.find((l) => l.chave === "direcao");
     expect(linha?.quantidade).toBe(1);
     expect(linha?.total).toBe(200);
+  });
+});
+
+describe("comparação de escopos (Parte 46)", () => {
+  it("compara produção, canais, site e extras", () => {
+    const pedido = esc({ producao: { posts: 4, carrosseis: 0, reels: 0, stories: 0 } });
+    const nosso = esc({
+      producao: { posts: 8, carrosseis: 4, reels: 2, stories: 0 },
+      canais: { instagram: { ativo: true, proprio: false } },
+      extras: { relatorio: true },
+      site: { tipo: "novo", paginas: 5 },
+    });
+    const c = compararEscopos(pedido, nosso);
+    expect(c.producao).toEqual([4, 14]);
+    expect(c.canais).toEqual([0, 1]);
+    expect(c.site).toEqual(["nenhum", "novo"]);
+    expect(c.relatorio).toEqual([false, true]);
   });
 });
