@@ -179,6 +179,38 @@ export const FAIXAS_ARRANQUE = [
   ["nao_sei", "Ainda não sei", "Not sure yet"],
 ] as const;
 
+// ── Website: o que precisa de resolver (Parte 14) ───────────────────────────
+export const SITE_PROBLEMAS = [
+  ["sem_site", "Não tenho website", "No website"],
+  ["desatualizado", "Está desatualizado", "It's outdated"],
+  ["nao_gera", "Não gera contactos", "Doesn't bring leads"],
+  ["dificil", "É difícil de atualizar", "Hard to update"],
+  ["nao_representa", "Não representa a empresa", "Doesn't represent the business"],
+  ["precisa_loja", "Precisa de loja", "Needs a store"],
+  ["precisa_marcacoes", "Precisa de marcações", "Needs bookings"],
+  ["formularios", "Precisa de melhores formulários", "Needs better forms"],
+  ["idioma", "Precisa de outro idioma", "Needs another language"],
+  ["integracoes", "Precisa de integrações", "Needs integrations"],
+  ["lento", "Está lento", "It's slow"],
+  ["nao_sei", "Não sei", "Not sure"],
+  ["bem_assim", "Está bem como está", "It's fine as is"],
+] as const;
+
+export type RecomendacaoSite = "criar" | "reconstruir" | "melhorar" | "manter" | null;
+
+/** A partir dos problemas indicados, o que faz sentido: criar/reconstruir/melhorar/manter. */
+export function recomendacaoSite(
+  problemas: string[] | undefined,
+  siteEstado?: string,
+): RecomendacaoSite {
+  const p = new Set(problemas ?? []);
+  if (p.has("sem_site") || siteEstado === "nao") return "criar";
+  if (p.size === 0) return null;
+  if (p.has("bem_assim") && p.size === 1) return "manter";
+  if (["nao_representa", "precisa_loja", "integracoes"].some((x) => p.has(x))) return "reconstruir";
+  return "melhorar";
+}
+
 // ── Quem decide (Parte 19) ──────────────────────────────────────────────────
 export const DECISORES = [
   ["eu", "Sou eu", "It's me"],
@@ -206,6 +238,7 @@ export type Brief = {
   site_novo?: string;
   site_tipo?: string[];
   site_funcoes?: string;
+  site_problemas?: string[];
   automacao?: string[];
   tarefa_chata?: string;
   ambicao?: string;
@@ -247,6 +280,7 @@ export const LISTAS_BRIEF: Record<string, readonly (readonly [string, string, st
   site_estado: SITE_ESTADO,
   site_novo: SITE_NOVO,
   site_tipo: SITE_TIPO,
+  site_problemas: SITE_PROBLEMAS,
   automacao: AUTOMACAO,
   prazo: PRAZO,
   leads_como: LEADS_COMO,

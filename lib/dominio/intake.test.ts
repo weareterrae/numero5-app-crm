@@ -4,6 +4,7 @@ import {
   investeAnuncios,
   temSite,
   processoComercialFraco,
+  recomendacaoSite,
   respostaSubstancial,
   respostaAdiada,
   urlValido,
@@ -61,6 +62,16 @@ describe("validação inteligente das respostas (Parte 24)", () => {
     expect(respostaAdiada("não sei")).toBe(true);
     expect(respostaAdiada("depois")).toBe(true);
     expect(respostaAdiada("Quero vender mais")).toBe(false);
+  });
+
+  it("recomendação de site a partir dos problemas", () => {
+    expect(recomendacaoSite(["sem_site"])).toBe("criar");
+    expect(recomendacaoSite([], "nao")).toBe("criar");
+    expect(recomendacaoSite(["bem_assim"])).toBe("manter");
+    expect(recomendacaoSite(["precisa_loja"])).toBe("reconstruir");
+    expect(recomendacaoSite(["nao_representa", "lento"])).toBe("reconstruir");
+    expect(recomendacaoSite(["desatualizado", "nao_gera"])).toBe("melhorar");
+    expect(recomendacaoSite([])).toBeNull();
   });
 
   it("valida URLs e emails", () => {

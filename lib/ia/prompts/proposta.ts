@@ -140,6 +140,7 @@ function linhasBrief(b: Brief): string[] {
   txt("A evitar", b.evitar);
   um("Logótipo", "logo", b.logo);
   um("Renovar imagem", "renovar", b.renovar);
+  muitos("Problemas do site a resolver", "site_problemas", b.site_problemas);
   um("Estado do site", "site_estado", b.site_estado);
   um("Quer site novo por nós", "site_novo", b.site_novo);
   muitos("Tipo de site", "site_tipo", b.site_tipo);

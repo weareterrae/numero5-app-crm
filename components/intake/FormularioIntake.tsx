@@ -26,11 +26,13 @@ import {
   SIM_NAO,
   SITE_ESTADO,
   SITE_NOVO,
+  SITE_PROBLEMAS,
   SITE_TIPO,
   TOM,
   TRATAMENTO,
   investeAnuncios,
   recebeContactos,
+  recomendacaoSite,
   respostaSubstancial,
   urlValido,
   type Brief,
@@ -105,6 +107,13 @@ const TX = {
     revSite: "Site",
     revOrcamento: "Investimento",
     revVazio: "—",
+    siteProblemasQ: "O que precisas de resolver no website?",
+    recSite: {
+      criar: "Pelo que dizes, faz sentido criar um site de raiz.",
+      reconstruir: "Pelo que dizes, faz sentido reconstruir o site.",
+      melhorar: "Pelo que dizes, dá para melhorar o que já tens.",
+      manter: "Boa — o site parece estar a cumprir.",
+    } as Record<string, string>,
     decideQ: "Quem terá de dizer «sim» para avançarmos?",
     decisorNomeQ: "Nome de quem decide (opcional)",
     decisorContactoQ: "Contacto dele (opcional)",
@@ -220,6 +229,13 @@ const TX = {
     revSite: "Website",
     revOrcamento: "Investment",
     revVazio: "—",
+    siteProblemasQ: "What do you need to fix on the website?",
+    recSite: {
+      criar: "From what you say, it makes sense to build a site from scratch.",
+      reconstruir: "From what you say, it makes sense to rebuild the site.",
+      melhorar: "From what you say, we can improve what you already have.",
+      manter: "Good — the site seems to be doing its job.",
+    } as Record<string, string>,
     decideQ: "Who has to say «yes» for us to go ahead?",
     decisorNomeQ: "Name of the decision-maker (optional)",
     decisorContactoQ: "Their contact (optional)",
@@ -602,6 +618,17 @@ export function FormularioIntake({
       sub: t.p6s,
       corpo: (
         <>
+          <Pergunta titulo={t.siteProblemasQ} nota={t.maisQueUm}>
+            <Chips opcoes={SITE_PROBLEMAS} L={L} multi ativo={(k) => (brief.site_problemas ?? []).includes(k)} onSel={(k) => varios("site_problemas", k)} />
+          </Pergunta>
+          {(() => {
+            const rec = recomendacaoSite(brief.site_problemas, brief.site_estado);
+            return rec ? (
+              <p className="-mt-1 rounded-lg border border-gold/40 bg-gold/5 p-2.5 text-sm text-gold-dark">
+                {t.recSite[rec]}
+              </p>
+            ) : null;
+          })()}
           <Pergunta titulo={t.siteEstadoQ}>
             <Chips opcoes={SITE_ESTADO} L={L} ativo={(k) => brief.site_estado === k} onSel={(k) => um("site_estado", k)} />
           </Pergunta>
