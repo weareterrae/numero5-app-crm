@@ -43,7 +43,7 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
     supabase.from("pacotes").select("id, chave, nome, tagline").eq("ativo", true).order("ordem"),
     supabase
       .from("precos_unitarios")
-      .select("chave, rotulo, tipo, unidade, preco, minutos")
+      .select("chave, rotulo, tipo, unidade, preco, minutos, custo_interno, tempo_planeado_min")
       .neq("estado", "inativo")
       .order("ordem"),
     supabase
@@ -78,6 +78,15 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
     ? await supabase.from("clientes").select("idioma").eq("id", cliente.id).maybeSingle()
     : { data: null };
   const idiomaCliente = idiomaDe(idiomaRow?.idioma);
+
+  // Configurações comerciais (passo de arredondamento, valor-alvo/hora).
+  const { data: cfgRows } = await supabase
+    .from("configuracoes")
+    .select("chave, valor")
+    .in("chave", ["passo_arredondamento", "valor_hora_alvo"]);
+  const cfg = Object.fromEntries((cfgRows ?? []).map((r) => [r.chave, Number(r.valor)]));
+  const passo = cfg.passo_arredondamento || 50;
+  const valorHoraAlvo = cfg.valor_hora_alvo || 65;
 
   const objetivosSel: string[] = diag?.objetivos?.selecionados ?? [];
   const dossier: DossierProposta = {
@@ -219,7 +228,13 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
         </section>
       )}
 
-      <Configurador propostaId={p.id} inicial={p.escopo ?? {}} precos={(precos ?? []) as Preco[]} />
+      <Configurador
+        propostaId={p.id}
+        inicial={p.escopo ?? {}}
+        precos={(precos ?? []) as Preco[]}
+        passo={passo}
+        valorHoraAlvo={valorHoraAlvo}
+      />
 
       {/* Pacote, âmbito e investimento */}
       <form action={guardarProposta} className="rounded-xl border border-line bg-white p-5">

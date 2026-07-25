@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "test": "vitest run",
     "dev": "next dev",
     "_nota_build": "--webpack: o Turbopack (padrão no Next 16) gera chunks que o empacotador de edge functions da Netlify não consegue carregar ao construir o proxy.ts. Manter Webpack até o suporte estabilizar.",
     "build": "next build --webpack",
@@ -24,6 +25,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.11",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.10"
   }
 }

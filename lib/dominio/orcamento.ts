@@ -107,7 +107,30 @@ export type Preco = {
   unidade: string;
   preco: number | null;
   minutos: number | null;
+  /** Campos comerciais (catálogo 0022), opcionais. */
+  custo_interno?: number | null;
+  tempo_planeado_min?: number | null;
+  preco_minimo?: number | null;
+  percentagem?: number | null;
 };
+
+/** Arredondamento comercial: sobe ao múltiplo de `passo` imediatamente superior. */
+export function arredondarComercial(valor: number, passo = 50): number {
+  if (!(valor > 0) || !(passo > 0)) return Math.max(0, Math.round(valor));
+  return Math.ceil(valor / passo) * passo;
+}
+
+/** Margem prevista (0–1) de um total face ao custo interno. Null se não dá. */
+export function margem(total: number, custo: number): number | null {
+  if (!(total > 0)) return null;
+  return (total - custo) / total;
+}
+
+/** €/hora efetiva de um total face ao tempo planeado (minutos). Null se sem tempo. */
+export function euroHora(total: number, minutos: number): number | null {
+  if (!(minutos > 0)) return null;
+  return total / (minutos / 60);
+}
 
 export type LinhaOrcamento = {
   chave: string;
@@ -116,6 +139,10 @@ export type LinhaOrcamento = {
   precoUnitario: number | null;
   total: number | null;
   minutos: number | null;
+  /** Custo interno da linha (custo_interno × quantidade). */
+  custo: number | null;
+  /** Tempo planeado da linha, em minutos. */
+  tempoMin: number;
 };
 
 export type Orcamento = {
@@ -124,6 +151,12 @@ export type Orcamento = {
   totalMensal: number;
   totalSetup: number;
   minutosMensais: number;
+  /** Custo interno somado (para a margem). */
+  custoMensal: number;
+  custoSetup: number;
+  /** Tempo planeado somado (para o €/hora). */
+  tempoMensalMin: number;
+  tempoSetupMin: number;
   porDefinir: string[];
 };
 
@@ -234,6 +267,8 @@ export function calcular(e: Escopo, precos: Preco[]): Orcamento {
       precoUnitario: p.preco,
       total,
       minutos: p.minutos ? p.minutos * quantidade : null,
+      custo: p.custo_interno != null ? Number(p.custo_interno) * quantidade : null,
+      tempoMin: (Number(p.tempo_planeado_min ?? p.minutos ?? 0) || 0) * quantidade,
     });
   }
 
@@ -253,10 +288,14 @@ export function calcular(e: Escopo, precos: Preco[]): Orcamento {
       precoUnitario: p.preco,
       total,
       minutos: p.minutos ? p.minutos * quantidade : null,
+      custo: p.custo_interno != null ? Number(p.custo_interno) * quantidade : null,
+      tempoMin: (Number(p.tempo_planeado_min ?? p.minutos ?? 0) || 0) * quantidade,
     });
   }
 
   const somar = (l: LinhaOrcamento[]) => l.reduce((t, x) => t + (x.total ?? 0), 0);
+  const somarCusto = (l: LinhaOrcamento[]) => l.reduce((t, x) => t + (x.custo ?? 0), 0);
+  const somarTempo = (l: LinhaOrcamento[]) => l.reduce((t, x) => t + (x.tempoMin ?? 0), 0);
 
   return {
     mensal,
@@ -264,6 +303,10 @@ export function calcular(e: Escopo, precos: Preco[]): Orcamento {
     totalMensal: somar(mensal),
     totalSetup: somar(setup),
     minutosMensais: mensal.reduce((t, l) => t + (l.minutos ?? 0), 0),
+    custoMensal: somarCusto(mensal),
+    custoSetup: somarCusto(setup),
+    tempoMensalMin: somarTempo(mensal),
+    tempoSetupMin: somarTempo(setup),
     porDefinir,
   };
 }

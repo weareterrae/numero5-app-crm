@@ -6,9 +6,12 @@ import {
   CANAIS,
   CHAVES_ESTRUTURADAS,
   ESCOPO_VAZIO,
+  arredondarComercial,
   calcular,
   canaisAtivos,
   descreverEscopo,
+  euroHora,
+  margem,
   normalizarEscopo,
   pecasPorMes,
   type ChaveCanal,
@@ -47,10 +50,14 @@ export function Configurador({
   propostaId,
   inicial,
   precos,
+  passo = 50,
+  valorHoraAlvo = 65,
 }: {
   propostaId: string;
   inicial: unknown;
   precos: Preco[];
+  passo?: number;
+  valorHoraAlvo?: number;
 }) {
   const [e, setE] = useState<Escopo>(() => normalizarEscopo(inicial));
   const [estado, setEstado] = useState("");
@@ -65,8 +72,14 @@ export function Configurador({
   const ativos = canaisAtivos(e);
   const semPrecos = precos.every((p) => p.preco === null);
 
-  const setupFinal = override ? Math.max(0, Number(setupProp) || 0) : orc.totalSetup;
-  const mensalFinal = override ? Math.max(0, Number(mensalProp) || 0) : orc.totalMensal;
+  // Total comercial: arredondado ao múltiplo superior (o que vai na proposta).
+  const mensalComercial = arredondarComercial(orc.totalMensal, passo);
+  const setupComercial = arredondarComercial(orc.totalSetup, passo);
+  const margemMensal = margem(mensalComercial, orc.custoMensal);
+  const ehMensal = euroHora(mensalComercial, orc.tempoMensalMin);
+
+  const setupFinal = override ? Math.max(0, Number(setupProp) || 0) : setupComercial;
+  const mensalFinal = override ? Math.max(0, Number(mensalProp) || 0) : mensalComercial;
 
   // Serviços à medida do catálogo (tudo o que não é gerido pelos controlos acima).
   const outros = precos.filter(
@@ -94,9 +107,9 @@ export function Configurador({
   function ligarOverride(on: boolean) {
     setOverride(on);
     if (on) {
-      // arranca com o valor calculado, para baixares a partir dele
-      if (!setupProp) setSetupProp(String(orc.totalSetup || ""));
-      if (!mensalProp) setMensalProp(String(orc.totalMensal || ""));
+      // arranca com o valor comercial (arredondado), para ajustares a partir dele
+      if (!setupProp) setSetupProp(String(setupComercial || ""));
+      if (!mensalProp) setMensalProp(String(mensalComercial || ""));
     }
   }
 
@@ -361,6 +374,45 @@ export function Configurador({
                 </span>
               )}
             </div>
+
+            {/* Interno vs. comercial — a spec exige mostrar sempre os dois. */}
+            {(orc.totalMensal > 0 || orc.totalSetup > 0) && (
+              <div className="mt-3 space-y-1 border-t border-white/15 pt-3 text-sm">
+                {orc.totalMensal > 0 && (
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-soft">Mensal comercial (arredondado)</span>
+                    <b className="font-display text-lg text-gold">{euros(mensalComercial)}/mês</b>
+                  </div>
+                )}
+                {orc.totalSetup > 0 && (
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-soft">Arranque comercial (arredondado)</span>
+                    <b className="font-display text-lg text-gold">{euros(setupComercial)}</b>
+                  </div>
+                )}
+                {(margemMensal !== null || ehMensal !== null) && (
+                  <div className="flex items-baseline justify-between text-xs">
+                    <span className="text-soft">Margem · €/hora (mensal)</span>
+                    <span>
+                      {margemMensal !== null && (
+                        <b className={margemMensal < 0.3 ? "text-bad" : "text-good"}>
+                          {Math.round(margemMensal * 100)}%
+                        </b>
+                      )}
+                      {ehMensal !== null && (
+                        <>
+                          {" · "}
+                          <b className={ehMensal < valorHoraAlvo ? "text-bad" : "text-cream"}>
+                            {euros(Math.round(ehMensal))}/h
+                          </b>
+                          <span className="text-soft"> (alvo {euros(valorHoraAlvo)})</span>
+                        </>
+                      )}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
 
             {orc.porDefinir.length > 0 && (
               <p className="mt-3 rounded-lg bg-bad/20 p-2 text-xs">
