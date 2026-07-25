@@ -3,7 +3,10 @@ import {
   minutosReuniao,
   resumoReunioes,
   reuniaoExcedePercentagem,
+  aprovacaoAtrasada,
+  indicadorAprovacao,
   type Reuniao,
+  type Aprovacao,
 } from "./operacao";
 
 describe("reuniões (Fase 2, bloco 2)", () => {
@@ -58,5 +61,44 @@ describe("reuniões (Fase 2, bloco 2)", () => {
     expect(reuniaoExcedePercentagem(180, 20, 20)).toBe(false); // 3h < 4h
     expect(reuniaoExcedePercentagem(300, null, 20)).toBe(false); // sem horas contratadas
     expect(reuniaoExcedePercentagem(300, 20, null)).toBe(false); // sem limite
+  });
+});
+
+describe("aprovações (Fase 2, bloco 3)", () => {
+  const HOJE = "2026-07-25";
+
+  it("uma aprovação pendente com prazo passado está bloqueada", () => {
+    expect(aprovacaoAtrasada({ estado: "pendente", prazo: "2026-07-20" }, HOJE)).toBe(true);
+    expect(aprovacaoAtrasada({ estado: "pendente", prazo: "2026-07-30" }, HOJE)).toBe(false);
+    expect(aprovacaoAtrasada({ estado: "aprovado", prazo: "2026-07-20" }, HOJE)).toBe(false);
+  });
+
+  it("não assume aprovação tácita — sem_resposta continua pendente", () => {
+    expect(aprovacaoAtrasada({ estado: "sem_resposta", prazo: "2026-07-01" }, HOJE)).toBe(true);
+  });
+
+  it("o indicador calcula tempo médio, % no prazo e bloqueados", () => {
+    const aps: Aprovacao[] = [
+      // resolvida em 2 dias, dentro do prazo
+      { estado: "aprovado", enviado_em: "2026-07-01", prazo: "2026-07-05", resolvido_em: "2026-07-03" },
+      // resolvida em 6 dias, fora do prazo
+      { estado: "alteracoes", enviado_em: "2026-07-01", prazo: "2026-07-04", resolvido_em: "2026-07-07" },
+      // pendente e atrasada
+      { estado: "pendente", enviado_em: "2026-07-10", prazo: "2026-07-15" },
+    ];
+    const ind = indicadorAprovacao(aps, HOJE);
+    expect(ind.total).toBe(3);
+    expect(ind.pendentes).toBe(1);
+    expect(ind.bloqueados).toBe(1);
+    expect(ind.tempoMedioDias).toBe(4); // (2 + 6) / 2
+    expect(ind.pctNoPrazo).toBeCloseTo(0.5); // 1 de 2 dentro do prazo
+    expect(ind.diasAtrasoAcumulados).toBe(10); // 25 - 15
+  });
+
+  it("sem resolvidas, tempo médio e % no prazo são null", () => {
+    const ind = indicadorAprovacao([{ estado: "pendente", prazo: "2026-08-01" }], HOJE);
+    expect(ind.tempoMedioDias).toBeNull();
+    expect(ind.pctNoPrazo).toBeNull();
+    expect(ind.bloqueados).toBe(0);
   });
 });

@@ -58,7 +58,7 @@ export default async function handler() {
 
   // Consultas em paralelo. relatorios e descontos são tolerantes (a tabela
   // pode ainda não existir).
-  const [followups, propostas, planos, relatorios, descontosRes] = await Promise.all([
+  const [followups, propostas, planos, relatorios, descontosRes, aprovacoesRes] = await Promise.all([
     db
       .from("atividades")
       .select("cliente_id, descricao, followup_nota, followup_em")
@@ -77,6 +77,13 @@ export default async function handler() {
       .eq("estado", "ativo")
       .not("fim", "is", null)
       .lte("fim", daqui7)
+      .then((r) => r, () => ({ data: [] })),
+    db
+      .from("aprovacoes")
+      .select("cliente_id, titulo, prazo")
+      .in("estado", ["pendente", "sem_resposta"])
+      .not("prazo", "is", null)
+      .lte("prazo", hojeISO)
       .then((r) => r, () => ({ data: [] })),
   ]);
 
@@ -138,8 +145,17 @@ export default async function handler() {
       };
     });
 
-  const nada = hoje.length === 0 && espera.length === 0 && descontos.length === 0;
-  const { html, texto } = render({ hoje, espera, arrefecer, descontos, nada });
+  // ── Secção 5: aprovações em atraso ─────────────────────────────────────
+  const aprovacoes = (aprovacoesRes.data ?? [])
+    .filter((a) => nome.has(a.cliente_id))
+    .map((a) => {
+      const [, m, dia] = a.prazo.split("-");
+      return { marca: nome.get(a.cliente_id), texto: `«${a.titulo}» à espera de aprovação (prazo ${dia}/${m})` };
+    });
+
+  const nada =
+    hoje.length === 0 && espera.length === 0 && descontos.length === 0 && aprovacoes.length === 0;
+  const { html, texto } = render({ hoje, espera, arrefecer, descontos, aprovacoes, nada });
 
   // Envio pelo Resend.
   const r = await fetch("https://api.resend.com/emails", {
@@ -157,7 +173,7 @@ export default async function handler() {
   return resposta(`Digest enviado para ${para}.`);
 }
 
-function render({ hoje, espera, arrefecer, descontos, nada }) {
+function render({ hoje, espera, arrefecer, descontos, aprovacoes, nada }) {
   const linhasTxt = [];
   const blocos = [];
 
@@ -181,6 +197,7 @@ function render({ hoje, espera, arrefecer, descontos, nada }) {
     "#B4761A",
   );
   bloco(`👀 À espera de ti (${espera.length})`, espera, "#2B44E7");
+  bloco(`✅ Aprovações em atraso (${(aprovacoes ?? []).length})`, aprovacoes ?? [], "#C0392B");
   bloco(`🏷️ Descontos a terminar (${(descontos ?? []).length})`, descontos ?? [], "#B4761A");
   bloco(
     `❄️ A arrefecer (${arrefecer.length})`,

@@ -103,6 +103,22 @@ export default async function Cockpit() {
   type ReuFaturar = { cliente_id: string; data: string; clientes: ClienteEmbed };
   const reunioesPorFaturar = (reuRows ?? []) as unknown as ReuFaturar[];
 
+  // Aprovações bloqueadas: pendentes com prazo passado (tolerante: 0028).
+  const { data: apRows } = await supabase
+    .from("aprovacoes")
+    .select("cliente_id, titulo, prazo, estado, clientes(nome_marca)")
+    .in("estado", ["pendente", "sem_resposta"])
+    .not("prazo", "is", null)
+    .lt("prazo", hoje)
+    .order("prazo", { ascending: true });
+  type ApBloqueada = {
+    cliente_id: string;
+    titulo: string;
+    prazo: string;
+    clientes: ClienteEmbed;
+  };
+  const aprovacoesBloqueadas = (apRows ?? []) as unknown as ApBloqueada[];
+
   const vazio = clientes.length === 0;
 
   return (
@@ -184,6 +200,35 @@ export default async function Cockpit() {
                       {nomeDe(r.clientes)}
                     </Link>
                     <span className="text-soft">reunião extra · {dataCurta(r.data)}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {aprovacoesBloqueadas.length > 0 && (
+            <section className="rounded-xl border-2 border-bad/40 bg-bad/5 p-5">
+              <h2 className="font-display text-lg font-extrabold">
+                Aprovações em atraso ({aprovacoesBloqueadas.length})
+              </h2>
+              <p className="mb-3 text-xs text-soft">
+                Conteúdo à espera do cliente — pode obrigar a ajustar datas de publicação.
+              </p>
+              <ul className="space-y-1.5">
+                {aprovacoesBloqueadas.slice(0, 8).map((a, i) => (
+                  <li
+                    key={i}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-white px-3 py-2 text-sm"
+                  >
+                    <Link
+                      href={`/clientes/${a.cliente_id}/aprovacoes`}
+                      className="font-bold hover:underline"
+                    >
+                      {nomeDe(a.clientes)}
+                    </Link>
+                    <span className="text-soft">
+                      {a.titulo} · prazo {dataCurta(a.prazo)}
+                    </span>
                   </li>
                 ))}
               </ul>
