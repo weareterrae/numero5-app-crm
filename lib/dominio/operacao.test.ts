@@ -20,6 +20,7 @@ import {
   distribuirFundacao,
   rentabilidade,
   sugestoesRentabilidade,
+  indiceEsforco,
   diferencasVersao,
   totalOrdem,
   ordemEntraProducao,
@@ -292,6 +293,50 @@ describe("rentabilidade real (Fase 2, bloco 8)", () => {
     expect(sugestoesRentabilidade("verde", 0)).toHaveLength(0);
     expect(sugestoesRentabilidade("vermelho", 5).length).toBeGreaterThan(0);
     expect(sugestoesRentabilidade("amarelo", 5).some((s) => s.includes("reuniões"))).toBe(true);
+  });
+});
+
+describe("índice de esforço do cliente (Fase 2, Prioridade 2)", () => {
+  const zero = {
+    reunioesExtra: 0,
+    retrabalhos: 0,
+    revisoesSobreLimite: false,
+    aprovacoesBloqueadas: 0,
+    tempoAprovacaoDias: null,
+    decisores: null,
+    estadoFinanceiro: null,
+  };
+
+  it("cliente tranquilo → esforço baixo, sem critérios", () => {
+    const e = indiceEsforco(zero);
+    expect(e.nivel).toBe("baixo");
+    expect(e.criterios).toHaveLength(0);
+  });
+
+  it("soma os sinais e é transparente", () => {
+    const e = indiceEsforco({
+      ...zero,
+      reunioesExtra: 2,
+      retrabalhos: 1,
+      revisoesSobreLimite: true,
+      decisores: 3,
+    });
+    // 2 + 1 + 2 + 2 = 7 → muito_alto
+    expect(e.pontos).toBe(7);
+    expect(e.nivel).toBe("muito_alto");
+    expect(e.criterios.find((c) => c.nome.includes("Reuniões"))?.contribuicao).toBe(2);
+    expect(e.criterios.some((c) => c.nome.includes("decisores"))).toBe(true);
+  });
+
+  it("financeiro em alerta e demora a aprovar pesam", () => {
+    const e = indiceEsforco({ ...zero, estadoFinanceiro: "pagamento_atraso", tempoAprovacaoDias: 6 });
+    expect(e.pontos).toBe(4); // 2 + 2
+    expect(e.nivel).toBe("alto");
+  });
+
+  it("os sinais são limitados (não disparam ao infinito)", () => {
+    const e = indiceEsforco({ ...zero, reunioesExtra: 99, retrabalhos: 99, aprovacoesBloqueadas: 99 });
+    expect(e.pontos).toBe(9); // 3 + 3 + 3
   });
 });
 

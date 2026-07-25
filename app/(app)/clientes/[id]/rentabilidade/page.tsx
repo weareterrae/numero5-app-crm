@@ -7,8 +7,19 @@ import {
   rentabilidade,
   sugestoesRentabilidade,
   minutosReuniao,
+  indiceEsforco,
+  indicadorAprovacao,
+  resumoRevisoesPeca,
   type Reuniao,
+  type Aprovacao,
 } from "@/lib/dominio/operacao";
+
+const ESFORCO = {
+  baixo: { rotulo: "Saudável", cls: "text-good" },
+  medio: { rotulo: "Exigente", cls: "text-warn" },
+  alto: { rotulo: "Risco operacional", cls: "text-bad" },
+  muito_alto: { rotulo: "Muito exigente", cls: "text-bad" },
+} as const;
 
 export const dynamic = "force-dynamic";
 
@@ -36,8 +47,18 @@ export default async function RentabilidadePage({ params }: { params: Promise<{ 
   inicioMes.setDate(1);
   const inicioMesISO = inicioMes.toISOString().slice(0, 10);
 
-  const [propRes, precosRes, extRes, cfgRes, reunioesRes, producaoRes, revisoesRes] =
-    await Promise.all([
+  const [
+    propRes,
+    precosRes,
+    extRes,
+    cfgRes,
+    reunioesRes,
+    producaoRes,
+    revisoesRes,
+    aprovacoesRes,
+    revisoesAllRes,
+    clienteJsonRes,
+  ] = await Promise.all([
       supabase
         .from("propostas")
         .select("avenca_valor, setup_valor, escopo")
@@ -63,10 +84,11 @@ export default async function RentabilidadePage({ params }: { params: Promise<{ 
           "limiar_vermelho_hora",
           "limiar_amarelo_margem",
           "limiar_vermelho_margem",
+          "revisoes_incluidas",
         ]),
       supabase
         .from("reunioes")
-        .select("duracao_planeada_min, duracao_real_min")
+        .select("duracao_planeada_min, duracao_real_min, incluida")
         .eq("cliente_id", id)
         .gte("data", inicioMesISO)
         .then((r) => r, () => ({ data: [] })),
@@ -83,6 +105,20 @@ export default async function RentabilidadePage({ params }: { params: Promise<{ 
         .eq("incluido", false)
         .eq("faturada", false)
         .then((r) => r, () => ({ data: [] })),
+      supabase
+        .from("aprovacoes")
+        .select("estado, enviado_em, prazo, resolvido_em")
+        .eq("cliente_id", id)
+        .then((r) => r, () => ({ data: [] })),
+      supabase
+        .from("revisoes")
+        .select("peca, tipo, incluido")
+        .eq("cliente_id", id)
+        .then((r) => r, () => ({ data: [] })),
+      supabase.from("clientes").select("aprovacao, financeiro").eq("id", id).maybeSingle().then(
+        (r) => r,
+        () => ({ data: null }),
+      ),
     ]);
 
   if (!propRes.data) {
@@ -142,6 +178,38 @@ export default async function RentabilidadePage({ params }: { params: Promise<{ 
   const cor = COR[luz.cor];
   const sugestoes = sugestoesRentabilidade(luz.cor, r.desvioHoras);
 
+  // Índice de esforço — a partir dos sinais reais da operação.
+  const reunioesExtra = ((reunioesRes.data ?? []) as { incluida?: boolean }[]).filter(
+    (x) => x.incluida === false,
+  ).length;
+  const revAll = (revisoesAllRes.data ?? []) as { peca: string; tipo: string | null; incluido: boolean }[];
+  const retrabalhos = revAll.filter((x) => x.tipo === "retrabalho").length;
+  const revIncluidas = cfg.revisoes_incluidas || null;
+  const pecas = new Map<string, typeof revAll>();
+  for (const rv of revAll) {
+    if (!pecas.has(rv.peca)) pecas.set(rv.peca, []);
+    pecas.get(rv.peca)!.push(rv);
+  }
+  const revisoesSobreLimite = [...pecas.values()].some(
+    (lista) => resumoRevisoesPeca(lista, revIncluidas).sobreLimite,
+  );
+  const hojeISO = new Date().toISOString().slice(0, 10);
+  const indAp = indicadorAprovacao((aprovacoesRes.data ?? []) as Aprovacao[], hojeISO);
+  const jsonRow = (clienteJsonRes.data ?? null) as {
+    aprovacao?: { decisores?: number } | null;
+    financeiro?: { estado?: string } | null;
+  } | null;
+  const esforco = indiceEsforco({
+    reunioesExtra,
+    retrabalhos,
+    revisoesSobreLimite,
+    aprovacoesBloqueadas: indAp.bloqueados,
+    tempoAprovacaoDias: indAp.tempoMedioDias,
+    decisores: jsonRow?.aprovacao?.decisores ?? null,
+    estadoFinanceiro: jsonRow?.financeiro?.estado ?? null,
+  });
+  const esf = ESFORCO[esforco.nivel];
+
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       <div>
@@ -161,6 +229,44 @@ export default async function RentabilidadePage({ params }: { params: Promise<{ 
         </div>
         {luz.motivos.length > 0 && <p className="mt-1 text-xs">{luz.motivos.join(" · ")}</p>}
       </div>
+
+      {/* Índice de esforço — quanto custa gerir este cliente (interno) */}
+      <section className="rounded-xl border border-line bg-white p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="font-display text-lg font-extrabold">Esforço de gestão</h2>
+          <span className={`text-sm font-bold ${esf.cls}`}>
+            {esf.rotulo} · {esforco.pontos} pt
+          </span>
+        </div>
+        {esforco.criterios.length === 0 ? (
+          <p className="mt-1 text-sm text-soft">Cliente tranquilo — sem sinais de esforço extra.</p>
+        ) : (
+          <>
+            <ul className="mt-2 space-y-1 text-sm">
+              {esforco.criterios.map((c, i) => (
+                <li key={i} className="flex items-center justify-between">
+                  <span className="text-grey">{c.nome}</span>
+                  <span className="font-mono text-xs text-soft">+{c.contribuicao}</span>
+                </li>
+              ))}
+            </ul>
+            {(esforco.nivel === "alto" || esforco.nivel === "muito_alto") && luz.cor !== "vermelho" && (
+              <p className="mt-2 rounded-lg bg-warn/10 p-2 text-xs text-warn">
+                Exigente, mas ainda a dar margem — vale a pena rever âmbito/reuniões na renovação.
+              </p>
+            )}
+            {(esforco.nivel === "alto" || esforco.nivel === "muito_alto") && luz.cor === "vermelho" && (
+              <p className="mt-2 rounded-lg bg-bad/10 p-2 text-xs text-bad">
+                Muito esforço e pouca margem — risco operacional. Renegociar ou rever o âmbito.
+              </p>
+            )}
+          </>
+        )}
+        <p className="mt-2 text-[11px] text-soft">
+          Interno · nunca visível ao cliente. Somado a partir de reuniões, aprovações, revisões e
+          pagamentos reais.
+        </p>
+      </section>
 
       {/* Previsto vs real */}
       <section className="rounded-xl border border-line bg-white p-5">

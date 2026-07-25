@@ -389,6 +389,59 @@ export function distribuirFundacao(minutosSetup: number, meses: number): number[
   return fatias;
 }
 
+// ── Índice de esforço do cliente (interno, Partes 28-29) ─────────────────────
+
+export type SinaisEsforco = {
+  reunioesExtra: number;
+  retrabalhos: number;
+  revisoesSobreLimite: boolean;
+  aprovacoesBloqueadas: number;
+  tempoAprovacaoDias: number | null;
+  decisores: number | null;
+  estadoFinanceiro: string | null;
+};
+
+export type NivelEsforco = "baixo" | "medio" | "alto" | "muito_alto";
+
+export type Esforco = {
+  pontos: number;
+  nivel: NivelEsforco;
+  /** Transparência: o que contribuiu e quanto (nunca uma «caixa negra»). */
+  criterios: { nome: string; contribuicao: number }[];
+};
+
+/**
+ * Quanto custa gerir este cliente, a partir de sinais reais da operação.
+ * Interno — nunca visível ao cliente. Transparente: devolve o detalhe.
+ */
+export function indiceEsforco(s: SinaisEsforco): Esforco {
+  const criterios: { nome: string; contribuicao: number }[] = [];
+  const add = (nome: string, c: number) => {
+    if (c > 0) criterios.push({ nome, contribuicao: c });
+  };
+
+  const reunioes = Math.min(3, Math.max(0, s.reunioesExtra));
+  add("Reuniões extra", reunioes);
+  const retrab = Math.min(3, Math.max(0, s.retrabalhos));
+  add("Retrabalho", retrab);
+  const sobre = s.revisoesSobreLimite ? 2 : 0;
+  add("Revisões acima do incluído", sobre);
+  const bloq = Math.min(3, Math.max(0, s.aprovacoesBloqueadas));
+  add("Aprovações bloqueadas", bloq);
+  const tempo = s.tempoAprovacaoDias == null ? 0 : s.tempoAprovacaoDias > 5 ? 2 : s.tempoAprovacaoDias > 2 ? 1 : 0;
+  add("Demora a aprovar", tempo);
+  const dec = s.decisores == null ? 0 : s.decisores >= 3 ? 2 : s.decisores === 2 ? 1 : 0;
+  add("Vários decisores", dec);
+  const fin = ESTADOS_FINANCEIROS_ALERTA.has(s.estadoFinanceiro ?? "") ? 2 : 0;
+  add("Situação financeira", fin);
+
+  const pontos = reunioes + retrab + sobre + bloq + tempo + dec + fin;
+  const nivel: NivelEsforco =
+    pontos >= 7 ? "muito_alto" : pontos >= 4 ? "alto" : pontos >= 2 ? "medio" : "baixo";
+
+  return { pontos, nivel, criterios };
+}
+
 // ── Rentabilidade real ───────────────────────────────────────────────────────
 
 export type EntradaRentabilidade = {
