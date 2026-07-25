@@ -30,9 +30,14 @@ export async function POST(req: NextRequest) {
   }
   if (!dossier?.cliente) return NextResponse.json({ erro: "Falta o cliente." }, { status: 400 });
 
+  const emIngles = dossier.idioma === "en";
+  const sistema = emIngles
+    ? `WRITE EVERYTHING IN ENGLISH — the client speaks English. Keep the Nº 5 voice (warm, direct, confident, human, "you") but in natural English. The Portuguese/"tu" language rule below does NOT apply; every other rule still does. All JSON string values must be in English.\n\n${SISTEMA_PROPOSTA}`
+    : SISTEMA_PROPOSTA;
+
   const r = await ia.gerar({
-    sistema: SISTEMA_PROPOSTA,
-    utilizador: `Escreve a proposta a partir deste dossiê real:\n\n${montarDossier(dossier)}`,
+    sistema,
+    utilizador: `${emIngles ? "Write the proposal from this real dossier" : "Escreve a proposta a partir deste dossiê real"}:\n\n${montarDossier(dossier)}`,
     json: true,
     maxTokens: 4096,
   });

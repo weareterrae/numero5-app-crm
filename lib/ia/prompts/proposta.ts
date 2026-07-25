@@ -89,6 +89,8 @@ export type DossierProposta = {
   recomendacoes?: { titulo: string; descricao: string; origem: string }[];
   /** O brief profundo preenchido pelo próprio cliente (tom, site, automação…). */
   brief?: Brief | null;
+  /** Idioma em que a proposta deve ser escrita. */
+  idioma?: "pt" | "en";
   notas?: string | null;
 };
 

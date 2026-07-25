@@ -6,6 +6,7 @@ import { DecisaoProposta } from "@/components/propostas/DecisaoProposta";
 import { EfeitosProposta } from "@/components/propostas/EfeitosProposta";
 import { euros } from "@/lib/dominio/metricas";
 import { calcular, normalizarEscopo, type Preco } from "@/lib/dominio/orcamento";
+import { idiomaDe } from "@/lib/dominio/intake";
 import type { ConteudoProposta } from "@/lib/ia/prompts/proposta";
 
 export const dynamic = "force-dynamic";
@@ -33,12 +34,134 @@ const PP_CSS = `
 @media (prefers-reduced-motion:reduce){.pp-simbolo path,.pp-cue .seta,.pp-dots i{animation:none;stroke-dashoffset:0}.pp-on .pp-corpo>section{opacity:1!important;transform:none!important;transition:none}}
 `;
 
-const METODO = [
-  ["Ouvir", "Percebemos o negócio, o cliente e o que já tentaste. Sem isto, é tudo palpite."],
-  ["Montar", "Estratégia, mensagem e as peças no sítio. A casa em ordem antes de fazer barulho."],
-  ["Publicar", "Conteúdo com constância. A IA acelera; a decisão e o «publicar» são sempre de uma pessoa."],
-  ["Medir", "Números reais, todos os meses. O que resulta, reforça-se. O que não, corta-se."],
-];
+const TX = {
+  pt: {
+    proposta: "Proposta",
+    tagline: "Uma proposta do Nº 5 — o departamento de marketing das marcas que não têm um. 🖐️",
+    indice: ["Onde estás", "O que construímos", "O teu assistente", "90 dias", "Investimento"],
+    cue: "role para ver a proposta",
+    ondeEstas: "onde estás hoje",
+    ondeChegar: "onde queremos chegar",
+    resolver: "o que vamos resolver — e porquê",
+    construir: "o que vamos construir para ti",
+    construirH: "Não é conversa. É o que vais ter.",
+    assistenteE: "o teu assistente, só teu",
+    conhece: (n: string) => `Conhece o ${n}`,
+    responder: "sempre a responder — no site e no WhatsApp",
+    assistenteNota:
+      "O nome é a nossa sugestão — o definitivo escolhemo-lo contigo. Feito à medida da tua marca, nunca repetido noutra. 🖐️",
+    fazer: "o que vamos fazer",
+    caminho: "o caminho",
+    caminhoH: "Os primeiros 90 dias",
+    trabalhamos: "como trabalhamos",
+    metodoH: "Método em 4 tempos",
+    metodo: [
+      ["Ouvir", "Percebemos o negócio, o cliente e o que já tentaste. Sem isto, é tudo palpite."],
+      ["Montar", "Estratégia, mensagem e as peças no sítio. A casa em ordem antes de fazer barulho."],
+      ["Publicar", "Conteúdo com constância. A IA acelera; a decisão e o «publicar» são sempre de uma pessoa."],
+      ["Medir", "Números reais, todos os meses. O que resulta, reforça-se. O que não, corta-se."],
+    ],
+    porque: "porquê o Nº 5",
+    jaFizemos: "o que já fizemos",
+    jaFizemosH: "Não são promessas. É trabalho.",
+    verSite: "Ver o site ↗",
+    verRedes: "Ver as redes ↗",
+    investimento: "investimento",
+    pediste: "O que pediste",
+    recomendacao: "A nossa recomendação",
+    recomendado: "recomendado",
+    mes: "/mês",
+    semSetupPedido: "sem setup pedido",
+    semSetup: "sem setup",
+    poupanca: (v: string) =>
+      `Recomendamos menos ${v}/mês do que pediste — não porque cortámos, mas porque focado rende mais. Melhor estar bem onde importa do que espalhado por todo o lado. 🖐️`,
+    arranque: "Arranque",
+    arranqueNota: "montar a base, uma só vez",
+    acompanhamento: "Acompanhamento mensal",
+    motorNota: "o motor a trabalhar todos os meses",
+    fechaContigo:
+      "O número exato fecha-se contigo depois de alinharmos o âmbito — sem surpresas, sem letras pequeninas.",
+    iva: "Aos valores apresentados acresce IVA à taxa legal em vigor.",
+    ritmo: "o ritmo, mês a mês",
+    ritmoH: "Como trabalhamos, todos os meses",
+    ritmoItens: [
+      ["Até dia 15", "Enviamos-te o plano de publicações do mês seguinte."],
+      ["Tens 5 dias", "Para pedires os ajustes que quiseres ao plano."],
+      ["Depois disso", "O plano fecha e entra em produção, para sair a tempo e horas."],
+      ["Durante o mês", "Alterações pedidas com o plano já a decorrer são orçamentadas à parte."],
+    ],
+    ritmoNota:
+      "É este ritmo que garante constância e nos deixa a ambos com as contas certas — sem surpresas de parte a parte.",
+    garantiaB: "A nossa garantia de honestidade:",
+    garantia:
+      " se olharmos para o teu digital e não encontrarmos pelo menos 3 coisas concretas para melhorar, dizemos-te na hora — e não avançamos. Não vendemos marketing que não precisas.",
+    fecho: "Damos cá cinco? 🖐️",
+    footer: "Proposta válida por 30 dias · Nº 5, marca operada por Os Caetanos, Lda · NIF 504428918",
+  },
+  en: {
+    proposta: "Proposal",
+    tagline: "A proposal from Nº 5 — the marketing department for brands that don't have one. 🖐️",
+    indice: ["Where you are", "What we'll build", "Your assistant", "90 days", "Investment"],
+    cue: "scroll to see the proposal",
+    ondeEstas: "where you are today",
+    ondeChegar: "where we're heading",
+    resolver: "what we'll solve — and why",
+    construir: "what we'll build for you",
+    construirH: "Not talk. What you'll actually get.",
+    assistenteE: "your assistant, only yours",
+    conhece: (n: string) => `Meet ${n}`,
+    responder: "always answering — on the site and WhatsApp",
+    assistenteNota:
+      "The name is our suggestion — we'll pick the final one with you. Made for your brand, never reused elsewhere. 🖐️",
+    fazer: "what we'll do",
+    caminho: "the path",
+    caminhoH: "The first 90 days",
+    trabalhamos: "how we work",
+    metodoH: "Our method, in 4 beats",
+    metodo: [
+      ["Listen", "We understand the business, the customer and what you've tried. Without this, it's all guesswork."],
+      ["Set up", "Strategy, message and the pieces in place. The house in order before making noise."],
+      ["Publish", "Consistent content. AI accelerates; the decision and the 'publish' are always a person's."],
+      ["Measure", "Real numbers, every month. What works, we double down on. What doesn't, we cut."],
+    ],
+    porque: "why Nº 5",
+    jaFizemos: "what we've done",
+    jaFizemosH: "Not promises. Work.",
+    verSite: "View the site ↗",
+    verRedes: "View the socials ↗",
+    investimento: "investment",
+    pediste: "What you asked for",
+    recomendacao: "Our recommendation",
+    recomendado: "recommended",
+    mes: "/mo",
+    semSetupPedido: "no setup requested",
+    semSetup: "no setup",
+    poupanca: (v: string) =>
+      `We recommend ${v}/mo less than you asked — not because we cut, but because focus pays off. Better to be strong where it matters than spread thin. 🖐️`,
+    arranque: "Setup",
+    arranqueNota: "building the base, one-off",
+    acompanhamento: "Monthly retainer",
+    motorNota: "the engine working every month",
+    fechaContigo:
+      "The exact number is finalised with you once we align the scope — no surprises, no fine print.",
+    iva: "VAT at the legal rate applies to the amounts shown.",
+    ritmo: "the monthly rhythm",
+    ritmoH: "How we work, every month",
+    ritmoItens: [
+      ["By the 15th", "We send you next month's publishing plan."],
+      ["You have 5 days", "To request any changes to the plan."],
+      ["After that", "The plan is locked and goes into production, to ship on time."],
+      ["During the month", "Changes requested once the plan is running are quoted separately."],
+    ],
+    ritmoNota:
+      "This rhythm is what guarantees consistency and keeps us both on the same page — no surprises either way.",
+    garantiaB: "Our honesty guarantee:",
+    garantia:
+      " if we look at your digital presence and can't find at least 3 concrete things to improve, we'll tell you on the spot — and we won't proceed. We don't sell marketing you don't need.",
+    fecho: "High five? 🖐️",
+    footer: "Proposal valid for 30 days · Nº 5, a brand operated by Os Caetanos, Lda · NIF 504428918",
+  },
+};
 
 export default async function PropostaPublica({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -52,18 +175,25 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
     .maybeSingle();
   if (!p) notFound();
 
+  // Idioma do cliente, tolerante (não parte se a migração 0021 não correu).
+  const { data: idiomaRow } = await supabase
+    .from("clientes")
+    .select("idioma")
+    .eq("id", p.cliente_id)
+    .maybeSingle();
+  const idioma = idiomaDe(idiomaRow?.idioma);
+  const t = TX[idioma];
+
   const um = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
   const cliente = um(p.clientes) as { nome_marca: string; setor: string | null } | null;
   const pacote = um(p.pacotes) as { nome: string; tagline: string | null } | null;
   const c = (p.conteudo ?? {}) as Partial<ConteudoProposta>;
   const ambito = (p.ambito ?? []) as string[];
 
-  // Duplo investimento: o que o cliente pediu vs. a nossa recomendação.
   const { data: precos } = await supabase
     .from("precos_unitarios")
     .select("chave, rotulo, tipo, unidade, preco, minutos")
     .eq("ativo", true);
-  // Casos a mostrar — a prova do que já fizemos, pela ordem escolhida.
   const chavesCasos = (p.casos ?? []) as string[];
   let casos: {
     chave: string;
@@ -79,9 +209,7 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
       .from("casos")
       .select("chave, marca, o_que, resultado, imagem_url, link, link_redes")
       .in("chave", chavesCasos);
-    casos = (data ?? []).sort(
-      (a, b) => chavesCasos.indexOf(a.chave) - chavesCasos.indexOf(b.chave),
-    );
+    casos = (data ?? []).sort((a, b) => chavesCasos.indexOf(a.chave) - chavesCasos.indexOf(b.chave));
   }
 
   const pedido = normalizarEscopo(p.escopo_pedido ?? {});
@@ -90,19 +218,20 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
   const nossoMensal = Number(p.avenca_valor) || 0;
   const nossoSetup = Number(p.setup_valor) || 0;
   const poupancaMensal = temPedido ? orcPedido.totalMensal - nossoMensal : 0;
-  // Linhas a mostrar na comparação: se QUALQUER dos lados tiver esse valor.
   const temMensal = orcPedido.totalMensal > 0 || nossoMensal > 0;
   const temSetup = orcPedido.totalSetup > 0 || nossoSetup > 0;
-  // A comparação só aparece se o comercial a ligou, se houve pedido do cliente,
-  // E se TEMOS mesmo uma avença para recomendar. Sem isto, mostrava "recomendação
-  // —/mês" e uma poupança absurda (pedido − 0). Neste caso cai no valor único.
   const comparar = !!p.mostrar_comparacao && temPedido && nossoMensal > 0;
 
-  const paras = (t?: string) =>
-    (t ?? "")
-      .split(/\n\n+/)
-      .map((x) => x.trim())
-      .filter(Boolean);
+  const paras = (txt?: string) =>
+    (txt ?? "").split(/\n\n+/).map((x) => x.trim()).filter(Boolean);
+
+  const indice = [
+    t.indice[0],
+    t.indice[1],
+    ...(c.assistente?.nome ? [t.indice[2]] : []),
+    t.indice[3],
+    t.indice[4],
+  ];
 
   return (
     <main className="relative z-10 mx-auto max-w-3xl px-5 py-10 print:py-0">
@@ -112,22 +241,21 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
         <div className="pointer-events-none absolute -right-24 -top-24 size-72 rounded-full bg-gold/25 blur-3xl print:hidden" />
         <div className="relative">
           <Simbolo fundo="escuro" className="pp-simbolo mb-6 w-16" titulo="Nº 5" />
-          <p className="rotulo !text-gold">Proposta{pacote ? ` · ${pacote.nome}` : ""}</p>
-          <h1 className="mt-2 font-display text-5xl font-extrabold leading-[0.98] tracking-tight">
-            {cliente?.nome_marca ?? "Proposta"}
-          </h1>
-          <p className="mt-3 max-w-[42ch] text-[15px] text-soft">
-            Uma proposta do Nº 5 — o departamento de marketing das marcas que não têm um. 🖐️
+          <p className="rotulo !text-gold">
+            {t.proposta}
+            {pacote ? ` · ${pacote.nome}` : ""}
           </p>
+          <h1 className="mt-2 font-display text-5xl font-extrabold leading-[0.98] tracking-tight">
+            {cliente?.nome_marca ?? t.proposta}
+          </h1>
+          <p className="mt-3 max-w-[42ch] text-[15px] text-soft">{t.tagline}</p>
           <div className="pp-indice">
-            {["Onde estás", "O que construímos", ...(c.assistente?.nome ? ["O teu assistente"] : []), "90 dias", "Investimento"].map(
-              (t) => (
-                <span key={t}>{t}</span>
-              ),
-            )}
+            {indice.map((x) => (
+              <span key={x}>{x}</span>
+            ))}
           </div>
           <div className="pp-cue">
-            <span className="seta">↓</span> role para ver a proposta
+            <span className="seta">↓</span> {t.cue}
           </div>
         </div>
       </header>
@@ -135,10 +263,10 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
       <div className="pp-corpo rounded-b-2xl border border-t-0 border-line bg-white px-8 py-9 print:rounded-none print:border-0">
         {c.abertura && (
           <section className="mb-8">
-            <p className="rotulo">onde estás hoje</p>
-            {paras(c.abertura).map((t, i) => (
+            <p className="rotulo">{t.ondeEstas}</p>
+            {paras(c.abertura).map((x, i) => (
               <p key={i} className={`mt-2 text-[16px] leading-relaxed ${i === 0 ? "pp-cap" : ""}`}>
-                {t}
+                {x}
               </p>
             ))}
           </section>
@@ -146,14 +274,14 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
 
         {c.objetivo && (
           <section className="mb-8">
-            <p className="rotulo">onde queremos chegar</p>
+            <p className="rotulo">{t.ondeChegar}</p>
             <p className="mt-2 text-[16px] leading-relaxed">{c.objetivo}</p>
           </section>
         )}
 
         {!!c.prioridades?.length && (
           <section className="mb-8">
-            <p className="rotulo">o que vamos resolver — e porquê</p>
+            <p className="rotulo">{t.resolver}</p>
             {c.prioridades.map((x, i) => (
               <div key={i} className="flex gap-4 border-b border-line/60 py-3.5 last:border-0">
                 <span className="font-display text-2xl font-extrabold text-gold-dark">{i + 1}</span>
@@ -168,10 +296,8 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
 
         {!!c.construir?.length && (
           <section className="mb-8">
-            <p className="rotulo">o que vamos construir para ti</p>
-            <h2 className="mt-1 mb-3 font-display text-2xl font-extrabold">
-              Não é conversa. É o que vais ter.
-            </h2>
+            <p className="rotulo">{t.construir}</p>
+            <h2 className="mt-1 mb-3 font-display text-2xl font-extrabold">{t.construirH}</h2>
             <div className="grid gap-3 sm:grid-cols-2">
               {c.construir.map((x, i) => (
                 <div key={i} className="rounded-xl border border-line bg-white p-4">
@@ -200,9 +326,9 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
                 💬
               </div>
               <div className="relative">
-                <p className="rotulo !text-gold">o teu assistente, só teu</p>
+                <p className="rotulo !text-gold">{t.assistenteE}</p>
                 <h2 className="mt-1 font-display text-3xl font-extrabold text-gold">
-                  Conhece o {c.assistente.nome}
+                  {t.conhece(c.assistente.nome)}
                 </h2>
                 <p className="mt-3 max-w-[52ch] text-[15px] leading-relaxed text-soft">
                   {c.assistente.descricao}
@@ -213,12 +339,9 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
                     <i></i>
                     <i></i>
                   </span>
-                  <span className="text-soft">sempre a responder — no site e no WhatsApp</span>
+                  <span className="text-soft">{t.responder}</span>
                 </div>
-                <p className="mt-3 text-xs text-soft">
-                  O nome é a nossa sugestão — o definitivo escolhemo-lo contigo. Feito à medida da tua
-                  marca, nunca repetido noutra. 🖐️
-                </p>
+                <p className="mt-3 text-xs text-soft">{t.assistenteNota}</p>
               </div>
             </div>
           </section>
@@ -226,7 +349,7 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
 
         {ambito.length > 0 && (
           <section className="mb-8">
-            <p className="rotulo">o que vamos fazer</p>
+            <p className="rotulo">{t.fazer}</p>
             <h2 className="mt-1 font-display text-2xl font-extrabold">
               {pacote?.nome}
               {pacote?.tagline && (
@@ -245,13 +368,13 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
         )}
 
         <section className="mb-8">
-          <p className="rotulo">como trabalhamos</p>
-          <h2 className="mt-1 mb-2 font-display text-2xl font-extrabold">Método em 4 tempos</h2>
-          {METODO.map(([t, d], i) => (
-            <div key={t} className="flex gap-4 border-b border-line/60 py-3 last:border-0">
+          <p className="rotulo">{t.trabalhamos}</p>
+          <h2 className="mt-1 mb-2 font-display text-2xl font-extrabold">{t.metodoH}</h2>
+          {t.metodo.map(([titulo, d], i) => (
+            <div key={titulo} className="flex gap-4 border-b border-line/60 py-3 last:border-0">
               <span className="font-display text-2xl font-extrabold text-cobalt">{i + 1}</span>
               <div>
-                <b className="text-[15px]">{t}</b>
+                <b className="text-[15px]">{titulo}</b>
                 <p className="text-sm text-grey">{d}</p>
               </div>
             </div>
@@ -260,14 +383,12 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
 
         {!!c.roadmap?.length && (
           <section className="mb-8">
-            <p className="rotulo">o caminho</p>
-            <h2 className="mt-1 mb-3 font-display text-2xl font-extrabold">Os primeiros 90 dias</h2>
+            <p className="rotulo">{t.caminho}</p>
+            <h2 className="mt-1 mb-3 font-display text-2xl font-extrabold">{t.caminhoH}</h2>
             <div className="grid gap-3 sm:grid-cols-3">
               {c.roadmap.map((x, i) => (
                 <div key={i} className="rounded-xl border border-line bg-white p-4">
-                  <p className="font-mono text-xs font-bold uppercase tracking-wide text-cobalt">
-                    {x.fase}
-                  </p>
+                  <p className="font-mono text-xs font-bold uppercase tracking-wide text-cobalt">{x.fase}</p>
                   <b className="mt-1 block text-[15px]">{x.titulo}</b>
                   <p className="mt-1 text-sm text-grey">{x.texto}</p>
                 </div>
@@ -278,28 +399,21 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
 
         {c.porque_n5 && (
           <section className="mb-8">
-            <p className="rotulo">porquê o Nº 5</p>
+            <p className="rotulo">{t.porque}</p>
             <p className="mt-2 text-[15px] leading-relaxed">{c.porque_n5}</p>
           </section>
         )}
 
         {casos.length > 0 && (
           <section className="mb-8">
-            <p className="rotulo">o que já fizemos</p>
-            <h2 className="mt-1 mb-3 font-display text-2xl font-extrabold">Não são promessas. É trabalho.</h2>
+            <p className="rotulo">{t.jaFizemos}</p>
+            <h2 className="mt-1 mb-3 font-display text-2xl font-extrabold">{t.jaFizemosH}</h2>
             <div className="grid gap-4 sm:grid-cols-2">
               {casos.map((caso) => (
-                <div
-                  key={caso.chave}
-                  className="flex flex-col overflow-hidden rounded-xl border border-line bg-white"
-                >
+                <div key={caso.chave} className="flex flex-col overflow-hidden rounded-xl border border-line bg-white">
                   {caso.imagem_url && (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={caso.imagem_url}
-                      alt={caso.marca}
-                      className="h-40 w-full object-cover object-top"
-                    />
+                    <img src={caso.imagem_url} alt={caso.marca} className="h-40 w-full object-cover object-top" />
                   )}
                   <div className="flex flex-1 flex-col p-4">
                     <p className="font-display text-lg font-extrabold">{caso.marca}</p>
@@ -311,23 +425,13 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
                     )}
                     <div className="mt-3 flex flex-wrap gap-2">
                       {caso.link && (
-                        <a
-                          href={caso.link}
-                          target="_blank"
-                          rel="noopener"
-                          className="rounded-full border border-gold-dark px-3 py-1.5 text-xs font-bold text-gold-dark hover:bg-gold hover:text-ink"
-                        >
-                          Ver o site ↗
+                        <a href={caso.link} target="_blank" rel="noopener" className="rounded-full border border-gold-dark px-3 py-1.5 text-xs font-bold text-gold-dark hover:bg-gold hover:text-ink">
+                          {t.verSite}
                         </a>
                       )}
                       {caso.link_redes && (
-                        <a
-                          href={caso.link_redes}
-                          target="_blank"
-                          rel="noopener"
-                          className="rounded-full border border-gold-dark px-3 py-1.5 text-xs font-bold text-gold-dark hover:bg-gold hover:text-ink"
-                        >
-                          Ver as redes ↗
+                        <a href={caso.link_redes} target="_blank" rel="noopener" className="rounded-full border border-gold-dark px-3 py-1.5 text-xs font-bold text-gold-dark hover:bg-gold hover:text-ink">
+                          {t.verRedes}
                         </a>
                       )}
                     </div>
@@ -340,110 +444,82 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
 
         {(p.setup_valor || p.avenca_valor) && (
           <section className="mb-8">
-            <p className="rotulo">investimento</p>
+            <p className="rotulo">{t.investimento}</p>
 
             {comparar ? (
-              // Duas colunas: o que pediste vs. a nossa recomendação.
               <>
                 <div className="mt-2 grid gap-3 sm:grid-cols-2">
                   <div className="rounded-xl border border-line bg-white px-6 py-5">
-                    <p className="text-xs font-bold uppercase tracking-wide text-grey">O que pediste</p>
+                    <p className="text-xs font-bold uppercase tracking-wide text-grey">{t.pediste}</p>
                     {temMensal && (
                       <p className="mt-2 font-display text-2xl font-extrabold text-grey">
                         {orcPedido.totalMensal > 0 ? euros(orcPedido.totalMensal) : "—"}
-                        <span className="text-sm font-normal">/mês</span>
+                        <span className="text-sm font-normal">{t.mes}</span>
                       </p>
                     )}
                     {temSetup && (
                       <p className="text-sm text-soft">
-                        {orcPedido.totalSetup > 0 ? `setup ${euros(orcPedido.totalSetup)}` : "sem setup pedido"}
+                        {orcPedido.totalSetup > 0 ? `setup ${euros(orcPedido.totalSetup)}` : t.semSetupPedido}
                       </p>
                     )}
                   </div>
                   <div className="relative rounded-xl bg-ink px-6 py-5 text-cream ring-2 ring-gold">
-                    <span className="pp-tagr">recomendado</span>
-                    <p className="text-xs font-bold uppercase tracking-wide text-gold">
-                      A nossa recomendação
-                    </p>
+                    <span className="pp-tagr">{t.recomendado}</span>
+                    <p className="text-xs font-bold uppercase tracking-wide text-gold">{t.recomendacao}</p>
                     {temMensal && (
                       <p className="mt-2 font-display text-3xl font-extrabold text-gold">
                         {nossoMensal > 0 ? euros(nossoMensal) : "—"}
-                        <span className="text-base font-normal">/mês</span>
+                        <span className="text-base font-normal">{t.mes}</span>
                       </p>
                     )}
                     {temSetup && (
                       <p className="text-sm text-soft">
-                        {Number(p.setup_valor) > 0 ? `setup ${euros(p.setup_valor)}` : "sem setup"}
+                        {Number(p.setup_valor) > 0 ? `setup ${euros(p.setup_valor)}` : t.semSetup}
                       </p>
                     )}
                   </div>
                 </div>
                 {poupancaMensal > 0 && (
-                  <p className="mt-3 rounded-lg bg-gold/10 px-4 py-3 text-[15px]">
-                    Recomendamos <b>menos {euros(poupancaMensal)}/mês</b> do que pediste — não porque
-                    cortámos, mas porque <b>focado rende mais</b>. Melhor estar bem onde importa do que
-                    espalhado por todo o lado. 🖐️
-                  </p>
+                  <p className="mt-3 rounded-lg bg-gold/10 px-4 py-3 text-[15px]">{t.poupanca(euros(poupancaMensal))}</p>
                 )}
                 <p className="mt-2 text-xs text-soft">
-                  {p.avenca_nota || "o motor a trabalhar todos os meses"}
-                  {p.setup_nota ? ` · ${p.setup_nota}` : ""}. O número exato fecha-se contigo depois de
-                  alinharmos o âmbito — sem surpresas, sem letras pequeninas.
+                  {p.avenca_nota || t.motorNota}
+                  {p.setup_nota ? ` · ${p.setup_nota}` : ""}. {t.fechaContigo}
                 </p>
               </>
             ) : (
-              // Coluna única (quando não houve pedido do cliente).
               <div className="mt-2 rounded-xl bg-ink px-7 py-6 text-cream">
                 {p.setup_valor ? (
                   <div className="flex items-baseline justify-between gap-4 border-b border-white/10 py-2.5">
                     <div>
-                      <p className="text-[15px]">Arranque</p>
-                      <p className="text-xs text-soft">{p.setup_nota || "montar a base, uma só vez"}</p>
+                      <p className="text-[15px]">{t.arranque}</p>
+                      <p className="text-xs text-soft">{p.setup_nota || t.arranqueNota}</p>
                     </div>
-                    <span className="font-display text-2xl font-extrabold text-gold">
-                      {euros(p.setup_valor)}
-                    </span>
+                    <span className="font-display text-2xl font-extrabold text-gold">{euros(p.setup_valor)}</span>
                   </div>
                 ) : null}
                 {p.avenca_valor ? (
                   <div className="flex items-baseline justify-between gap-4 py-2.5">
                     <div>
-                      <p className="text-[15px]">Acompanhamento mensal</p>
-                      <p className="text-xs text-soft">
-                        {p.avenca_nota || "o motor a trabalhar todos os meses"}
-                      </p>
+                      <p className="text-[15px]">{t.acompanhamento}</p>
+                      <p className="text-xs text-soft">{p.avenca_nota || t.motorNota}</p>
                     </div>
-                    <span className="font-display text-2xl font-extrabold text-gold">
-                      {euros(p.avenca_valor)}
-                    </span>
+                    <span className="font-display text-2xl font-extrabold text-gold">{euros(p.avenca_valor)}</span>
                   </div>
                 ) : null}
-                <p className="mt-3 text-xs text-soft">
-                  O número exato fecha-se contigo depois de alinharmos o âmbito — sem surpresas, sem
-                  letras pequeninas.
-                </p>
+                <p className="mt-3 text-xs text-soft">{t.fechaContigo}</p>
               </div>
             )}
-            <p className="mt-2 text-xs font-bold text-grey">
-              Aos valores apresentados acresce IVA à taxa legal em vigor.
-            </p>
+            <p className="mt-2 text-xs font-bold text-grey">{t.iva}</p>
           </section>
         )}
 
         {Number(p.avenca_valor) > 0 && (
           <section className="mb-8">
-            <p className="rotulo">o ritmo, mês a mês</p>
-            <h2 className="mt-1 mb-3 font-display text-2xl font-extrabold">Como trabalhamos, todos os meses</h2>
+            <p className="rotulo">{t.ritmo}</p>
+            <h2 className="mt-1 mb-3 font-display text-2xl font-extrabold">{t.ritmoH}</h2>
             <ol className="space-y-2.5">
-              {[
-                ["Até dia 15", "Enviamos-te o plano de publicações do mês seguinte."],
-                ["Tens 5 dias", "Para pedires os ajustes que quiseres ao plano."],
-                ["Depois disso", "O plano fecha e entra em produção, para sair a tempo e horas."],
-                [
-                  "Durante o mês",
-                  "Alterações pedidas com o plano já a decorrer são orçamentadas à parte.",
-                ],
-              ].map(([q, d], i) => (
+              {t.ritmoItens.map(([q, d], i) => (
                 <li key={i} className="flex gap-4 rounded-xl border border-line bg-white p-3.5">
                   <span className="font-display text-xl font-extrabold text-cobalt">{i + 1}</span>
                   <div>
@@ -453,35 +529,28 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
                 </li>
               ))}
             </ol>
-            <p className="mt-2 text-xs text-soft">
-              É este ritmo que garante constância e nos deixa a ambos com as contas certas — sem
-              surpresas de parte a parte.
-            </p>
+            <p className="mt-2 text-xs text-soft">{t.ritmoNota}</p>
           </section>
         )}
 
         <section className="mb-8 rounded-xl border border-dashed border-gold bg-gold/5 px-6 py-5 text-[15px]">
-          <b className="text-gold-dark">A nossa garantia de honestidade:</b> se olharmos para o teu
-          digital e não encontrarmos pelo menos 3 coisas concretas para melhorar, dizemos-te na hora —
-          e não avançamos. Não vendemos marketing que não precisas.
+          <b className="text-gold-dark">{t.garantiaB}</b>
+          {t.garantia}
         </section>
 
         <section className="py-6 text-center">
           {c.fecho && <p className="mx-auto mb-4 max-w-xl text-[17px]">{c.fecho}</p>}
-          <p className="font-display text-3xl font-extrabold">Damos cá cinco? 🖐️</p>
+          <p className="font-display text-3xl font-extrabold">{t.fecho}</p>
           <p className="mt-4 inline-block rounded-full bg-gold px-7 py-3 font-bold text-ink">
             numerocinco.pt · giveme5@numerocinco.pt
           </p>
         </section>
 
-        {/* Decisão do cliente */}
         <div className="mb-4">
-          <DecisaoProposta token={token} estado={p.estado} />
+          <DecisaoProposta token={token} estado={p.estado} idioma={idioma} />
         </div>
 
-        <footer className="mt-4 text-center text-[11px] text-soft">
-          Proposta válida por 30 dias · Nº 5, marca operada por Os Caetanos, Lda · NIF 504428918
-        </footer>
+        <footer className="mt-4 text-center text-[11px] text-soft">{t.footer}</footer>
       </div>
     </main>
   );

@@ -7,6 +7,7 @@ import { alternarPartilhaProposta, guardarProposta } from "../acoes";
 import { euros } from "@/lib/dominio/metricas";
 import { OBJETIVOS } from "@/lib/dominio/diagnostico/recomendacoes";
 import type { DossierProposta } from "@/lib/ia/prompts/proposta";
+import { idiomaDe } from "@/lib/dominio/intake";
 import { Configurador } from "@/components/propostas/Configurador";
 import { CasosPicker, type Caso } from "@/components/propostas/CasosPicker";
 import { calcular, descreverEscopo, normalizarEscopo, type Preco } from "@/lib/dominio/orcamento";
@@ -73,6 +74,11 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
         .maybeSingle()
     : { data: null };
 
+  const { data: idiomaRow } = cliente
+    ? await supabase.from("clientes").select("idioma").eq("id", cliente.id).maybeSingle()
+    : { data: null };
+  const idiomaCliente = idiomaDe(idiomaRow?.idioma);
+
   const objetivosSel: string[] = diag?.objetivos?.selecionados ?? [];
   const dossier: DossierProposta = {
     cliente: cliente?.nome_marca ?? "Cliente",
@@ -97,6 +103,7 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
     recomendacoes: diag?.recomendacoes ?? [],
     // O brief profundo que o cliente preencheu — o que ele sonha para a marca.
     brief: diag?.brief ?? null,
+    idioma: idiomaCliente,
     // O que o Sandro já sabe do negócio — é daqui que sai a originalidade.
     notas: cliente?.notas_gerais ?? null,
   };
