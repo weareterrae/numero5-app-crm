@@ -32,7 +32,8 @@ import {
   type Idioma,
 } from "@/lib/dominio/intake";
 import { CANAIS, ESCOPO_VAZIO, type ChaveCanal, type Escopo } from "@/lib/dominio/orcamento";
-import { submeterIntake, guardarRascunhoIntake } from "@/app/intake/[token]/acoes";
+import { submeterIntake, guardarRascunhoIntake, analisarWebsiteIntake } from "@/app/intake/[token]/acoes";
+import { resumoInfoSite, type InfoSite } from "@/lib/dominio/diagnostico/extrair-site";
 
 type Opcao = readonly [string, string, string];
 
@@ -52,6 +53,11 @@ const TX = {
     sub: "Umas perguntas rápidas — a maioria é só tocar. Quanto mais nos contas, mais à tua medida fica a proposta. 🖐️",
     guardado: "As tuas respostas ficam guardadas — podes fechar e continuar mais tarde. É confidencial.",
     retomado: "Bem-vindo de volta — retomámos onde paraste.",
+    analisar: "Ver o que já está no site",
+    analisando: "A ver o site…",
+    detetadoTitulo: "Detetámos isto no teu site. Confirma ou corrige.",
+    usarRedes: "Usar as redes detetadas",
+    analiseFalhou: "Não conseguimos aceder ao site — sem problema, continua e conta-nos tu.",
     jaSubmetido: "Já nos tinhas enviado isto — se preencheres outra vez, ficamos com a versão mais recente.",
     passo: (a: number, b: number) => `Passo ${a} de ${b}`,
     voltar: "← Voltar",
@@ -251,6 +257,11 @@ const TX = {
     ferramentasQ: "Which tools do you already use? (optional)",
     intencaoQ: "What are you looking for right now?",
     arranqueQ: "And for the setup (one-off payment)?",
+    analisar: "See what's already on the site",
+    analisando: "Reading the site…",
+    detetadoTitulo: "We found this on your site. Confirm or correct.",
+    usarRedes: "Use the detected socials",
+    analiseFalhou: "We couldn't reach the site — no problem, carry on and tell us yourself.",
   },
 };
 
@@ -304,6 +315,27 @@ export function FormularioIntake({
   );
   const [erro, setErro] = useState("");
   const [retomado] = useState((passoInicial || 0) > 0);
+  const [analisando, setAnalisando] = useState(false);
+  const [detetado, setDetetado] = useState<InfoSite | null>(null);
+  const [analiseFalhou, setAnaliseFalhou] = useState(false);
+
+  async function analisarSite() {
+    if (!website.trim() || analisando) return;
+    setAnalisando(true);
+    setAnaliseFalhou(false);
+    const r = await analisarWebsiteIntake(website.trim());
+    setAnalisando(false);
+    if (r.ok) {
+      setDetetado(r.info);
+      setBrief((b) => ({ ...b, site_detetado: r.info as unknown as Record<string, unknown> }));
+    } else {
+      setAnaliseFalhou(true);
+    }
+  }
+
+  function usarRedesDetetadas() {
+    if (detetado) setRedes((prev) => ({ ...prev, ...detetado.redes }));
+  }
 
   const setB = (campo: keyof Brief, valor: unknown) => setBrief((b) => ({ ...b, [campo]: valor }));
   const um = (campo: keyof Brief, k: string) =>
@@ -372,6 +404,36 @@ export function FormularioIntake({
         <>
           <Campo label={t.website}>
             <input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://…" className={CAMPO} />
+            {website.trim() && (
+              <button
+                type="button"
+                onClick={analisarSite}
+                disabled={analisando}
+                className="mt-2 rounded-full border border-gold-dark px-4 py-1.5 text-sm font-bold text-gold-dark disabled:opacity-60"
+              >
+                {analisando ? t.analisando : t.analisar}
+              </button>
+            )}
+            {analiseFalhou && <p className="mt-2 text-sm text-soft">{t.analiseFalhou}</p>}
+            {detetado && (
+              <div className="mt-3 rounded-lg border-2 border-gold/40 bg-gold/5 p-3">
+                <p className="text-sm font-bold">{t.detetadoTitulo}</p>
+                <ul className="mt-1.5 space-y-0.5 text-sm text-grey">
+                  {resumoInfoSite(detetado).map((l, i) => (
+                    <li key={i}>• {l}</li>
+                  ))}
+                </ul>
+                {Object.keys(detetado.redes).length > 0 && (
+                  <button
+                    type="button"
+                    onClick={usarRedesDetetadas}
+                    className="mt-2 rounded-full bg-gold px-4 py-1.5 text-sm font-bold text-ink"
+                  >
+                    {t.usarRedes}
+                  </button>
+                )}
+              </div>
+            )}
           </Campo>
           <Campo label={t.redes}>
             <div className="grid gap-2 sm:grid-cols-2">

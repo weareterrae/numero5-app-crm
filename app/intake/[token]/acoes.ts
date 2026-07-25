@@ -2,6 +2,7 @@
 
 import { criarClienteServico } from "@/lib/supabase/server";
 import { obterContexto } from "@/lib/dominio/diagnostico/analisar-site";
+import { extrairInfoSite, type InfoSite } from "@/lib/dominio/diagnostico/extrair-site";
 import { correrTodas } from "@/lib/dominio/diagnostico/verificacoes";
 import { pontuarSite } from "@/lib/dominio/diagnostico/pontuacao";
 import { ESCOPO_VAZIO, type Escopo } from "@/lib/dominio/orcamento";
@@ -100,6 +101,19 @@ export async function submeterIntake(dados: SubmissaoIntake) {
     );
 
   return { ok: true as const, nome: cliente.nome_marca, jaTinha: !!cliente.intake_submetido_em };
+}
+
+/**
+ * Analisa o website indicado e devolve informação VERIFICÁVEL para o cliente
+ * confirmar ou corrigir. Pública (a guarda SSRF vive no obterContexto). Se
+ * falhar, devolve ok:false e o diagnóstico continua na mesma.
+ */
+export async function analisarWebsiteIntake(
+  url: string,
+): Promise<{ ok: true; info: InfoSite } | { ok: false }> {
+  const obtido = await obterContexto(url);
+  if (!obtido.ok) return { ok: false };
+  return { ok: true, info: extrairInfoSite(obtido.ctx.html, obtido.ctx.urlFinal) };
 }
 
 /**

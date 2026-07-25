@@ -218,6 +218,8 @@ export type Brief = {
   // Ambição / investimento
   intencao?: string;
   orcamento_arranque?: string;
+  // Detetado no website (verificável, para o cliente confirmar/corrigir)
+  site_detetado?: Record<string, unknown>;
 };
 
 /** Todas as listas juntas, para traduzir chaves → rótulos. */

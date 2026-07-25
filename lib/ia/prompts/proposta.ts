@@ -5,6 +5,7 @@
  */
 
 import { rotulo, processoComercialFraco, type Brief } from "@/lib/dominio/intake";
+import { resumoInfoSite, type InfoSite } from "@/lib/dominio/diagnostico/extrair-site";
 
 export const SISTEMA_PROPOSTA = `És o estratega sénior do Nº 5 (numerocinco.pt) — estúdio de marketing digital + IA para PMEs em Portugal e Angola, do Sandro. Vais escrever o TEXTO de uma proposta comercial, a partir de um dossiê de diagnóstico real. Quem a lê é o dono do negócio.
 
@@ -192,6 +193,14 @@ export function montarDossier(d: DossierProposta): string {
     if (linhas.length) {
       L.push("\n— O QUE O CLIENTE SONHA (brief que ELE preencheu — usa-o muito) —");
       L.push(...linhas);
+    }
+    const det = d.brief.site_detetado as unknown as InfoSite | undefined;
+    if (det) {
+      const linhasDet = resumoInfoSite(det);
+      if (linhasDet.length) {
+        L.push("\n— OBSERVADO NO SITE (verificável, não é opinião) —");
+        linhasDet.forEach((l) => L.push(`  ${l}`));
+      }
     }
     if (processoComercialFraco(d.brief)) {
       L.push(
