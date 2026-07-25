@@ -13,6 +13,7 @@ export type SubmissaoComecar = {
   presenca: string;
   objetivos: string[];
   mensagem: string;
+  idioma?: "pt" | "en";
   /** Campo-armadilha: se vier preenchido, é um bot. */
   hp?: string;
 };
@@ -80,6 +81,9 @@ export async function criarLeadPublico(dados: SubmissaoComecar) {
     .select("id, intake_token")
     .single();
   if (error || !cliente) return { ok: false as const, erro: "Não conseguimos registar agora. Tenta outra vez." };
+
+  if (dados.idioma === "en")
+    await supabase.from("clientes").update({ idioma: "en" }).eq("id", cliente.id);
 
   await supabase.from("contactos").insert({
     cliente_id: cliente.id,
