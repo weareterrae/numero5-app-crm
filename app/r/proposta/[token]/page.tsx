@@ -7,6 +7,7 @@ import { EfeitosProposta } from "@/components/propostas/EfeitosProposta";
 import { euros } from "@/lib/dominio/metricas";
 import { calcular, compararEscopos, normalizarEscopo, type Preco } from "@/lib/dominio/orcamento";
 import { contratoDatas, planoPagamentoFundacao, propostaExpirada } from "@/lib/dominio/operacao";
+import { rotuloConfianca, corConfianca, confiancaPorDefeito } from "@/lib/dominio/confianca";
 import { idiomaDe } from "@/lib/dominio/intake";
 import type { ConteudoProposta } from "@/lib/ia/prompts/proposta";
 
@@ -537,12 +538,29 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
           <section className="mb-8">
             <p className="rotulo">{t.medicaoT}</p>
             <ul className="mt-2 divide-y divide-line/60 rounded-xl border border-line bg-white">
-              {c.medicao.map((m, i) => (
-                <li key={i} className="flex flex-wrap items-baseline justify-between gap-2 px-4 py-2.5 text-sm">
-                  <span className="font-bold">{m.metrica}</span>
-                  <span className="text-xs text-soft">{m.fonte}</span>
-                </li>
-              ))}
+              {c.medicao.map((m, i) => {
+                const nivel = m.confianca || confiancaPorDefeito(m.metrica);
+                const cor = corConfianca(nivel);
+                const clsSelo =
+                  cor === "good"
+                    ? "bg-good/15 text-good"
+                    : cor === "warn"
+                      ? "bg-warn/15 text-warn"
+                      : cor === "cobalt"
+                        ? "bg-cobalt/10 text-cobalt"
+                        : "bg-cream text-grey";
+                return (
+                  <li key={i} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm">
+                    <span className="font-bold">{m.metrica}</span>
+                    <span className="flex items-center gap-2">
+                      <span className="text-xs text-soft">{m.fonte}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${clsSelo}`}>
+                        {rotuloConfianca(nivel, idioma)}
+                      </span>
+                    </span>
+                  </li>
+                );
+              })}
             </ul>
           </section>
         )}

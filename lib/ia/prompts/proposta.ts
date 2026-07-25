@@ -68,13 +68,13 @@ DEVOLVES APENAS JSON válido, sem markdown, com esta forma exata:
   "construir": [ { "titulo": "nome do entregável (ex.: 'Site montra com marcações', 'Motor de conteúdo mensal')", "texto": "1-2 frases: o que é e o que muda para ele" } ],
   "assistente": { "nome": "nome inventado para esta marca", "descricao": "2-3 frases: o que faz no dia-a-dia, na voz da marca" },
   "roadmap": [ { "fase": "Primeiros 30 dias", "titulo": "título da fase", "texto": "1-2 frases do que acontece" } ],
-  "medicao": [ { "metrica": "o que vamos medir (ex.: contactos do formulário)", "fonte": "de onde vem o número (ex.: formulário do site)" } ],
+  "medicao": [ { "metrica": "o que vamos medir (ex.: contactos do formulário)", "fonte": "de onde vem o número (ex.: formulário do site)", "confianca": "um de: confirmado_sistema | reportado_plataforma | comunicado_cliente | estimado" } ],
   "responsabilidades": { "n5": ["o que o Nº 5 assume"], "cliente": ["o que a empresa assegura: acessos, materiais, aprovações, resposta aos contactos"] },
   "por_confirmar": ["dados que ficaram por confirmar, se existirem — senão, lista vazia"],
   "porque_n5": "1 parágrafo: porquê o Nº 5 — pessoas + IA como acelerador, a prova real (marcas acompanhadas em 2 países, redes geridas e sites no ar) e a honestidade da casa.",
   "fecho": "1-2 frases a convidar para o próximo passo. Aqui podes usar 🖐️."
 }
-Entre 3 e 5 prioridades. "construir" com 2-5 itens. "roadmap" com exatamente 3 fases (30 / 60 / 90 dias). "medicao" com 2-4 métricas, SEMPRE com fonte real (nunca ROI se o cliente não liga leads a vendas). "assistente" pode ser null se não encaixar. "por_confirmar" pode ser lista vazia. Texto simples, sem markdown.`;
+Entre 3 e 5 prioridades. "construir" com 2-5 itens. "roadmap" com exatamente 3 fases (30 / 60 / 90 dias). "medicao" com 2-4 métricas, SEMPRE com fonte real e nível de confiança (contactos do formulário = confirmado_sistema; alcance/interação = reportado_plataforma; vendas = comunicado_cliente; ROI = estimado e SÓ se o cliente conseguir ligar leads a vendas). "assistente" pode ser null se não encaixar. "por_confirmar" pode ser lista vazia. Texto simples, sem markdown.`;
 
 export type ConteudoProposta = {
   abertura: string;
@@ -88,8 +88,8 @@ export type ConteudoProposta = {
   // Novos (Parte C+E) — opcionais, para não partir propostas antigas.
   /** O que percebemos: factos que o cliente deu vs. a nossa leitura. */
   percebemos?: { factos: string[]; leitura: string[] } | null;
-  /** O que será medido e a fonte de cada métrica. */
-  medicao?: { metrica: string; fonte: string }[] | null;
+  /** O que será medido, a fonte e o nível de confiança de cada métrica. */
+  medicao?: { metrica: string; fonte: string; confianca?: string }[] | null;
   /** Responsabilidades: o Nº 5 assume / a empresa assegura. */
   responsabilidades?: { n5: string[]; cliente: string[] } | null;
   /** Dados por confirmar antes de fechar (marcados [A CONFIRMAR]). */
