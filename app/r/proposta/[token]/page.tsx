@@ -251,6 +251,27 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
     .maybeSingle();
   if (!p) notFound();
 
+  // «Proposta vista»: regista a abertura pelo cliente (máx. 1 registo por 6 h,
+  // para não encher o histórico com refreshes). Falha em silêncio — nunca
+  // impede o cliente de ver a proposta.
+  try {
+    const desde = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString();
+    const { data: recente } = await supabase
+      .from("atividades")
+      .select("id")
+      .eq("cliente_id", p.cliente_id)
+      .like("descricao", "👁 Proposta aberta%")
+      .gte("data", desde)
+      .limit(1)
+      .maybeSingle();
+    if (!recente)
+      await supabase.from("atividades").insert({
+        cliente_id: p.cliente_id,
+        tipo: "nota",
+        descricao: "👁 Proposta aberta pelo cliente (link partilhado).",
+      });
+  } catch { /* melhor perder o registo do que a visita */ }
+
   // Idioma do cliente, tolerante (não parte se a migração 0021 não correu).
   const { data: idiomaRow } = await supabase
     .from("clientes")
