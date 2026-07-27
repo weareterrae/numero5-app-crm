@@ -740,6 +740,13 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
                 <p className="mt-3 text-xs text-soft">{t.fechaContigo}</p>
               </div>
             )}
+            {(() => {
+              // Moeda local (ex.: AOA): nota manual escrita pelo operador — nunca convertida automaticamente.
+              const nota = ((p.condicoes ?? {}) as Record<string, unknown>).moeda_nota;
+              return typeof nota === "string" && nota.trim() !== "" ? (
+                <p className="mt-2 text-xs text-soft">💱 {nota}</p>
+              ) : null;
+            })()}
             {descAvenca && descAvenca.preco_durante != null && (
               <div className="mt-3 rounded-xl border border-gold/40 bg-gold/5 p-4 text-sm">
                 <div className="flex justify-between">

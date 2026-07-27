@@ -14,6 +14,7 @@ export type Condicoes = {
   renovacao?: string | null;
   pagamento_fundacao?: string | null;
   pagamento_fundacao_fases?: string | null;
+  moeda_nota?: string | null;
 };
 
 const inp = "w-full rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-gold";
@@ -191,6 +192,17 @@ export function CondicoesProposta({
             )}
           </>
         )}
+
+        <div className="sm:col-span-2 mt-1 border-t border-line pt-3">
+          <p className="rotulo">moeda local (opcional · ex.: Angola)</p>
+          <label className={lab}>Nota de equivalência — escrita por ti, nunca automática</label>
+          <input
+            name="moeda_nota"
+            defaultValue={condicoes.moeda_nota ?? ""}
+            placeholder="ex.: Equivalente indicativo: 950 000 Kz/mês · câmbio de referência de 27-07-2026"
+            className={inp}
+          />
+        </div>
 
         <button className="rounded-full bg-gold px-5 py-2 text-sm font-bold text-ink sm:col-span-2">
           Guardar condições

@@ -444,6 +444,10 @@ export async function guardarCondicoes(formData: FormData) {
     // Pagamento da Fundação.
     pagamento_fundacao: t(formData.get("pagamento_fundacao")), // 50_50 | 100 | fases
     pagamento_fundacao_fases: t(formData.get("pagamento_fundacao_fases")),
+    // Moeda local (ex.: Angola) — nota manual e honesta, escrita pelo operador
+    // (ex.: «Equivalente indicativo: 950 000 Kz/mês · câmbio de referência de 27-07-2026»).
+    // Sem conversão automática: nunca inventamos câmbios.
+    moeda_nota: t(formData.get("moeda_nota")),
   };
 
   const supabase = await criarClienteServidor();

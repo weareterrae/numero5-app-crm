@@ -29,6 +29,7 @@ type Item = {
   origem: string | null;
   licenca: string | null;
   notas: string | null;
+  ficheiro?: string | null;
 };
 
 export default async function BibliotecaPage({ params }: { params: Promise<{ id: string }> }) {
@@ -42,13 +43,33 @@ export default async function BibliotecaPage({ params }: { params: Promise<{ id:
     .maybeSingle();
   if (!cliente) notFound();
 
-  const { data: itensData } = await supabase
+  // Query tolerante à coluna «ficheiro» (migração 0044): tenta com ela; senão, sem ela.
+  let itensData: Item[] | null = await supabase
     .from("biblioteca_conteudos")
-    .select("id, tema, formato, canal, data, desempenho, reutilizavel, origem, licenca, notas")
+    .select("id, tema, formato, canal, data, desempenho, reutilizavel, origem, licenca, notas, ficheiro")
     .eq("cliente_id", id)
     .order("data", { ascending: false, nullsFirst: false })
-    .then((r) => r, () => ({ data: [] }));
-  const itens = (itensData ?? []) as Item[];
+    .then((r) => (r.error ? null : (r.data as Item[] | null)), () => null);
+  if (!itensData) {
+    itensData = await supabase
+      .from("biblioteca_conteudos")
+      .select("id, tema, formato, canal, data, desempenho, reutilizavel, origem, licenca, notas")
+      .eq("cliente_id", id)
+      .order("data", { ascending: false, nullsFirst: false })
+      .then((r2) => (r2.data as Item[] | null) ?? [], () => []);
+  }
+  const itens = itensData ?? [];
+
+  // URLs assinados (1 h) para os ficheiros anexos.
+  const urls = new Map<string, string>();
+  const comFicheiro = itens.filter((i) => i.ficheiro);
+  if (comFicheiro.length > 0) {
+    const { data: assinados } = await supabase.storage
+      .from("materiais")
+      .createSignedUrls(comFicheiro.map((i) => i.ficheiro as string), 3600)
+      .then((r) => r, () => ({ data: null }));
+    for (const a of assinados ?? []) if (a.signedUrl && a.path) urls.set(a.path, a.signedUrl);
+  }
 
   return (
     <div className="mx-auto max-w-3xl space-y-5">
@@ -98,6 +119,16 @@ export default async function BibliotecaPage({ params }: { params: Promise<{ id:
                   <p className="mt-1.5 text-xs text-gold-dark">↻ {sug.join(" · ")}</p>
                 )}
                 {c.notas && <p className="mt-1 text-xs text-grey">{c.notas}</p>}
+                {c.ficheiro && urls.has(c.ficheiro) && (
+                  <a
+                    href={urls.get(c.ficheiro)}
+                    target="_blank"
+                    rel="noopener"
+                    className="mt-1.5 inline-block text-xs font-bold text-gold-dark underline"
+                  >
+                    📎 Abrir ficheiro
+                  </a>
+                )}
               </section>
             );
           })}
@@ -131,6 +162,10 @@ export default async function BibliotecaPage({ params }: { params: Promise<{ id:
           <div className="sm:col-span-2">
             <label className={lab}>Notas</label>
             <input name="notas" className={inp} />
+          </div>
+          <div className="sm:col-span-2">
+            <label className={lab}>Ficheiro (opcional · máx. 25 MB)</label>
+            <input name="ficheiro" type="file" className={inp} />
           </div>
           <button className="rounded-full bg-gold px-5 py-2 text-sm font-bold text-ink sm:col-span-2">
             Juntar à biblioteca

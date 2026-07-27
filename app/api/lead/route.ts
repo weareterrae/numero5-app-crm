@@ -70,6 +70,8 @@ export async function POST(req: NextRequest) {
       cliente_id: existente.cliente_id,
       tipo: "nota",
       descricao: "🌐 Voltou a preencher o formulário do site.",
+      followup_em: dataFollowUp(),
+      followup_nota: "Lead reativado pelo site — responder em 24 h.",
     });
     return NextResponse.json({ ok: true }, { headers });
   }
@@ -103,7 +105,15 @@ export async function POST(req: NextRequest) {
     cliente_id: cliente.id,
     tipo: "nota",
     descricao: "🌐 Lead entrou pelo formulário do site.",
+    followup_em: dataFollowUp(),
+    followup_nota: "Lead novo do site — responder em 24 h.",
   });
 
   return NextResponse.json({ ok: true }, { headers });
+}
+
+/** Amanhã (data local) — o follow-up automático de cada lead do site. */
+function dataFollowUp(): string {
+  const d = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  return d.toISOString().slice(0, 10);
 }
