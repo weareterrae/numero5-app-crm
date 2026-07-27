@@ -119,6 +119,10 @@ const TX = {
     clienteEvitarQ: "Há algum tipo de cliente que não queiras atrair? (opcional)",
     clienteEvitarPH: "Ex.: quem só procura o mais barato…",
     materiaisQ: "O que já tens disponível?",
+    anexosQ: "Queres anexar já algum material? (opcional)",
+    anexosNota: "Logótipo, brochura, fotos… máx. 10 MB por ficheiro.",
+    anexosErro: "Não foi possível enviar — tenta outra vez.",
+    anexosOk: "enviado",
     siteProblemasQ: "O que precisas de resolver no website?",
     recSite: {
       criar: "Pelo que dizes, faz sentido criar um site de raiz.",
@@ -249,6 +253,10 @@ const TX = {
     clienteEvitarQ: "Any kind of customer you'd rather not attract? (optional)",
     clienteEvitarPH: "e.g. those who only chase the cheapest…",
     materiaisQ: "What do you already have?",
+    anexosQ: "Want to attach any material now? (optional)",
+    anexosNota: "Logo, brochure, photos… max. 10 MB per file.",
+    anexosErro: "Couldn't upload — please try again.",
+    anexosOk: "uploaded",
     siteProblemasQ: "What do you need to fix on the website?",
     recSite: {
       criar: "From what you say, it makes sense to build a site from scratch.",
@@ -651,6 +659,9 @@ export function FormularioIntake({
           <Pergunta titulo={t.materiaisQ} nota={t.maisQueUm}>
             <Chips opcoes={MATERIAIS} L={L} multi ativo={(k) => (brief.materiais ?? []).includes(k)} onSel={(k) => varios("materiais", k)} />
           </Pergunta>
+          <Pergunta titulo={t.anexosQ} nota={t.anexosNota}>
+            <AnexosIntake token={token} okTxt={t.anexosOk} erroTxt={t.anexosErro} />
+          </Pergunta>
         </>
       ),
     },
@@ -1041,6 +1052,50 @@ function Campo({ label, nota, children }: { label: string; nota?: string; childr
         {nota && <span className="ml-2 font-normal text-soft">{nota}</span>}
       </label>
       {children}
+    </div>
+  );
+}
+
+/** Upload opcional de materiais no intake público — envia para /api/intake-upload. */
+function AnexosIntake({ token, okTxt, erroTxt }: { token: string; okTxt: string; erroTxt: string }) {
+  const [itens, setItens] = useState<{ nome: string; estado: "a-enviar" | "ok" | "erro" }[]>([]);
+
+  async function enviar(lista: FileList | null) {
+    if (!lista) return;
+    for (const f of Array.from(lista).slice(0, 5)) {
+      setItens((v) => [...v, { nome: f.name, estado: "a-enviar" }]);
+      const fd = new FormData();
+      fd.set("token", token);
+      fd.set("ficheiro", f);
+      let ok = false;
+      try {
+        const r = await fetch("/api/intake-upload", { method: "POST", body: fd });
+        ok = (await r.json())?.ok === true;
+      } catch { /* fica erro */ }
+      setItens((v) => v.map((i) => (i.nome === f.name && i.estado === "a-enviar" ? { ...i, estado: ok ? "ok" : "erro" } : i)));
+    }
+  }
+
+  return (
+    <div>
+      <input
+        type="file"
+        multiple
+        onChange={(e) => { void enviar(e.target.files); e.target.value = ""; }}
+        className="block w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm file:mr-3 file:rounded-full file:border-0 file:bg-gold file:px-4 file:py-1.5 file:text-sm file:font-bold file:text-ink"
+      />
+      {itens.length > 0 && (
+        <ul className="mt-2 space-y-1 text-xs">
+          {itens.map((i, n) => (
+            <li key={`${i.nome}-${n}`} className="flex items-center gap-2">
+              <span className="truncate">📎 {i.nome}</span>
+              {i.estado === "a-enviar" && <span className="text-soft">…</span>}
+              {i.estado === "ok" && <span className="font-bold text-good">✓ {okTxt}</span>}
+              {i.estado === "erro" && <span className="text-bad">{erroTxt}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
