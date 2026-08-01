@@ -6,6 +6,7 @@ import {
   apagarEtapa,
   guardarAlertas,
   guardarEtapa,
+  guardarMarca,
 } from "@/app/(app)/leads/[org]/definicoes/acoes";
 import type { Etapa } from "@/lib/dominio/crm";
 
@@ -74,6 +75,41 @@ export default async function Definicoes({ params }: { params: Promise<{ org: st
               type="number"
               min={5}
               defaultValue={org.alerta_minutos ?? 30}
+              className="w-full rounded-lg border border-line bg-cream px-3 py-2 text-sm"
+            />
+          </div>
+          <button className="rounded-lg bg-ink px-4 py-2 text-sm font-bold text-cream" type="submit">
+            Guardar
+          </button>
+        </form>
+      </section>
+
+      {/* Marca do cliente (white-label) */}
+      <section className="rounded-xl border border-line bg-white p-5">
+        <h2 className="mb-1 text-xs font-bold uppercase tracking-wide text-grey">Marca do cliente</h2>
+        <p className="mb-3 text-[11px] text-soft">
+          O cliente vê o quadro com a sua cor e logótipo quando entra.
+        </p>
+        <form action={guardarMarca} className="flex flex-wrap items-end gap-3">
+          <input type="hidden" name="org" value={slug} />
+          <div>
+            <label className="mb-1 block text-[11px] font-bold text-soft">Cor</label>
+            <input
+              name="cor"
+              type="color"
+              defaultValue={(org.marca?.cor as string) || "#E8A13C"}
+              className="h-10 w-16 rounded-lg border border-line bg-cream"
+            />
+          </div>
+          <div className="min-w-[220px] flex-1">
+            <label className="mb-1 block text-[11px] font-bold text-soft">
+              Logótipo (URL, opcional)
+            </label>
+            <input
+              name="logo_url"
+              type="url"
+              defaultValue={(org.marca?.logo_url as string) || ""}
+              placeholder="https://…/logo.png"
               className="w-full rounded-lg border border-line bg-cream px-3 py-2 text-sm"
             />
           </div>

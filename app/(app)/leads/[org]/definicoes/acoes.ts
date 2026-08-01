@@ -109,3 +109,20 @@ export async function apagarEtapa(fd: FormData) {
   await ctx.supabase.from("crm_etapas").delete().eq("id", id).eq("org_id", ctx.orgId);
   revalidatePath(`/leads/${slug}/definicoes`);
 }
+
+/** Marca do cliente (white-label leve): cor de destaque + logótipo. */
+export async function guardarMarca(fd: FormData) {
+  const slug = t(fd, "org");
+  const ctx = await contexto(slug);
+  if (!ctx) return;
+  const cor = t(fd, "cor");
+  const logo = t(fd, "logo_url");
+  const { data: cur } = await ctx.supabase.from("orgs").select("marca").eq("id", ctx.orgId).maybeSingle();
+  const marca: Record<string, unknown> = { ...((cur?.marca as Record<string, unknown>) ?? {}) };
+  if (/^#[0-9a-fA-F]{6}$/.test(cor)) marca.cor = cor;
+  else if (!cor) delete marca.cor;
+  if (logo) marca.logo_url = logo;
+  else delete marca.logo_url;
+  await ctx.supabase.from("orgs").update({ marca }).eq("id", ctx.orgId);
+  revalidatePath(`/leads/${slug}/definicoes`);
+}

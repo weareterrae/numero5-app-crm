@@ -32,14 +32,48 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .maybeSingle();
   const links = perfil?.externo ? [{ href: "/leads", label: "As minhas leads" }] : LINKS;
 
+  // White-label: o cliente externo vê a app com a SUA marca (cor/logótipo).
+  let marcaCliente: { nome: string; cor?: string; logo?: string } | null = null;
+  if (perfil?.externo) {
+    const { data: mem } = await supabase
+      .from("org_membros")
+      .select("org_id")
+      .eq("profile_id", user.id)
+      .limit(1)
+      .maybeSingle();
+    if (mem?.org_id) {
+      const { data: o } = await supabase.from("orgs").select("nome, marca").eq("id", mem.org_id).maybeSingle();
+      if (o) marcaCliente = { nome: o.nome, cor: o.marca?.cor, logo: o.marca?.logo_url };
+    }
+  }
+
   return (
     <div className="min-h-dvh">
       <ManterSessao />
       <header className="border-b border-line bg-white/80 backdrop-blur sticky top-0 z-20">
         <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
-          <Link href="/" className="flex items-center gap-2.5 shrink-0">
-            <Simbolo className="w-10" titulo="Nº 5" />
-            <span className="font-display text-lg font-extrabold tracking-tight">Nº 5</span>
+          <Link href={marcaCliente ? "/leads" : "/"} className="flex items-center gap-2.5 shrink-0">
+            {marcaCliente ? (
+              marcaCliente.logo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={marcaCliente.logo} alt={marcaCliente.nome} className="h-9 w-auto max-w-[170px] object-contain" />
+              ) : (
+                <>
+                  <span
+                    className="inline-block h-8 w-8 rounded-lg"
+                    style={{ background: marcaCliente.cor || "#E8A13C" }}
+                  />
+                  <span className="font-display text-lg font-extrabold tracking-tight">
+                    {marcaCliente.nome}
+                  </span>
+                </>
+              )
+            ) : (
+              <>
+                <Simbolo className="w-10" titulo="Nº 5" />
+                <span className="font-display text-lg font-extrabold tracking-tight">Nº 5</span>
+              </>
+            )}
           </Link>
           <nav className="flex-1 overflow-x-auto">
             <ul className="flex gap-1">

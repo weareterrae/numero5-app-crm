@@ -17,7 +17,7 @@ export default async function QuadroOrg({ params }: { params: Promise<{ org: str
 
   const { data: org } = await supabase
     .from("orgs")
-    .select("id, nome, slug")
+    .select("*")
     .eq("slug", slug)
     .maybeSingle();
   if (!org) notFound();
@@ -47,7 +47,12 @@ export default async function QuadroOrg({ params }: { params: Promise<{ org: str
           <Link href="/leads" className="text-xs font-bold text-soft hover:text-ink">
             ← Clientes
           </Link>
-          <h1 className="font-display text-2xl font-extrabold tracking-tight">{org.nome}</h1>
+          <h1 className="flex items-center gap-2 font-display text-2xl font-extrabold tracking-tight">
+            {org.marca?.cor && (
+              <span className="inline-block h-4 w-4 rounded" style={{ background: org.marca.cor }} />
+            )}
+            {org.nome}
+          </h1>
         </div>
         {token && (
           <Link
