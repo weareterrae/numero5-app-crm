@@ -159,3 +159,38 @@ export const ATIVIDADE_ICON: Record<Atividade["tipo"], string> = {
   reuniao: "🤝",
   sistema: "•",
 };
+
+// --- Métricas -----------------------------------------------------------
+
+/** Tempo médio até à 1.ª resposta, em minutos (só das leads respondidas). */
+export function tempoMedioRespostaMin(
+  leads: Array<Pick<Lead, "created_at" | "primeira_resposta_at">>,
+): number | null {
+  const resp = leads.filter((l) => l.primeira_resposta_at);
+  if (!resp.length) return null;
+  const soma = resp.reduce((t, l) => {
+    const dt = (Date.parse(l.primeira_resposta_at as string) - Date.parse(l.created_at)) / 60000;
+    return t + Math.max(0, dt);
+  }, 0);
+  return Math.round(soma / resp.length);
+}
+
+/** Formata uma duração em minutos de forma humana. */
+export function formatarDuracao(min: number | null): string {
+  if (min == null) return "—";
+  if (min < 60) return `${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}h${min % 60 ? ` ${min % 60}m` : ""}`;
+  const d = Math.floor(h / 24);
+  return `${d} ${d === 1 ? "dia" : "dias"}`;
+}
+
+/** Taxa de conversão para "ganho" sobre o total (0..1) ou null se sem leads. */
+export function taxaGanho(leads: Array<Pick<Lead, "resultado">>): number | null {
+  if (!leads.length) return null;
+  return leads.filter((l) => l.resultado === "ganho").length / leads.length;
+}
+
+export function percentagem(v: number | null): string {
+  return v == null ? "—" : `${Math.round(v * 100)}%`;
+}

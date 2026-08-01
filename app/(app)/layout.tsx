@@ -24,6 +24,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
+  // Clientes externos só veem as suas leads; a equipa do Nº 5 vê tudo.
+  const { data: perfil } = await supabase
+    .from("profiles")
+    .select("externo")
+    .eq("id", user.id)
+    .maybeSingle();
+  const links = perfil?.externo ? [{ href: "/leads", label: "As minhas leads" }] : LINKS;
+
   return (
     <div className="min-h-dvh">
       <ManterSessao />
@@ -35,7 +43,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </Link>
           <nav className="flex-1 overflow-x-auto">
             <ul className="flex gap-1">
-              {LINKS.map((l) => (
+              {links.map((l) => (
                 <li key={l.href}>
                   <Link
                     href={l.href}

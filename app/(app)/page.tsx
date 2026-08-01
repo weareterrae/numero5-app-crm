@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import {
   ESTADO_LABEL,
@@ -24,6 +25,19 @@ export const dynamic = "force-dynamic";
 
 export default async function Cockpit() {
   const supabase = await criarClienteServidor();
+
+  // Cliente externo não vê o cockpit da agência — vai para as suas leads.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) {
+    const { data: perfil } = await supabase
+      .from("profiles")
+      .select("externo")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (perfil?.externo) redirect("/leads");
+  }
 
   const [clientesRes, avencasRes, followupsRes, historicoRes] = await Promise.all([
     supabase.from("clientes").select("id, nome_marca, estado, valor_estimado, ultima_interacao_at, setor"),

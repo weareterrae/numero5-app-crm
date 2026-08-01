@@ -32,6 +32,14 @@ export default async function Leads() {
       .eq("arquivado", false),
   ]);
 
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { data: perfil } = user
+    ? await supabase.from("profiles").select("externo").eq("id", user.id).maybeSingle()
+    : { data: null };
+  const staff = !perfil?.externo;
+
   const lista = (orgs ?? []) as Org[];
   const todas = (leads ?? []) as LinhaLead[];
   const nomeOrg = new Map(lista.map((o) => [o.id, o.nome] as const));
@@ -53,9 +61,19 @@ export default async function Leads() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-2xl font-extrabold tracking-tight">Leads dos clientes</h1>
-        <p className="text-sm text-grey">Tudo o que entra, de todos os clientes, num sítio só.</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl font-extrabold tracking-tight">Leads dos clientes</h1>
+          <p className="text-sm text-grey">Tudo o que entra, de todos os clientes, num sítio só.</p>
+        </div>
+        {staff && (
+          <Link
+            href="/leads/novo"
+            className="rounded-full bg-ink px-4 py-2 text-sm font-bold text-cream hover:brightness-110"
+          >
+            + Novo cliente
+          </Link>
+        )}
       </div>
 
       {/* KPIs globais */}
