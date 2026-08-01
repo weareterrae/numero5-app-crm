@@ -9,6 +9,7 @@ const LINKS = [
   { href: "/", label: "Cockpit" },
   { href: "/clientes", label: "Clientes" },
   { href: "/clientes/funil", label: "Funil" },
+  { href: "/leads", label: "Leads" },
   { href: "/metricas", label: "Métricas" },
   { href: "/avencas", label: "Avenças" },
   { href: "/faturacao", label: "Faturação" },
