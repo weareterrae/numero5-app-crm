@@ -49,6 +49,14 @@ export default async function QuadroOrg({ params }: { params: Promise<{ org: str
           </Link>
           <h1 className="font-display text-2xl font-extrabold tracking-tight">{org.nome}</h1>
         </div>
+        {token && (
+          <Link
+            href={`/leads/${slug}/definicoes`}
+            className="rounded-full border border-line px-3.5 py-1.5 text-sm font-bold text-grey hover:bg-cream hover:text-ink"
+          >
+            Definições
+          </Link>
+        )}
       </div>
 
       {/* Métricas do cliente */}
