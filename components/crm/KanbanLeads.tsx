@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { moverLead, registarContacto } from "@/app/(app)/leads/[org]/acoes";
 import { haQuantoTempo, nomeLead, urgencia, type Etapa, type Lead } from "@/lib/dominio/crm";
@@ -102,7 +103,12 @@ export function KanbanLeads({
                       u ? cor[u] : "border-line"
                     } ${aArrastar === l.id ? "opacity-40" : ""} md:cursor-grab md:active:cursor-grabbing`}
                   >
-                    <p className="truncate text-sm font-bold">{nomeLead(l)}</p>
+                    <Link
+                      href={`/leads/${org}/${l.id}`}
+                      className="block truncate text-sm font-bold hover:underline"
+                    >
+                      {nomeLead(l)}
+                    </Link>
                     {l.telefone && (
                       <p className="truncate font-mono text-[11px] text-grey">{l.telefone}</p>
                     )}
