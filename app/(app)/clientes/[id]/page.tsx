@@ -68,7 +68,7 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
       .order("versao", { ascending: false }),
     supabase
       .from("planos")
-      .select("id, mes, titulo, estado")
+      .select("id, mes, titulo, estado, arquivado")
       .eq("cliente_id", id)
       .order("mes", { ascending: false }),
     // Tolerante: se a migração 0016 ainda não correu, vem vazio em vez de partir.
@@ -98,7 +98,10 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
     mes: string;
     titulo: string | null;
     estado: string;
+    arquivado: boolean;
   }[];
+  const planosVisiveis = planos.filter((p) => !p.arquivado);
+  const planosArquivados = planos.filter((p) => p.arquivado);
   const relatorios = (relatoriosRes.data ?? []) as {
     id: string;
     mes: string;
@@ -380,12 +383,12 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
             </button>
           </form>
         </div>
-        {planos.length === 0 ? (
+        {planosVisiveis.length === 0 && planosArquivados.length === 0 ? (
           <p className="text-sm text-soft">
             Ainda sem planos. Cria um, cola o HTML feito no Claude Code e partilha com o cliente.
           </p>
         ) : (
-          planos.map((pl) => (
+          planosVisiveis.map((pl) => (
             <Link
               key={pl.id}
               href={`/clientes/${cliente.id}/planos/${pl.id}`}
@@ -410,6 +413,27 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
               </span>
             </Link>
           ))
+        )}
+        {planosArquivados.length > 0 && (
+          <details className="mt-3 border-t border-line/60 pt-3">
+            <summary className="cursor-pointer text-xs font-bold text-grey">
+              Anexos arquivados ({planosArquivados.length})
+            </summary>
+            <div className="mt-2">
+              {planosArquivados.map((pl) => (
+                <Link
+                  key={pl.id}
+                  href={`/clientes/${cliente.id}/planos/${pl.id}`}
+                  className="flex items-center justify-between gap-3 border-b border-line/40 py-2 opacity-70 last:border-0 hover:text-gold-dark hover:opacity-100"
+                >
+                  <div>
+                    {pl.titulo && <p className="text-xs font-bold">{pl.titulo}</p>}
+                    <p className="text-[11px] text-grey">{mesLegivel(pl.mes)} · arquivado</p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </details>
         )}
       </section>
 

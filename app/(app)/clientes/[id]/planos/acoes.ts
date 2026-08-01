@@ -63,6 +63,18 @@ export async function alternarPartilhaPlano(formData: FormData) {
   revalidatePath(`/clientes/${clienteId}/planos/${id}`);
 }
 
+/** Arquiva/desarquiva o plano: esconde-o da lista do cliente sem apagar. O link público continua a funcionar. */
+export async function alternarArquivoPlano(formData: FormData) {
+  const id = t(formData.get("id"));
+  const clienteId = t(formData.get("cliente_id"));
+  const arquivar = formData.get("arquivar") === "1";
+  if (!id) return;
+  const supabase = await criarClienteServidor();
+  await supabase.from("planos").update({ arquivado: arquivar }).eq("id", id);
+  revalidatePath(`/clientes/${clienteId}`);
+  revalidatePath(`/clientes/${clienteId}/planos/${id}`);
+}
+
 export async function apagarPlano(formData: FormData) {
   const id = t(formData.get("id"));
   const clienteId = t(formData.get("cliente_id"));

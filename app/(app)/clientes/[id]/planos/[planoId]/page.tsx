@@ -5,6 +5,7 @@ import { mesISO, mesLegivel } from "@/lib/dominio/producao";
 import { dataCurta } from "@/lib/dominio/metricas";
 import { EnviarLink } from "@/components/crm/EnviarLink";
 import {
+  alternarArquivoPlano,
   alternarPartilhaPlano,
   apagarPlano,
   guardarPlano,
@@ -57,14 +58,29 @@ export default async function PlanoPage({
           </h1>
           <p className="text-sm text-grey">{ESTADO_LABEL[plano.estado] ?? plano.estado}</p>
         </div>
-        <form action={apagarPlano}>
-          <input type="hidden" name="id" value={plano.id} />
-          <input type="hidden" name="cliente_id" value={id} />
-          <button className="rounded-full border border-bad px-4 py-2 text-sm font-bold text-bad">
-            Apagar
-          </button>
-        </form>
+        <div className="flex items-center gap-2">
+          <form action={alternarArquivoPlano}>
+            <input type="hidden" name="id" value={plano.id} />
+            <input type="hidden" name="cliente_id" value={id} />
+            <input type="hidden" name="arquivar" value={plano.arquivado ? "0" : "1"} />
+            <button className="rounded-full border border-line px-4 py-2 text-sm font-bold text-grey">
+              {plano.arquivado ? "Desarquivar" : "Arquivar"}
+            </button>
+          </form>
+          <form action={apagarPlano}>
+            <input type="hidden" name="id" value={plano.id} />
+            <input type="hidden" name="cliente_id" value={id} />
+            <button className="rounded-full border border-bad px-4 py-2 text-sm font-bold text-bad">
+              Apagar
+            </button>
+          </form>
+        </div>
       </div>
+      {plano.arquivado && (
+        <p className="rounded-lg bg-line/40 px-3 py-2 text-xs font-bold text-grey">
+          Arquivado — escondido da lista do cliente. O link público continua a funcionar.
+        </p>
+      )}
 
       {/* Resposta do cliente */}
       {(plano.estado === "aprovado" || plano.estado === "recusado" || plano.estado === "alteracoes") && (
