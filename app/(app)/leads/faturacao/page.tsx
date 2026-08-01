@@ -28,7 +28,8 @@ export default async function Faturacao() {
 
   const [{ data: orgs }, { data: assinaturas }] = await Promise.all([
     supabase.from("orgs").select("id, nome, slug").eq("ativo", true).order("nome"),
-    supabase.from("org_assinaturas").select("*"),
+    // tolerante: se a migração 0050 (org_assinaturas) ainda não correu, não parte
+    supabase.from("org_assinaturas").select("*").then((r) => r, () => ({ data: [] })),
   ]);
 
   const lista = (orgs ?? []) as { id: string; nome: string; slug: string }[];

@@ -1,6 +1,16 @@
 import Link from "next/link";
 import { criarClienteServidor } from "@/lib/supabase/server";
-import { haQuantoTempo, nomeLead, urgencia, type Org } from "@/lib/dominio/crm";
+import { haQuantoTempo, nomeLead, urgencia } from "@/lib/dominio/crm";
+
+// Local (não depende do tipo Org de crm.ts, que está a ser editado noutro sítio):
+// inclui `grupo` para agrupar quadros do mesmo cliente.
+type OrgLinha = {
+  id: string;
+  nome: string;
+  slug: string;
+  ativo: boolean;
+  grupo: string | null;
+};
 
 type LinhaLead = {
   id: string;
@@ -25,7 +35,7 @@ export default async function Leads() {
   const supabase = await criarClienteServidor();
 
   const [{ data: orgs }, { data: leads }] = await Promise.all([
-    supabase.from("orgs").select("id, nome, slug, ativo").eq("ativo", true).order("nome"),
+    supabase.from("orgs").select("*").eq("ativo", true).order("nome"), // select("*") tolera a coluna `grupo` (migração 0049) ainda não existir
     supabase
       .from("crm_leads")
       .select("id, org_id, nome, telefone, email, fonte_detalhe, primeira_resposta_at, resultado, arquivado, created_at")
@@ -40,10 +50,19 @@ export default async function Leads() {
     : { data: null };
   const staff = !perfil?.externo;
 
-  const lista = (orgs ?? []) as Org[];
+  const lista = (orgs ?? []) as OrgLinha[];
   const todas = (leads ?? []) as LinhaLead[];
   const nomeOrg = new Map(lista.map((o) => [o.id, o.nome] as const));
   const slugOrg = new Map(lista.map((o) => [o.id, o.slug] as const));
+
+  // Agrupar quadros por cliente: `grupo` quando existe, senão o nome da org.
+  const grupos = new Map<string, OrgLinha[]>();
+  for (const o of lista) {
+    const chave = o.grupo?.trim() || o.nome;
+    const arr = grupos.get(chave) ?? [];
+    arr.push(o);
+    grupos.set(chave, arr);
+  }
 
   const porResponder = todas
     .filter((l) => !l.primeira_resposta_at && l.resultado === "aberto")
@@ -78,7 +97,7 @@ export default async function Leads() {
 
       {/* KPIs globais */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Kpi rotulo="Clientes" valor={lista.length} />
+        <Kpi rotulo="Clientes" valor={grupos.size} />
         <Kpi rotulo="Leads (abertas)" valor={todas.filter((l) => l.resultado === "aberto").length} />
         <Kpi rotulo="Por responder" valor={porResponder.length} destaque={porResponder.length > 0} />
         <Kpi rotulo="Ganhas" valor={ganhos} />
@@ -126,30 +145,83 @@ export default async function Leads() {
         </section>
       )}
 
-      {/* Um cartão por cliente */}
-      {lista.length === 0 ? (
+      {/* Um cartão por cliente (agrupa vários quadros do mesmo cliente) */}
+      {grupos.size === 0 ? (
         <p className="rounded-xl border border-line bg-white/60 p-6 text-sm text-soft">
           Ainda não há clientes com CRM ativo.
         </p>
       ) : (
         <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {lista.map((o) => {
-            const c = contagem(o.id);
+          {[...grupos.entries()].map(([cliente, quadros]) => {
+            const agg = quadros.reduce(
+              (a, q) => {
+                const c = contagem(q.id);
+                return {
+                  total: a.total + c.total,
+                  ganhos: a.ganhos + c.ganhos,
+                  porResponder: a.porResponder + c.porResponder,
+                };
+              },
+              { total: 0, ganhos: 0, porResponder: 0 },
+            );
+            const resumo = (
+              <>
+                <span className="numero">{agg.total}</span> leads
+                {agg.ganhos > 0 && <span className="text-good"> · {agg.ganhos} ganhas</span>}
+                {agg.porResponder > 0 && (
+                  <span className="font-bold text-bad"> · {agg.porResponder} por responder</span>
+                )}
+              </>
+            );
+
+            // Cliente com um único quadro (sem grupo definido) → cartão clicável, como antes.
+            if (quadros.length === 1) {
+              const o = quadros[0];
+              return (
+                <li key={cliente}>
+                  <Link
+                    href={`/leads/${o.slug}`}
+                    className="block rounded-xl border border-line bg-white p-4 transition hover:border-gold hover:bg-gold/5"
+                  >
+                    <p className="font-bold">{o.nome}</p>
+                    <p className="mt-1 text-sm text-grey">{resumo}</p>
+                  </Link>
+                </li>
+              );
+            }
+
+            // Cliente com vários quadros → cabeçalho do cliente + um link por quadro.
             return (
-              <li key={o.id}>
-                <Link
-                  href={`/leads/${o.slug}`}
-                  className="block rounded-xl border border-line bg-white p-4 transition hover:border-gold hover:bg-gold/5"
-                >
-                  <p className="font-bold">{o.nome}</p>
-                  <p className="mt-1 text-sm text-grey">
-                    <span className="numero">{c.total}</span> leads
-                    {c.ganhos > 0 && <span className="text-good"> · {c.ganhos} ganhas</span>}
-                    {c.porResponder > 0 && (
-                      <span className="font-bold text-bad"> · {c.porResponder} por responder</span>
-                    )}
-                  </p>
-                </Link>
+              <li key={cliente}>
+                <div className="rounded-xl border border-line bg-white p-4">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="font-bold">{cliente}</p>
+                    <span className="shrink-0 text-[11px] font-bold uppercase tracking-wide text-soft">
+                      {quadros.length} quadros
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-xs text-grey">{resumo}</p>
+                  <div className="mt-3 space-y-1.5">
+                    {quadros.map((q) => {
+                      const c = contagem(q.id);
+                      return (
+                        <Link
+                          key={q.id}
+                          href={`/leads/${q.slug}`}
+                          className="flex items-center justify-between gap-2 rounded-lg border border-line/70 px-3 py-2 text-sm transition hover:border-gold hover:bg-gold/5"
+                        >
+                          <span className="min-w-0 truncate font-bold">{q.nome}</span>
+                          <span className="shrink-0 text-xs text-grey">
+                            <span className="numero">{c.total}</span>
+                            {c.porResponder > 0 && (
+                              <span className="font-bold text-bad"> · {c.porResponder} por responder</span>
+                            )}
+                          </span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
               </li>
             );
           })}
