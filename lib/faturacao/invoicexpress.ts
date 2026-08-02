@@ -282,7 +282,7 @@ export type DocIXLista = {
   permalink: string | null;
 };
 
-const TIPOS_DOC = ["Invoice", "SimplifiedInvoice", "InvoiceReceipt", "CreditNote"];
+const TIPOS_DOC = ["Invoice", "SimplifiedInvoice", "InvoiceReceipt", "CreditNote", "Receipt"];
 
 /**
  * Lista documentos do InvoiceXpress. `estados`: sent = emitida por regularizar,
@@ -346,4 +346,47 @@ export function diasAtraso(vencimento: string | null, hoje = new Date()): number
   const v = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
   const diff = Math.floor((hoje.getTime() - v.getTime()) / 86_400_000);
   return Math.max(0, diff);
+}
+
+// ── Extrato de cliente (partilhado: ficha do operador + Sede) ────────────────
+
+export type ClasseDoc = "fatura_pendente" | "fatura_paga" | "recibo" | "nc";
+
+/** Classifica um documento para exibição — pelo TIPO primeiro, depois estado. */
+export function classificarDoc(d: DocIXLista): ClasseDoc {
+  if (d.tipo === "CreditNote") return "nc";
+  if (d.tipo === "Receipt") return "recibo";
+  if (d.tipo === "InvoiceReceipt") return "fatura_paga"; // fatura-recibo: paga na emissão
+  return d.estado === "settled" ? "fatura_paga" : "fatura_pendente";
+}
+
+export type ExtratoClienteIX = {
+  ok: boolean;
+  erro?: string;
+  docs: DocIXLista[];
+  pendente: number; // faturas por regularizar (€)
+  pago: number; // faturas pagas (€)
+  nc: number; // notas de crédito (€)
+};
+
+/**
+ * Extrato de conta corrente de um cliente no InvoiceXpress, cruzado pelo nome
+ * (fiscal ou de marca): ex.: «Quente e Bom» apanha «Doce, Quente e Bom Angola».
+ */
+export async function extratoClienteIX(nome: string, maxPaginas = 3): Promise<ExtratoClienteIX> {
+  const chave = nome.trim().toLowerCase();
+  if (!chave || !invoicexpressConfigurado()) return { ok: true, docs: [], pendente: 0, pago: 0, nc: 0 };
+  const r = await listarDocumentosIX({ estados: ["sent", "settled"], texto: nome, maxPaginas });
+  if (!r.ok) return { ok: false, erro: r.erro, docs: [], pendente: 0, pago: 0, nc: 0 };
+  const docs = r.docs.filter((d) => d.cliente.toLowerCase().includes(chave));
+  let pendente = 0,
+    pago = 0,
+    nc = 0;
+  for (const d of docs) {
+    const c = classificarDoc(d);
+    if (c === "fatura_pendente") pendente += d.total;
+    else if (c === "fatura_paga") pago += d.total;
+    else if (c === "nc") nc += d.total;
+  }
+  return { ok: true, docs, pendente, pago, nc };
 }

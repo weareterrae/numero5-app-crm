@@ -2,6 +2,7 @@ import { contextoSede } from "@/lib/sede/contexto";
 import { criarClienteServico } from "@/lib/supabase/server";
 import { mesLegivel } from "@/lib/dominio/producao";
 import { euros } from "@/lib/dominio/metricas";
+import { extratoClienteIX, classificarDoc, diasAtraso } from "@/lib/faturacao/invoicexpress";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,15 @@ export default async function SedePagamentos() {
     estado: string;
     cobrado_em: string | null;
   }[];
+
+  // Extrato completo no InvoiceXpress (faturas, recibos, NC) — pelo nome fiscal.
+  const { data: fichaFiscal } = await svc
+    .from("clientes")
+    .select("nome_marca, empresa_fiscal")
+    .eq("id", ctx.clienteId)
+    .maybeSingle();
+  const nomeIX = (fichaFiscal?.empresa_fiscal || fichaFiscal?.nome_marca || "").trim();
+  const ext = await extratoClienteIX(nomeIX);
 
   // Documentos fiscais (0060) — consulta à parte e tolerante.
   const docsDe = new Map<string, { numero: string | null; faturaPdf: string | null; reciboPdf: string | null }>();
@@ -117,6 +127,62 @@ export default async function SedePagamentos() {
           </ul>
         </>
       )}
+
+      {/* Todos os documentos de faturação (InvoiceXpress) */}
+      {ext.docs.length > 0 ? (
+        <section className="mt-8">
+          <div className="rotulo">os teus documentos</div>
+          <h2 className="mt-1 font-display text-xl font-extrabold">Faturas e recibos</h2>
+          <p className="mt-0.5 text-xs text-grey">
+            Todos os documentos emitidos — abre cada um para veres e descarregares o PDF.
+          </p>
+
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className={`rounded-xl border-2 p-4 ${ext.pendente > 0 ? "border-warn/40 bg-warn/5" : "border-good/40 bg-good/5"}`}>
+              <p className={`numero text-2xl ${ext.pendente > 0 ? "text-warn" : "text-good"}`}>{euros(ext.pendente)}</p>
+              <p className="text-[11px] font-bold text-grey">por regularizar</p>
+            </div>
+            <div className="rounded-xl border border-line bg-white p-4">
+              <p className="numero text-2xl text-good">{euros(ext.pago)}</p>
+              <p className="text-[11px] font-bold text-grey">pago — obrigado! 🖐️</p>
+            </div>
+          </div>
+
+          <ul className="mt-4 space-y-2">
+            {ext.docs.map((d) => {
+              const classe = classificarDoc(d);
+              const atraso = classe === "fatura_pendente" ? diasAtraso(d.vencimento) : 0;
+              const pill =
+                classe === "nc"
+                  ? ["bg-warn/15 text-warn", "nota de crédito"]
+                  : classe === "recibo"
+                    ? ["bg-good/15 text-good", "recibo ✓"]
+                    : classe === "fatura_paga"
+                      ? ["bg-good/15 text-good", "paga ✓"]
+                      : ["bg-warn/15 text-warn", atraso > 0 ? `vencida há ${atraso} d` : "por regularizar"];
+              return (
+                <li key={`${d.tipo}-${d.id}`} className="flex items-center gap-3 rounded-xl border border-line bg-white px-5 py-3">
+                  <span className="text-lg">{classe === "recibo" ? "🧾" : classe === "nc" ? "↩️" : "📄"}</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold">
+                      {classe === "nc" ? "NC " : classe === "recibo" ? "Recibo " : "Fatura "}
+                      {d.numero ?? d.id}
+                    </p>
+                    <p className="text-[11px] text-soft">{d.data ?? ""}</p>
+                  </div>
+                  <span className="numero text-sm">{classe === "nc" ? "−" : ""}{euros(d.total)}</span>
+                  <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${pill[0]}`}>{pill[1]}</span>
+                  {d.permalink ? (
+                    <a href={d.permalink} target="_blank" rel="noopener" className="text-sm font-bold text-gold-dark hover:underline">
+                      abrir ↗
+                    </a>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
     </div>
   );
 }

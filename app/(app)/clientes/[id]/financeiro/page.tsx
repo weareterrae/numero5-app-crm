@@ -20,9 +20,9 @@ import { guardarFinanceiro, guardarArranque, guardarPausa, terminarPausa } from 
 import {
   invoicexpressConfigurado,
   invoicexpressBase,
-  listarDocumentosIX,
+  extratoClienteIX,
+  classificarDoc,
   diasAtraso,
-  type DocIXLista,
 } from "@/lib/faturacao/invoicexpress";
 
 export const dynamic = "force-dynamic";
@@ -97,19 +97,12 @@ export default async function FinanceiroPage({ params }: { params: Promise<{ id:
 
   // Extrato de conta corrente no InvoiceXpress (por nome fiscal/marca).
   const nomeIX = (cliente.empresa_fiscal || cliente.nome_marca || "").trim();
-  const chaveNome = nomeIX.toLowerCase();
-  let extratoIX: DocIXLista[] = [];
-  let extratoErro: string | null = null;
-  if (invoicexpressConfigurado() && chaveNome) {
-    const r = await listarDocumentosIX({ estados: ["sent", "settled"], texto: nomeIX, maxPaginas: 3 });
-    if (r.ok) {
-      extratoIX = r.docs.filter((d) => d.cliente.toLowerCase().includes(chaveNome));
-    } else extratoErro = r.erro;
-  }
-  const ehNC = (d: DocIXLista) => d.tipo === "CreditNote";
-  const extPago = extratoIX.filter((d) => !ehNC(d) && d.estado === "settled").reduce((s, d) => s + d.total, 0);
-  const extPendente = extratoIX.filter((d) => !ehNC(d) && d.estado !== "settled").reduce((s, d) => s + d.total, 0);
-  const extNC = extratoIX.filter(ehNC).reduce((s, d) => s + d.total, 0);
+  const ext = await extratoClienteIX(nomeIX);
+  const extratoIX = ext.docs;
+  const extratoErro = ext.ok ? null : (ext.erro ?? "?");
+  const extPendente = ext.pendente;
+  const extPago = ext.pago;
+  const extNC = ext.nc;
 
   const estado = (fin.estado ?? "regular") as EstadoFinanceiro;
   const cor = corEstadoFinanceiro(estado);
@@ -234,32 +227,29 @@ export default async function FinanceiroPage({ params }: { params: Promise<{ id:
                   </thead>
                   <tbody>
                     {extratoIX.map((d) => {
-                      const nc = ehNC(d);
-                      const pago = d.estado === "settled";
-                      const atraso = !nc && !pago ? diasAtraso(d.vencimento) : 0;
+                      const classe = classificarDoc(d);
+                      const atraso = classe === "fatura_pendente" ? diasAtraso(d.vencimento) : 0;
+                      const pill =
+                        classe === "nc"
+                          ? ["bg-warn/15 text-warn", "nota de crédito"]
+                          : classe === "recibo"
+                            ? ["bg-good/15 text-good", "recibo ✓"]
+                            : classe === "fatura_paga"
+                              ? ["bg-good/15 text-good", "paga ✓"]
+                              : ["bg-bad/10 text-bad", atraso > 0 ? `vencida há ${atraso} d` : "por regularizar"];
                       return (
-                        <tr key={d.id} className="border-b border-line/50">
+                        <tr key={`${d.tipo}-${d.id}`} className="border-b border-line/50">
                           <td className="py-2 pr-3 text-grey">{d.data ?? "—"}</td>
                           <td className="py-2 pr-3 font-bold">
-                            {nc ? "NC " : ""}
+                            {classe === "nc" ? "NC " : classe === "recibo" ? "RC " : ""}
                             {d.numero ?? d.id}
                           </td>
-                          <td className={`py-2 pr-3 text-right tabular-nums ${nc ? "text-warn" : ""}`}>
-                            {nc ? "−" : ""}
+                          <td className={`py-2 pr-3 text-right tabular-nums ${classe === "nc" ? "text-warn" : ""}`}>
+                            {classe === "nc" ? "−" : ""}
                             {euros(d.total)}
                           </td>
                           <td className="py-2 pr-3">
-                            <span
-                              className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
-                                nc
-                                  ? "bg-warn/15 text-warn"
-                                  : pago
-                                    ? "bg-good/15 text-good"
-                                    : "bg-bad/10 text-bad"
-                              }`}
-                            >
-                              {nc ? "nota de crédito" : pago ? "paga ✓" : atraso > 0 ? `vencida há ${atraso} d` : "por regularizar"}
-                            </span>
+                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${pill[0]}`}>{pill[1]}</span>
                           </td>
                           <td className="py-2 text-right">
                             {d.permalink ? (
