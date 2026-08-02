@@ -472,3 +472,29 @@ export async function copiarDadosFicha(formData: FormData) {
   });
   revalidatePath(`/clientes/${destinoId}`);
 }
+
+/** Liga a conta de anúncios Meta de uma org (marca) — para a Sede mostrar campanhas. */
+export async function ligarMetaAds(formData: FormData) {
+  const clienteId = texto(formData.get("cliente_id"));
+  const orgId = texto(formData.get("org_id"));
+  const conta = (formData.get("meta_ads_id") ?? "").toString().trim().replace(/^act_/, "");
+  if (!clienteId || !orgId) return;
+
+  const supabase = await criarClienteServidor();
+  const { data: org } = await supabase
+    .from("orgs")
+    .select("id, nome, cliente_id")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (!org || org.cliente_id !== clienteId) return; // só orgs desta ficha
+
+  await supabase.from("orgs").update({ meta_ads_id: conta || null }).eq("id", orgId);
+  await supabase.from("atividades").insert({
+    cliente_id: clienteId,
+    tipo: "nota",
+    descricao: conta
+      ? `📣 Conta de anúncios Meta ligada à Sede (${org.nome}): act_${conta}.`
+      : `📣 Conta de anúncios Meta desligada da Sede (${org.nome}).`,
+  });
+  revalidatePath(`/clientes/${clienteId}`);
+}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ManterSessao } from "@/components/auth/ManterSessao";
 import { contextoSede } from "@/lib/sede/contexto";
+import { criarClienteServidor } from "@/lib/supabase/server";
 import { trocarMarcaSede } from "./acoes";
 
 const LINKS = [
@@ -20,6 +21,22 @@ const LINKS = [
 export default async function SedeLayout({ children }: { children: React.ReactNode }) {
   const ctx = await contextoSede();
   const marca = ctx.marca;
+
+  // «Anúncios» só entra no menu quando a marca tem conta ligada (0061, tolerante).
+  let temAnuncios = false;
+  {
+    const supabase = await criarClienteServidor();
+    const { data } = await supabase
+      .from("orgs")
+      .select("meta_ads_id")
+      .eq("id", ctx.org.id)
+      .maybeSingle()
+      .then((r) => r, () => ({ data: null }));
+    temAnuncios = !!(data as { meta_ads_id?: string | null } | null)?.meta_ads_id;
+  }
+  const links = temAnuncios
+    ? [...LINKS.slice(0, 5), { href: "/sede/anuncios", label: "Anúncios" }, ...LINKS.slice(5)]
+    : LINKS;
 
   return (
     <div className="min-h-dvh">
@@ -98,7 +115,7 @@ export default async function SedeLayout({ children }: { children: React.ReactNo
           </Link>
           <nav className="flex-1 overflow-x-auto">
             <ul className="flex gap-1">
-              {LINKS.map((l) => (
+              {links.map((l) => (
                 <li key={l.href}>
                   <Link
                     href={l.href}

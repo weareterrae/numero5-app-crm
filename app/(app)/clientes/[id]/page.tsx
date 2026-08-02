@@ -29,6 +29,7 @@ import {
   criarAcessoSede,
   removerAcessoSede,
   copiarDadosFicha,
+  ligarMetaAds,
 } from "../acoes";
 import { criarDiagnostico } from "@/app/(app)/diagnosticos/acoes";
 import { criarProposta } from "@/app/(app)/propostas/acoes";
@@ -59,10 +60,21 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
   // recrutamento). maybeSingle() falhava com 2 linhas e escondia a ligação.
   const { data: orgsLigadasRaw } = await supabase
     .from("orgs")
-    .select("id, slug, nome")
+    .select("id, slug, nome, meta_ads_id")
     .eq("cliente_id", id)
-    .order("slug");
-  const orgsLigadas = (orgsLigadasRaw ?? []) as { id: string; slug: string; nome: string }[];
+    .order("slug")
+    .then(
+      (r) => r,
+      async () =>
+        // 0061 pode ainda não ter corrido — cair para a forma antiga.
+        await supabase.from("orgs").select("id, slug, nome").eq("cliente_id", id).order("slug"),
+    );
+  const orgsLigadas = (orgsLigadasRaw ?? []) as {
+    id: string;
+    slug: string;
+    nome: string;
+    meta_ads_id?: string | null;
+  }[];
 
   // Acessos ativos à Sede: membros externos das orgs ligadas a esta ficha.
   type Acesso = { org_id: string; profile_id: string; email: string; nome: string | null };
@@ -396,6 +408,38 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
                     Entra por link mágico — sem passwords. Um convite dá acesso a todas as marcas
                     desta ficha{orgsLigadas.length > 1 ? ` (${orgsLigadas.map((o) => o.nome).join(" + ")})` : ""}.
                     Repetir reenvia o convite.
+                  </p>
+                </div>
+
+                {/* Conta de anúncios Meta por marca → Sede mostra campanhas */}
+                <div className="mt-3 border-t border-line/60 pt-3">
+                  <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-grey">
+                    Anúncios na Sede (conta Meta)
+                  </p>
+                  <div className="flex flex-col gap-1.5">
+                    {orgsLigadas.map((o) => (
+                      <form key={o.id} action={ligarMetaAds} className="flex flex-wrap items-center gap-2">
+                        <input type="hidden" name="cliente_id" value={cliente.id} />
+                        <input type="hidden" name="org_id" value={o.id} />
+                        {orgsLigadas.length > 1 ? (
+                          <span className="w-40 truncate text-xs text-grey">{o.nome}</span>
+                        ) : null}
+                        <input
+                          name="meta_ads_id"
+                          defaultValue={o.meta_ads_id ?? ""}
+                          placeholder="ID da conta (ex.: 1947956182572668)"
+                          className="w-56 rounded-lg border border-line px-2.5 py-1.5 text-xs outline-none focus:border-gold"
+                        />
+                        <button className="rounded-full border border-line px-3 py-1 text-xs font-bold text-grey hover:bg-cream">
+                          {o.meta_ads_id ? "atualizar" : "ligar"}
+                        </button>
+                        {o.meta_ads_id ? <span className="text-[11px] font-bold text-good">📣 ligada</span> : null}
+                      </form>
+                    ))}
+                  </div>
+                  <p className="mt-1 text-[10px] text-soft">
+                    Com a conta ligada (e o META_ADS_TOKEN no Netlify), o cliente ganha o separador
+                    «Anúncios» na Sede: campanhas, alcance, cliques, contactos e investimento.
                   </p>
                 </div>
               </>
