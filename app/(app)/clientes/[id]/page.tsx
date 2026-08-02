@@ -51,6 +51,8 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
   if (!cliente) notFound();
 
   const supabase = await criarClienteServidor();
+  // Org da Sede ligada a este cliente (para «Ver como cliente»). Tolerante.
+  const { data: orgLigada } = await supabase.from("orgs").select("slug").eq("cliente_id", id).maybeSingle();
   const [atividades, contactos, intake, diagRes, propRes, planosRes, relatoriosRes, metricoolRes] =
     await Promise.all([
     listarAtividades(id),
@@ -252,6 +254,14 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
             >
               🎫 Pedidos
             </Link>
+            {orgLigada ? (
+              <a
+                href={`/sede/ver/${orgLigada.slug}`}
+                className="rounded-full bg-ink px-4 py-2 text-sm font-bold text-cream hover:brightness-110"
+              >
+                👀 Ver como cliente
+              </a>
+            ) : null}
           </div>
           <MudarEstado
             clienteId={cliente.id}

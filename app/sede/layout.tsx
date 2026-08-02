@@ -19,6 +19,18 @@ export default async function SedeLayout({ children }: { children: React.ReactNo
   return (
     <div className="min-h-dvh">
       <ManterSessao />
+      {ctx.isStaff ? (
+        <div className="bg-ink text-cream">
+          <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-1.5 text-xs">
+            <span>
+              🔎 Pré-visualização como cliente — <b>{marca.nome}</b>
+            </span>
+            <Link href="/clientes" className="ml-auto font-bold text-gold hover:underline">
+              ← Voltar ao Nº 5
+            </Link>
+          </div>
+        </div>
+      ) : null}
       <header className="sticky top-0 z-20 border-b border-line bg-white/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3">
           <Link href="/sede" className="flex shrink-0 items-center gap-2.5">
