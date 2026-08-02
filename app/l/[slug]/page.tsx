@@ -108,7 +108,7 @@ export default async function LinkNaBio({ params }: { params: Promise<{ slug: st
         <div className="flex flex-col items-center text-center">
           {marca.logo_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={marca.logo_url} alt={nome} className="h-20 w-20 rounded-2xl object-contain" />
+            <img src={marca.logo_url} alt={nome} className="h-20 w-auto max-w-[240px] object-contain" />
           ) : (
             <div
               className="flex h-20 w-20 items-center justify-center rounded-2xl font-display text-2xl font-extrabold text-white"
