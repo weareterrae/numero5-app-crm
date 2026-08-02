@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { criarClienteServidor, criarClienteServico } from "@/lib/supabase/server";
 import { contextoSede } from "@/lib/sede/contexto";
 import { obterIA } from "@/lib/ia/provider";
@@ -133,4 +135,44 @@ ${L.join("\n")}`;
     descricao: `🤖 O assistente gerou o resumo do mês na Sede.`,
   });
   revalidatePath("/sede");
+}
+
+/**
+ * Troca a marca ativa da Sede. Externo: só para marcas a que ADERIU
+ * (org_membros) — pedir outra é simplesmente ignorado. Staff: qualquer uma.
+ */
+export async function trocarMarcaSede(formData: FormData) {
+  const slug = (formData.get("slug") ?? "").toString().trim();
+  if (!slug) redirect("/sede");
+
+  const supabase = await criarClienteServidor();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login?proximo=/sede");
+
+  const { data: perfil } = await supabase
+    .from("profiles")
+    .select("externo")
+    .eq("id", user.id)
+    .maybeSingle();
+  const isStaff = perfil?.externo === false;
+
+  const { data: org } = await supabase.from("orgs").select("id, slug").eq("slug", slug).maybeSingle();
+  if (!org) redirect("/sede");
+
+  if (!isStaff) {
+    const { data: mem } = await supabase
+      .from("org_membros")
+      .select("org_id")
+      .eq("profile_id", user.id)
+      .eq("org_id", org.id)
+      .maybeSingle();
+    if (!mem) redirect("/sede"); // não é dele — ignora em silêncio
+  }
+
+  const jar = await cookies();
+  jar.set("sede_org", org.slug, { path: "/", httpOnly: true, sameSite: "lax" });
+  revalidatePath("/sede");
+  redirect("/sede");
 }

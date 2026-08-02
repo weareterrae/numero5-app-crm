@@ -17,6 +17,8 @@ export type ContextoSede = {
   org: { id: string; nome: string; slug: string };
   marca: { nome: string; cor?: string; logo?: string };
   clienteId: string | null; // ponte orgs.cliente_id (pode ser null se ainda não ligado)
+  /** Marcas a que esta sessão tem acesso (externo: as suas adesões; staff: todas). >1 → seletor no topo. */
+  marcas: { slug: string; nome: string }[];
 };
 
 export async function contextoSede(opts?: { orgSlug?: string }): Promise<ContextoSede> {
@@ -33,9 +35,11 @@ export async function contextoSede(opts?: { orgSlug?: string }): Promise<Context
     .maybeSingle();
   const isStaff = perfil?.externo === false;
 
-  // Cliente externo → a org vem SEMPRE da sua adesão (org_membros); o URL é ignorado.
+  // Cliente externo → a org vem SEMPRE das suas adesões (org_membros); com
+  //   várias marcas, o cookie `sede_org` escolhe QUAL — mas só se for uma delas.
   // Staff → pré-visualiza a org escolhida (cookie `sede_org`, definido em /sede/ver/[slug]).
   let orgId: string | null = null;
+  let marcas: { slug: string; nome: string }[] = [];
   if (isStaff) {
     const jar = await cookies();
     const slug = opts?.orgSlug || jar.get("sede_org")?.value;
@@ -45,14 +49,27 @@ export async function contextoSede(opts?: { orgSlug?: string }): Promise<Context
     }
     // staff sem cliente escolhido → escolher no operador
     if (!orgId) redirect("/leads");
+    const { data: todas } = await supabase.from("orgs").select("slug, nome").eq("ativo", true).order("nome");
+    marcas = todas ?? [];
   } else {
-    const { data: mem } = await supabase
+    const { data: mems } = await supabase
       .from("org_membros")
       .select("org_id")
-      .eq("profile_id", user.id)
-      .limit(1)
-      .maybeSingle();
-    orgId = mem?.org_id ?? null;
+      .eq("profile_id", user.id);
+    const orgIds = (mems ?? []).map((m) => m.org_id);
+    if (!orgIds.length) redirect("/login?proximo=/sede");
+    const { data: minhas } = await supabase
+      .from("orgs")
+      .select("id, slug, nome")
+      .in("id", orgIds)
+      .order("nome");
+    const lista = minhas ?? [];
+    marcas = lista.map((o) => ({ slug: o.slug, nome: o.nome }));
+    // O cookie só conta se apontar para uma marca DELE — senão, a primeira.
+    const jar = await cookies();
+    const slugCookie = jar.get("sede_org")?.value;
+    const escolhida = lista.find((o) => o.slug === slugCookie) ?? lista[0];
+    orgId = escolhida?.id ?? null;
     if (!orgId) redirect("/login?proximo=/sede");
   }
 
@@ -79,5 +96,6 @@ export async function contextoSede(opts?: { orgSlug?: string }): Promise<Context
     org: { id: org.id, nome: org.nome, slug: org.slug },
     marca: { nome: org.nome, cor: marca?.cor, logo: marca?.logo_url },
     clienteId,
+    marcas,
   };
 }

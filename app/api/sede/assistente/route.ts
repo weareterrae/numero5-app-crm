@@ -61,7 +61,23 @@ export async function POST(req: NextRequest) {
     const slug = jar.get("sede_org")?.value;
     if (slug) orgId = (await supabase.from("orgs").select("id").eq("slug", slug).maybeSingle()).data?.id ?? null;
   } else {
-    orgId = (await supabase.from("org_membros").select("org_id").eq("profile_id", user.id).limit(1).maybeSingle()).data?.org_id ?? null;
+    // Várias marcas: honra o cookie `sede_org` MAS só se for uma adesão dele.
+    const { data: mems } = await supabase.from("org_membros").select("org_id").eq("profile_id", user.id);
+    const orgIds = (mems ?? []).map((m) => m.org_id);
+    if (orgIds.length) {
+      const jar = await cookies();
+      const slugCookie = jar.get("sede_org")?.value;
+      if (slugCookie) {
+        const { data: escolhida } = await supabase
+          .from("orgs")
+          .select("id")
+          .eq("slug", slugCookie)
+          .in("id", orgIds)
+          .maybeSingle();
+        orgId = escolhida?.id ?? null;
+      }
+      if (!orgId) orgId = orgIds[0];
+    }
   }
   if (!orgId) return NextResponse.json({ resposta: "Ainda estamos a preparar o teu espaço. 🖐️" });
 

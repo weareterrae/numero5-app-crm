@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ManterSessao } from "@/components/auth/ManterSessao";
 import { contextoSede } from "@/lib/sede/contexto";
+import { trocarMarcaSede } from "./acoes";
 
 const LINKS = [
   { href: "/sede", label: "Início" },
@@ -25,13 +26,51 @@ export default async function SedeLayout({ children }: { children: React.ReactNo
       <ManterSessao />
       {ctx.isStaff ? (
         <div className="bg-ink text-cream">
-          <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-1.5 text-xs">
-            <span>
-              🔎 Pré-visualização como cliente — <b>{marca.nome}</b>
-            </span>
-            <Link href="/clientes" className="ml-auto font-bold text-gold hover:underline">
+          <div className="mx-auto flex max-w-6xl items-center gap-3 overflow-x-auto px-4 py-1.5 text-xs">
+            <span className="shrink-0">🔎 Pré-visualização —</span>
+            {ctx.marcas.map((m) => {
+              const ativa = m.slug === ctx.org.slug;
+              return (
+                <form key={m.slug} action={trocarMarcaSede} className="shrink-0">
+                  <input type="hidden" name="slug" value={m.slug} />
+                  <button
+                    type="submit"
+                    className={`whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
+                      ativa ? "bg-gold text-ink" : "text-cream/70 hover:text-cream"
+                    }`}
+                  >
+                    {m.nome}
+                  </button>
+                </form>
+              );
+            })}
+            <Link href="/clientes" className="ml-auto shrink-0 font-bold text-gold hover:underline">
               ← Voltar ao Nº 5
             </Link>
+          </div>
+        </div>
+      ) : null}
+      {/* Seletor de marcas — só quando a sessão tem acesso a mais do que uma */}
+      {!ctx.isStaff && ctx.marcas.length > 1 ? (
+        <div className="border-b border-line bg-cream/70">
+          <div className="mx-auto flex max-w-6xl items-center gap-2 overflow-x-auto px-4 py-1.5">
+            <span className="rotulo shrink-0 !text-[10px]">as tuas marcas</span>
+            {ctx.marcas.map((m) => {
+              const ativa = m.slug === ctx.org.slug;
+              return (
+                <form key={m.slug} action={trocarMarcaSede} className="shrink-0">
+                  <input type="hidden" name="slug" value={m.slug} />
+                  <button
+                    type="submit"
+                    className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-bold ${
+                      ativa ? "bg-ink text-cream" : "border border-line bg-white text-grey hover:text-ink"
+                    }`}
+                  >
+                    {m.nome}
+                  </button>
+                </form>
+              );
+            })}
           </div>
         </div>
       ) : null}
