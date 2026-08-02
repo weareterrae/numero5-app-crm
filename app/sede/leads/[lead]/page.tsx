@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { contextoSede } from "@/lib/sede/contexto";
-import { moverLeadSede, registarRespostaSede, adicionarNotaSede } from "./acoes";
+import { moverLeadSede, registarRespostaSede, adicionarNotaSede, registarVendaSede } from "./acoes";
 import {
   ATIVIDADE_ICON,
   haQuantoTempo,
@@ -48,6 +48,8 @@ export default async function SedeFichaLead({ params }: { params: Promise<{ lead
 
   const tel = lead.telefone?.replace(/[^\d+]/g, "") || "";
   const wa = lead.telefone?.replace(/[^\d]/g, "") || "";
+  const valorNegocio = (lead as { valor_negocio?: number | null }).valor_negocio ?? null;
+  const ganho = lead.resultado === "ganho";
 
   return (
     <div className="space-y-6">
@@ -92,6 +94,30 @@ export default async function SedeFichaLead({ params }: { params: Promise<{ lead
           </form>
         ) : null}
       </div>
+
+      {/* Venda / ROI */}
+      {ganho ? (
+        <div className="rounded-xl border-2 border-good/40 bg-good/5 px-4 py-3">
+          <p className="text-sm font-bold text-good">
+            ✓ Venda fechada
+            {valorNegocio != null ? ` · €${Number(valorNegocio).toLocaleString("pt-PT")}` : ""}
+          </p>
+          <p className="text-[12px] text-grey">Este negócio conta no teu ROI. 🖐️</p>
+        </div>
+      ) : (
+        <form action={registarVendaSede} className="flex flex-wrap items-end gap-3 rounded-xl border border-line bg-white px-4 py-3">
+          <input type="hidden" name="lead" value={lead.id} />
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-soft">
+              Fechaste com esta lead? Quanto valeu (€)
+            </span>
+            <input name="valor" inputMode="decimal" placeholder="ex.: 1200" className="w-44 rounded-lg border border-line bg-cream px-3 py-2 text-sm" />
+          </label>
+          <button type="submit" className="rounded-full bg-good px-5 py-2 text-sm font-bold text-cream hover:brightness-110">
+            ✓ Marcar como venda
+          </button>
+        </form>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
         <div className="space-y-4">

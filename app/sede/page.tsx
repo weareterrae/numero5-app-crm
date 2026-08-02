@@ -54,6 +54,24 @@ export default async function SedePainel() {
     porResponder = leads.filter((l) => !l.primeira_resposta_at && l.resultado === "aberto").length;
   }
 
+  // ROI (0054) — consulta à parte e tolerante: se a migração ainda não correu, fica a 0.
+  let roiMes = 0;
+  let roiTotal = 0;
+  {
+    const { data } = await supabase
+      .from("crm_leads")
+      .select("valor_negocio, ganho_em, resultado")
+      .eq("org_id", ctx.org.id)
+      .eq("resultado", "ganho");
+    for (const l of data ?? []) {
+      const v = Number((l as { valor_negocio?: number | null }).valor_negocio) || 0;
+      if (!v) continue;
+      roiTotal += v;
+      const g = (l as { ganho_em?: string | null }).ganho_em;
+      if (g && g >= desdeMes) roiMes += v;
+    }
+  }
+
   // Internos (clientes-keyed): SÓ via service-role, estritamente filtrado por clienteId da sessão.
   let aprovacoesPendentes = 0;
   let ultimoRelatorioMes: string | null = null;
@@ -104,6 +122,28 @@ export default async function SedePainel() {
           href="/sede/plano"
         />
         <Mosaico rotulo="Último relatório" valor={mesRelatorio} href="/sede/relatorio" />
+      </div>
+
+      <div className="mt-4 rounded-2xl bg-ink px-6 py-5 text-cream">
+        <div className="rotulo" style={{ color: "var(--color-gold)" }}>o marketing a render</div>
+        {roiTotal > 0 ? (
+          <>
+            <div className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+              <span className="font-display text-4xl font-extrabold text-gold">
+                €{roiMes.toLocaleString("pt-PT")}
+              </span>
+              <span className="text-sm text-cream/80">fechado este mês a partir das tuas leads</span>
+            </div>
+            {roiTotal > roiMes ? (
+              <p className="mt-1 text-[12px] text-cream/60">€{roiTotal.toLocaleString("pt-PT")} no total</p>
+            ) : null}
+          </>
+        ) : (
+          <p className="mt-1 text-sm text-cream/80">
+            Marca as tuas vendas nas leads (botão «Marcar como venda») e vê aqui, em euros, quanto o
+            marketing te rende. 🖐️
+          </p>
+        )}
       </div>
 
       {!ctx.clienteId ? (
