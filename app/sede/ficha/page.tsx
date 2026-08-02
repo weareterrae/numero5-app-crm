@@ -78,6 +78,24 @@ export default async function SedeFicha({
         </p>
       ) : null}
 
+      <div className="mt-4 rounded-xl border border-line bg-white px-4 py-3">
+        <div className="rotulo">a tua página de links</div>
+        <p className="mt-1 text-sm">
+          <a
+            href={`https://app.numerocinco.pt/l/${ctx.org.slug}`}
+            target="_blank"
+            rel="noopener"
+            className="font-bold text-gold-dark hover:underline"
+          >
+            app.numerocinco.pt/l/{ctx.org.slug} ↗
+          </a>
+        </p>
+        <p className="mt-0.5 text-[11px] text-soft">
+          Uma página só com os teus links — perfeita para a bio do Instagram. Atualiza-se sozinha com
+          o que puseres aqui em baixo.
+        </p>
+      </div>
+
       <form action={guardarFichaSede} className="mt-6 grid max-w-2xl gap-4">
         <div className="grid gap-4 sm:grid-cols-2">
           <Campo label="Setor" name="setor" valor={cliente?.setor ?? ""} ph="ex.: restauração, imobiliário…" />
