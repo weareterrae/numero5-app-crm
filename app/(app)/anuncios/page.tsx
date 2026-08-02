@@ -1,13 +1,13 @@
 import Link from "next/link";
 import { criarClienteServidor } from "@/lib/supabase/server";
-import { campanhasMeta, anunciosAtivosMeta, metaAdsConfigurado } from "@/lib/ads/meta";
+import { campanhasMeta, anunciosRicosMeta, metaAdsConfigurado } from "@/lib/ads/meta";
+import { CartaoAnuncio } from "@/components/ads/CartaoAnuncio";
 
 export const dynamic = "force-dynamic";
 
 const fmt = (n: number) => n.toLocaleString("pt-PT");
 const din = (v: number, m: string) =>
   `${v.toLocaleString("pt-PT", { maximumFractionDigits: 2 })} ${m === "EUR" ? "€" : m}`;
-const pct = (v: number | null) => (v == null ? "—" : `${(v * 100).toFixed(2)}%`);
 
 export default async function AnunciosOperador() {
   const supabase = await criarClienteServidor();
@@ -60,7 +60,7 @@ export default async function AnunciosOperador() {
     orgs.map(async (o) => ({
       org: o,
       camp: await campanhasMeta(o.meta_ads_id),
-      ads: await anunciosAtivosMeta(o.meta_ads_id),
+      ads: await anunciosRicosMeta(o.meta_ads_id),
     })),
   );
 
@@ -75,6 +75,8 @@ export default async function AnunciosOperador() {
     }
     if (d.ads.ok) totAtivos += d.ads.anuncios.length;
   }
+  // Marcas com anúncios ativos primeiro.
+  dados.sort((a, b) => (b.ads.ok ? b.ads.anuncios.length : 0) - (a.ads.ok ? a.ads.anuncios.length : 0));
 
   return (
     <div className="space-y-6">
@@ -139,41 +141,12 @@ export default async function AnunciosOperador() {
                 ) : null}
               </div>
 
-              {/* Anúncios ativos, ao detalhe */}
+              {/* Anúncios ativos, ao detalhe (criativo + público + resultados) */}
               {ads.ok && ads.anuncios.length > 0 ? (
-                <div className="mt-4 overflow-x-auto">
-                  <table className="w-full min-w-[38rem] border-collapse text-sm">
-                    <thead>
-                      <tr className="border-b border-line text-left text-xs text-grey">
-                        <th className="py-1.5 pr-3 font-bold">Anúncio</th>
-                        <th className="py-1.5 pr-3 font-bold">Campanha</th>
-                        <th className="py-1.5 pr-3 text-right font-bold">Impressões</th>
-                        <th className="py-1.5 pr-3 text-right font-bold">Cliques</th>
-                        <th className="py-1.5 pr-3 text-right font-bold">CTR</th>
-                        <th className="py-1.5 pr-3 text-right font-bold">Gasto</th>
-                        <th className="py-1.5 text-right font-bold">Contactos · CPL</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ads.anuncios.map((a) => (
-                        <tr key={a.id} className="border-b border-line/50">
-                          <td className="max-w-[14rem] truncate py-2 pr-3 font-bold">{a.nome}</td>
-                          <td className="max-w-[10rem] truncate py-2 pr-3 text-grey">{a.campanha}</td>
-                          <td className="py-2 pr-3 text-right tabular-nums">{fmt(a.impressoes)}</td>
-                          <td className="py-2 pr-3 text-right tabular-nums">{fmt(a.cliques)}</td>
-                          <td className="py-2 pr-3 text-right tabular-nums">{pct(a.ctr)}</td>
-                          <td className="py-2 pr-3 text-right tabular-nums">
-                            {din(a.investimento, camp.moeda)}
-                          </td>
-                          <td className="py-2 text-right tabular-nums">
-                            {a.leads > 0
-                              ? `${a.leads} · ${a.custo_por_lead ? din(a.custo_por_lead, camp.moeda) : "—"}`
-                              : "—"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="mt-4 space-y-3">
+                  {ads.anuncios.map((a) => (
+                    <CartaoAnuncio key={a.id} a={a} />
+                  ))}
                 </div>
               ) : ads.ok ? (
                 <p className="mt-3 text-sm text-soft">Sem anúncios ativos neste momento.</p>

@@ -383,3 +383,57 @@ export async function anunciosRicosMeta(
     return { ok: false, erro: String(e).slice(0, 120) };
   }
 }
+
+// ── Resumo de um MÊS (para o relatório mensal) ───────────────────────────────
+
+export type ResumoMesMeta = {
+  moeda: string;
+  investimento: number;
+  alcance: number;
+  impressoes: number;
+  cliques: number;
+  leads: number;
+  campanhas: { nome: string; investimento: number; alcance: number; cliques: number; leads: number; cpl: number | null }[];
+};
+
+/** Resultados de anúncios num intervalo (o mês do relatório). `since`/`until` = YYYY-MM-DD. */
+export async function resumoAnunciosMes(
+  accountId: string,
+  since: string,
+  until: string,
+): Promise<{ ok: true; resumo: ResumoMesMeta } | { ok: false; erro: string }> {
+  const token = process.env.META_ADS_TOKEN?.trim();
+  if (!token) return { ok: false, erro: "sem token" };
+  const acc = accountId.replace(/^act_/, "").trim();
+  if (!acc) return { ok: false, erro: "sem conta" };
+  try {
+    const base = `https://graph.facebook.com/${V}/act_${acc}`;
+    const tr = encodeURIComponent(JSON.stringify({ since, until }));
+    const [rConta, rIns] = await Promise.all([
+      fetch(`${base}?fields=currency&access_token=${encodeURIComponent(token)}`),
+      fetch(
+        `${base}/insights?level=campaign&time_range=${tr}&fields=campaign_name,reach,impressions,clicks,spend,actions&limit=100&access_token=${encodeURIComponent(token)}`,
+      ),
+    ]);
+    if (!rIns.ok) return { ok: false, erro: `Meta ${rIns.status}` };
+    const moeda = ((await rConta.json().catch(() => ({}))) as { currency?: string }).currency || "EUR";
+    const d = (await rIns.json()) as {
+      data?: { campaign_name?: string; reach?: string; impressions?: string; clicks?: string; spend?: string; actions?: { action_type: string; value: string }[] }[];
+    };
+    let investimento = 0, alcance = 0, impressoes = 0, cliques = 0, leads = 0;
+    const campanhas = (d.data ?? []).map((c) => {
+      const inv = Number(c.spend) || 0;
+      const l = (c.actions ?? []).filter((a) => ACOES_LEAD.has(a.action_type)).reduce((s, a) => s + (Number(a.value) || 0), 0);
+      investimento += inv;
+      alcance += Number(c.reach) || 0;
+      impressoes += Number(c.impressions) || 0;
+      cliques += Number(c.clicks) || 0;
+      leads += l;
+      return { nome: c.campaign_name ?? "Campanha", investimento: inv, alcance: Number(c.reach) || 0, cliques: Number(c.clicks) || 0, leads: l, cpl: l > 0 && inv > 0 ? inv / l : null };
+    });
+    campanhas.sort((a, b) => b.investimento - a.investimento);
+    return { ok: true, resumo: { moeda, investimento, alcance, impressoes, cliques, leads, campanhas } };
+  } catch (e) {
+    return { ok: false, erro: String(e).slice(0, 100) };
+  }
+}

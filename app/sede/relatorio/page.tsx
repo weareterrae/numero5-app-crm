@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { contextoSede } from "@/lib/sede/contexto";
-import { criarClienteServico } from "@/lib/supabase/server";
+import { criarClienteServico, criarClienteServidor } from "@/lib/supabase/server";
 import { mesLegivel } from "@/lib/dominio/producao";
+import { AnunciosDoMes } from "@/components/ads/AnunciosDoMes";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,19 @@ export default async function SedeRelatorio({
     await svc.from("relatorios").update({ visto_em: new Date().toISOString() }).eq("id", rel.id).eq("cliente_id", ctx.clienteId);
   }
 
+  // Conta de anúncios da marca (0061) — para anexar os resultados do mês.
+  let contaAds: string | null = null;
+  {
+    const supabase = await criarClienteServidor();
+    const { data } = await supabase
+      .from("orgs")
+      .select("meta_ads_id")
+      .eq("id", ctx.org.id)
+      .maybeSingle()
+      .then((r) => r, () => ({ data: null }));
+    contaAds = (data as { meta_ads_id?: string | null } | null)?.meta_ads_id ?? null;
+  }
+
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -98,6 +112,8 @@ export default async function SedeRelatorio({
       ) : (
         <p className="mt-6 text-center text-sm text-soft">O relatório está a ser preparado.</p>
       )}
+
+      {rel ? <AnunciosDoMes contaId={contaAds} mesISO={rel.mes} /> : null}
     </div>
   );
 }
