@@ -1,35 +1,20 @@
 import { contextoSede } from "@/lib/sede/contexto";
 import { criarClienteServidor } from "@/lib/supabase/server";
-import { campanhasMeta, metaAdsConfigurado } from "@/lib/ads/meta";
+import { campanhasMeta, anunciosRicosMeta, metaAdsConfigurado } from "@/lib/ads/meta";
 
 export const dynamic = "force-dynamic";
 
 const fmt = (n: number) => n.toLocaleString("pt-PT");
-const dinheiro = (v: number, moeda: string) =>
-  `${v.toLocaleString("pt-PT", { maximumFractionDigits: 2 })} ${moeda === "EUR" ? "€" : moeda}`;
+const din = (v: number, m: string) =>
+  `${v.toLocaleString("pt-PT", { maximumFractionDigits: 2 })} ${m === "EUR" ? "€" : m}`;
+const pct = (v: number | null) => (v == null ? "—" : `${(v * 100).toFixed(2)}%`);
 
-const ESTADO_ROTULO: Record<string, [string, string]> = {
-  ACTIVE: ["a correr", "bg-good/15 text-good"],
-  PAUSED: ["em pausa", "bg-cream text-grey"],
-  CAMPAIGN_PAUSED: ["em pausa", "bg-cream text-grey"],
-  IN_PROCESS: ["a preparar", "bg-warn/15 text-warn"],
-  WITH_ISSUES: ["a precisar de atenção", "bg-warn/15 text-warn"],
-};
-
-const OBJETIVO_ROTULO: Record<string, string> = {
-  OUTCOME_LEADS: "gerar contactos",
-  OUTCOME_TRAFFIC: "levar ao site",
-  OUTCOME_AWARENESS: "dar a conhecer",
-  OUTCOME_ENGAGEMENT: "criar conversa",
-  OUTCOME_SALES: "vender",
-  OUTCOME_APP_PROMOTION: "promover app",
-};
+const FORMATO: Record<string, string> = { imagem: "🖼️ imagem", "vídeo": "🎬 vídeo", carrossel: "🔄 carrossel", "anúncio": "📢 anúncio" };
 
 export default async function SedeAnuncios() {
   const ctx = await contextoSede();
   const supabase = await criarClienteServidor();
 
-  // ID da conta desta marca (0061) — leitura tolerante.
   let contaId: string | null = null;
   {
     const { data } = await supabase
@@ -41,84 +26,46 @@ export default async function SedeAnuncios() {
     contaId = (data as { meta_ads_id?: string | null } | null)?.meta_ads_id ?? null;
   }
 
-  const vazio = (
+  const Vazio = () => (
     <div>
       <div className="rotulo">os teus anúncios</div>
       <h1 className="mt-1 font-display text-2xl font-extrabold">Anúncios</h1>
       <p className="mt-4 rounded-xl border border-line bg-cream px-4 py-3 text-sm text-grey">
         Ainda não há campanhas de anúncios ligadas à tua marca. Quando houver, vês aqui cada
-        campanha e o que ela está a render — alcance, cliques, contactos e investimento. 🖐️
+        anúncio, quem está a alcançar e o que está a render. 🖐️
       </p>
     </div>
   );
 
-  if (!contaId || !metaAdsConfigurado()) return vazio;
+  if (!contaId || !metaAdsConfigurado()) return <Vazio />;
 
-  const r = await campanhasMeta(contaId);
-  if (!r.ok) {
+  const [camp, ricos] = await Promise.all([campanhasMeta(contaId), anunciosRicosMeta(contaId)]);
+
+  if (!camp.ok && (!ricos.ok || ricos.anuncios.length === 0)) {
     return (
       <div>
         <div className="rotulo">os teus anúncios</div>
         <h1 className="mt-1 font-display text-2xl font-extrabold">Anúncios</h1>
         <p className="mt-4 rounded-xl border border-line bg-cream px-4 py-3 text-sm text-grey">
-          Não conseguimos ler as campanhas neste momento — tenta daqui a pouco. Se persistir, a
-          equipa já foi avisada. 🖐️
+          Não conseguimos ler as campanhas neste momento — tenta daqui a pouco. 🖐️
         </p>
       </div>
     );
   }
 
-  const ativas = r.campanhas.filter((c) => c.estado === "ACTIVE");
-  const outras = r.campanhas.filter((c) => c.estado !== "ACTIVE" && (c.investimento > 0 || c.impressoes > 0));
-  const totInvest = r.campanhas.reduce((s, c) => s + c.investimento, 0);
-  const totLeads = r.campanhas.reduce((s, c) => s + c.leads, 0);
-  const totAlcance = r.campanhas.reduce((s, c) => s + c.alcance, 0);
-
-  if (r.campanhas.length === 0) return vazio;
-
-  const Cartao = ({ c }: { c: (typeof r.campanhas)[number] }) => {
-    const [rot, cls] = ESTADO_ROTULO[c.estado] ?? [c.estado.toLowerCase(), "bg-cream text-grey"];
-    return (
-      <div className="rounded-xl border border-line bg-white p-5">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="font-bold">{c.nome}</p>
-            <p className="text-xs text-grey">
-              {OBJETIVO_ROTULO[c.objetivo ?? ""] ?? "campanha"} · últimos 30 dias
-            </p>
-          </div>
-          <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-bold ${cls}`}>{rot}</span>
-        </div>
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div>
-            <p className="numero text-xl">{fmt(c.alcance)}</p>
-            <p className="text-[11px] text-grey">pessoas alcançadas</p>
-          </div>
-          <div>
-            <p className="numero text-xl">{fmt(c.cliques)}</p>
-            <p className="text-[11px] text-grey">cliques</p>
-          </div>
-          <div>
-            <p className="numero text-xl">{c.leads > 0 ? fmt(c.leads) : "—"}</p>
-            <p className="text-[11px] text-grey">contactos</p>
-          </div>
-          <div>
-            <p className="numero text-xl">{dinheiro(c.investimento, c.moeda)}</p>
-            <p className="text-[11px] text-grey">
-              investimento{c.custo_por_lead ? ` · ${dinheiro(c.custo_por_lead, c.moeda)}/contacto` : ""}
-            </p>
-          </div>
-        </div>
-      </div>
-    );
-  };
+  const totInvest = camp.ok ? camp.campanhas.reduce((s, c) => s + c.investimento, 0) : 0;
+  const totLeads = camp.ok ? camp.campanhas.reduce((s, c) => s + c.leads, 0) : 0;
+  const totAlcance = camp.ok ? camp.campanhas.reduce((s, c) => s + c.alcance, 0) : 0;
+  const moeda = camp.ok ? camp.moeda : ricos.ok ? ricos.moeda : "EUR";
+  const anuncios = ricos.ok ? ricos.anuncios : [];
 
   return (
     <div className="max-w-3xl">
       <div className="rotulo">os teus anúncios</div>
-      <h1 className="mt-1 font-display text-2xl font-extrabold">O que os anúncios estão a render</h1>
+      <h1 className="mt-1 font-display text-2xl font-extrabold">O que os anúncios estão a fazer por ti</h1>
       <p className="mt-1 text-sm text-grey">
-        Números reais das tuas campanhas, dos últimos 30 dias. A verba é tua e está sempre à vista. 🖐️
+        Cada anúncio a correr, quem está a alcançar e o que está a render — números reais dos
+        últimos 30 dias. A verba é tua e está sempre à vista. 🖐️
       </p>
 
       <div className="mt-5 grid grid-cols-3 gap-3">
@@ -131,28 +78,84 @@ export default async function SedeAnuncios() {
           <p className="text-[11px] text-cream/70">contactos gerados</p>
         </div>
         <div className="rounded-xl bg-ink p-4 text-cream">
-          <p className="numero text-2xl" style={{ color: "var(--color-gold)" }}>{dinheiro(totInvest, r.moeda)}</p>
+          <p className="numero text-2xl" style={{ color: "var(--color-gold)" }}>{din(totInvest, moeda)}</p>
           <p className="text-[11px] text-cream/70">investimento (30 d)</p>
         </div>
       </div>
 
-      {ativas.length > 0 ? (
-        <section className="mt-6">
-          <div className="rotulo mb-2">a correr agora ({ativas.length})</div>
-          <div className="space-y-3">{ativas.map((c) => <Cartao key={c.id} c={c} />)}</div>
+      {anuncios.length > 0 ? (
+        <section className="mt-7">
+          <div className="rotulo mb-3">os anúncios a correr ({anuncios.length})</div>
+          <div className="space-y-4">
+            {anuncios.map((a) => (
+              <article key={a.id} className="overflow-hidden rounded-2xl border border-line bg-white">
+                <div className="grid sm:grid-cols-[210px_1fr]">
+                  {a.imagem ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={a.imagem}
+                      alt={a.titulo ?? "anúncio"}
+                      className="h-52 w-full object-cover sm:h-full"
+                    />
+                  ) : (
+                    <div className="grid h-52 place-items-center bg-cream text-3xl sm:h-full">📢</div>
+                  )}
+                  <div className="p-5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="rotulo !text-[10px]">{a.campanha}</p>
+                      <span className="rounded-full bg-cream px-2.5 py-0.5 text-[10px] font-bold text-grey">
+                        {FORMATO[a.formato] ?? a.formato}
+                      </span>
+                    </div>
+                    {a.titulo ? <h3 className="mt-1 font-display text-lg font-extrabold leading-snug">{a.titulo}</h3> : null}
+                    {a.corpo ? <p className="mt-1 line-clamp-3 text-sm text-grey">{a.corpo}</p> : null}
+                    {a.cta ? (
+                      <span className="mt-2 inline-block rounded-full border border-gold/50 bg-gold/10 px-3 py-0.5 text-[11px] font-bold text-gold-dark">
+                        {a.cta}
+                      </span>
+                    ) : null}
+
+                    <div className="mt-3 rounded-lg bg-cream/70 px-3 py-2 text-xs">
+                      <span className="font-bold text-ink">👥 Quem vê: </span>
+                      <span className="text-grey">{a.publico}</span>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+                      <div>
+                        <p className="numero text-base leading-none">{fmt(a.alcance)}</p>
+                        <p className="text-[10px] text-soft">alcance</p>
+                      </div>
+                      <div>
+                        <p className="numero text-base leading-none">{fmt(a.cliques)}</p>
+                        <p className="text-[10px] text-soft">cliques{a.ctr != null ? ` · ${pct(a.ctr)}` : ""}</p>
+                      </div>
+                      <div>
+                        <p className="numero text-base leading-none">{a.leads > 0 ? fmt(a.leads) : "—"}</p>
+                        <p className="text-[10px] text-soft">
+                          contactos{a.custo_por_lead ? ` · ${din(a.custo_por_lead, a.moeda)}` : ""}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="numero text-base leading-none">{din(a.investimento, a.moeda)}</p>
+                        <p className="text-[10px] text-soft">investido</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
         </section>
+      ) : camp.ok && camp.campanhas.some((c) => c.estado === "ACTIVE") ? (
+        <p className="mt-6 rounded-xl border border-line bg-cream px-4 py-3 text-sm text-grey">
+          Há campanhas a correr — os anúncios ao detalhe aparecem aqui assim que a Meta os
+          devolver. 🖐️
+        </p>
       ) : (
         <p className="mt-6 rounded-xl border border-line bg-cream px-4 py-3 text-sm text-grey">
-          Não há campanhas a correr neste momento.
+          Não há anúncios a correr neste momento. Quando arrancar a próxima campanha, aparece aqui. 🖐️
         </p>
       )}
-
-      {outras.length > 0 ? (
-        <section className="mt-6">
-          <div className="rotulo mb-2">anteriores</div>
-          <div className="space-y-3">{outras.map((c) => <Cartao key={c.id} c={c} />)}</div>
-        </section>
-      ) : null}
 
       <p className="mt-6 text-[11px] text-soft">
         Fonte: Meta Ads (Instagram + Facebook), últimos 30 dias. Google, TikTok e outras redes

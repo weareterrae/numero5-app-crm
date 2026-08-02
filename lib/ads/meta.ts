@@ -189,3 +189,197 @@ export async function anunciosAtivosMeta(
     return { ok: false, erro: String(e).slice(0, 140) };
   }
 }
+
+// ── Vista RICA: criativo + público + métricas (para a Sede) ──────────────────
+
+export type AnuncioRico = {
+  id: string;
+  nome: string;
+  campanha: string;
+  campanhaAtiva: boolean;
+  publico: string; // em português simples
+  imagem: string | null;
+  titulo: string | null;
+  corpo: string | null;
+  cta: string | null;
+  formato: "imagem" | "vídeo" | "carrossel" | "anúncio";
+  impressoes: number;
+  alcance: number;
+  frequencia: number | null;
+  cliques: number;
+  ctr: number | null;
+  investimento: number;
+  leads: number;
+  custo_por_lead: number | null;
+  moeda: string;
+};
+
+const PAIS: Record<string, string> = {
+  PT: "Portugal", AO: "Angola", ES: "Espanha", FR: "França", BR: "Brasil",
+  GB: "Reino Unido", DE: "Alemanha", MZ: "Moçambique", CV: "Cabo Verde",
+};
+const CTA_PT: Record<string, string> = {
+  LEARN_MORE: "Saber mais", SHOP_NOW: "Comprar agora", SIGN_UP: "Registar",
+  SEND_MESSAGE: "Enviar mensagem", MESSAGE_PAGE: "Enviar mensagem",
+  CONTACT_US: "Contactar", GET_QUOTE: "Pedir orçamento", BOOK_NOW: "Reservar",
+  BOOK_TRAVEL: "Reservar", DOWNLOAD: "Descarregar", CALL_NOW: "Ligar",
+  WHATSAPP_MESSAGE: "WhatsApp", APPLY_NOW: "Candidatar", SUBSCRIBE: "Subscrever",
+  GET_DIRECTIONS: "Como chegar", ORDER_NOW: "Encomendar", GET_OFFER: "Ver oferta",
+  SEE_DETAILS: "Ver detalhes", SEE_MENU: "Ver menu", REQUEST_TIME: "Marcar", DONATE_NOW: "Doar",
+};
+
+// Limpa nomes de locais da Meta (vêm em inglês): «Lisbon District» → «Lisboa».
+const LOCAL_PT: Record<string, string> = {
+  Lisbon: "Lisboa", Oporto: "Porto", Setubal: "Setúbal", Faro: "Faro", Braga: "Braga",
+  Coimbra: "Coimbra", Aveiro: "Aveiro", Luanda: "Luanda", Benguela: "Benguela",
+};
+function limparLocal(nome: string): string {
+  let n = nome.replace(/\s+(District|Province|Region|County)$/i, "").trim();
+  n = LOCAL_PT[n] ?? n;
+  return n;
+}
+
+type Targeting = {
+  age_min?: number;
+  age_max?: number;
+  genders?: number[];
+  geo_locations?: {
+    countries?: string[];
+    cities?: { name?: string }[];
+    regions?: { name?: string }[];
+    custom_locations?: { radius?: number; distance_unit?: string }[];
+  };
+  interests?: { name?: string }[];
+  flexible_spec?: { interests?: { name?: string }[] }[];
+  targeting_automation?: { advantage_audience?: number };
+};
+
+function humanizarPublico(t: Targeting | null | undefined): string {
+  if (!t) return "Público amplo";
+  const p: string[] = [];
+  const g = t.genders;
+  if (!g || g.length === 0 || (g.includes(1) && g.includes(2))) p.push("Homens e mulheres");
+  else if (g.includes(1)) p.push("Homens");
+  else if (g.includes(2)) p.push("Mulheres");
+  if (t.age_min || t.age_max) p.push(`${t.age_min ?? 18}–${t.age_max ?? 65}${(t.age_max ?? 65) >= 65 ? "+" : ""} anos`);
+  const geo = t.geo_locations ?? {};
+  const locs: string[] = [];
+  for (const c of geo.cities ?? []) if (c.name) locs.push(limparLocal(c.name));
+  for (const r of geo.regions ?? []) if (r.name) locs.push(limparLocal(r.name));
+  for (const c of geo.countries ?? []) locs.push(PAIS[c] ?? c);
+  const cl = geo.custom_locations?.[0];
+  if (cl?.radius) locs.push(`num raio de ${cl.radius} ${cl.distance_unit === "mile" ? "mi" : "km"}`);
+  if (locs.length) p.push(locs.slice(0, 4).join(", "));
+  const ints: string[] = [];
+  for (const fs of t.flexible_spec ?? []) for (const i of fs.interests ?? []) if (i.name) ints.push(i.name);
+  for (const i of t.interests ?? []) if (i.name) ints.push(i.name);
+  if (ints.length) p.push(`interesses: ${ints.slice(0, 5).join(", ")}`);
+  if (t.targeting_automation?.advantage_audience === 1 && !ints.length && locs.length <= 1)
+    p.push("com otimização automática de público");
+  return p.join(" · ") || "Público amplo";
+}
+
+type CreativeRaw = {
+  title?: string;
+  body?: string;
+  image_url?: string;
+  thumbnail_url?: string;
+  object_type?: string;
+  call_to_action_type?: string;
+  object_story_spec?: {
+    link_data?: { picture?: string; message?: string; name?: string; child_attachments?: unknown[]; call_to_action?: { type?: string } };
+    video_data?: { image_url?: string; message?: string; call_to_action?: { type?: string } };
+  };
+};
+
+/** Anúncios ATIVOS com criativo, público e métricas (30 dias). Um pedido/conta. */
+export async function anunciosRicosMeta(
+  accountId: string,
+): Promise<{ ok: true; anuncios: AnuncioRico[]; moeda: string } | { ok: false; erro: string }> {
+  const token = process.env.META_ADS_TOKEN?.trim();
+  if (!token) return { ok: false, erro: "META_ADS_TOKEN por configurar." };
+  const acc = accountId.replace(/^act_/, "").trim();
+  if (!acc) return { ok: false, erro: "Conta por definir." };
+
+  try {
+    const base = `https://graph.facebook.com/${V}/act_${acc}`;
+    const filtro = encodeURIComponent(JSON.stringify([{ field: "effective_status", operator: "IN", value: ["ACTIVE"] }]));
+    const campos = [
+      "id",
+      "name",
+      "campaign{name,effective_status}",
+      "adset{targeting}",
+      "creative{title,body,image_url,thumbnail_url,object_type,call_to_action_type,object_story_spec}",
+      "insights.date_preset(last_30d){impressions,reach,frequency,clicks,ctr,spend,actions}",
+    ].join(",");
+    const [rConta, rAds] = await Promise.all([
+      fetch(`${base}?fields=currency&access_token=${encodeURIComponent(token)}`),
+      fetch(`${base}/ads?fields=${encodeURIComponent(campos)}&filtering=${filtro}&limit=50&access_token=${encodeURIComponent(token)}`),
+    ]);
+    if (!rAds.ok) return { ok: false, erro: `Meta respondeu ${rAds.status}: ${(await rAds.text()).slice(0, 120)}` };
+    const moeda = ((await rConta.json().catch(() => ({}))) as { currency?: string }).currency || "EUR";
+    const d = (await rAds.json()) as {
+      data?: {
+        id: string;
+        name: string;
+        campaign?: { name?: string; effective_status?: string };
+        adset?: { targeting?: Targeting };
+        creative?: CreativeRaw;
+        insights?: { data?: { impressions?: string; reach?: string; frequency?: string; clicks?: string; ctr?: string; spend?: string; actions?: { action_type: string; value: string }[] }[] };
+      }[];
+    };
+
+    const anuncios: AnuncioRico[] = (d.data ?? []).map((a) => {
+      const c = a.creative ?? {};
+      const oss = c.object_story_spec ?? {};
+      const imagem =
+        oss.link_data?.picture || oss.video_data?.image_url || c.image_url || c.thumbnail_url || null;
+      const titulo = c.title || oss.link_data?.name || null;
+      const corpo = c.body || oss.link_data?.message || oss.video_data?.message || null;
+      const ctaTipo = c.call_to_action_type || oss.link_data?.call_to_action?.type || oss.video_data?.call_to_action?.type;
+      const cta = ctaTipo ? CTA_PT[ctaTipo] ?? null : null;
+      const formato: AnuncioRico["formato"] = (oss.link_data?.child_attachments?.length ?? 0) > 0
+        ? "carrossel"
+        : c.object_type === "VIDEO" || oss.video_data
+          ? "vídeo"
+          : imagem
+            ? "imagem"
+            : "anúncio";
+
+      const ins = a.insights?.data?.[0];
+      const impressoes = Number(ins?.impressions) || 0;
+      const alcance = Number(ins?.reach) || 0;
+      const cliques = Number(ins?.clicks) || 0;
+      const investimento = Number(ins?.spend) || 0;
+      const leads = (ins?.actions ?? [])
+        .filter((x) => ACOES_LEAD.has(x.action_type))
+        .reduce((s, x) => s + (Number(x.value) || 0), 0);
+
+      return {
+        id: a.id,
+        nome: a.name,
+        campanha: a.campaign?.name ?? "—",
+        campanhaAtiva: a.campaign?.effective_status === "ACTIVE",
+        publico: humanizarPublico(a.adset?.targeting),
+        imagem,
+        titulo,
+        corpo,
+        cta,
+        formato,
+        impressoes,
+        alcance,
+        frequencia: ins?.frequency ? Number(ins.frequency) : null,
+        cliques,
+        ctr: ins?.ctr ? Number(ins.ctr) / 100 : impressoes > 0 ? cliques / impressoes : null,
+        investimento,
+        leads,
+        custo_por_lead: leads > 0 && investimento > 0 ? investimento / leads : null,
+        moeda,
+      };
+    });
+    anuncios.sort((a, b) => b.investimento - a.investimento);
+    return { ok: true, anuncios, moeda };
+  } catch (e) {
+    return { ok: false, erro: String(e).slice(0, 120) };
+  }
+}
