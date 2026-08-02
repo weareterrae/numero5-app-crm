@@ -364,26 +364,18 @@ export async function criarAcessoSede(formData: FormData) {
 
   const nomesOrgs = orgsFicha.map((o) => o.nome).join(" + ");
 
-  // 4) convite: gera o magic link do tipo VERIFY (token_hash) — funciona em
-  //    qualquer dispositivo (ao contrário do fluxo PKCE do signInWithOtp, que
-  //    prende o link ao browser de origem). Envia-se pelo Resend (fiável).
-  const CALLBACK = "https://app.numerocinco.pt/auth/callback";
-  const { data: linkData, error: linkErr } = await svc.auth.admin.generateLink({
+  // 4) convite: gera o token_hash e constrói um link para o NOSSO domínio
+  //    (/auth/confirmar), que o valida por verifyOtp. Funciona em qualquer
+  //    dispositivo e não depende do Site URL/Redirect URLs do Supabase.
+  const { data: linkData } = await svc.auth.admin.generateLink({
     type: "magiclink",
     email,
-    options: { redirectTo: CALLBACK },
+    options: { redirectTo: "https://app.numerocinco.pt/sede" },
   });
-  let actionLink = linkData?.properties?.action_link ?? null;
-  // Força o redirect_to para produção (defende-se de um Site URL mal configurado).
-  if (actionLink) {
-    try {
-      const u = new URL(actionLink);
-      u.searchParams.set("redirect_to", CALLBACK);
-      actionLink = u.toString();
-    } catch {
-      /* mantém o original */
-    }
-  }
+  const hash = linkData?.properties?.hashed_token ?? null;
+  const actionLink = hash
+    ? `https://app.numerocinco.pt/auth/confirmar?token_hash=${encodeURIComponent(hash)}&type=magiclink&proximo=${encodeURIComponent("/sede")}`
+    : null;
 
   let enviado = false;
   if (actionLink && process.env.RESEND_API_KEY) {
