@@ -171,11 +171,38 @@ export async function concluirFollowup(formData: FormData) {
 }
 
 /** Apaga o cliente e tudo o que lhe está ligado (diagnósticos, propostas,
- *  avenças, produção, atividades, conversas — via ON DELETE CASCADE). */
+ *  avenças, produção, atividades, conversas — via ON DELETE CASCADE).
+ *  O nome tem de vir escrito igual (confirmação reforçada) e fica rasto na
+ *  `auditoria` — que NÃO é apagada em cascata. */
 export async function apagarCliente(formData: FormData) {
   const id = texto(formData.get("id"));
+  const confirmacao = texto(formData.get("confirmacao"));
   if (!id) return;
   const supabase = await criarClienteServidor();
+
+  const { data: cliente } = await supabase
+    .from("clientes")
+    .select("nome_marca, estado")
+    .eq("id", id)
+    .maybeSingle();
+  if (!cliente) return;
+  // Confirmação reforçada: o nome tem de bater certo (sem depender só do browser).
+  if ((confirmacao ?? "").trim().toLowerCase() !== cliente.nome_marca.trim().toLowerCase()) return;
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  // Rasto ANTES de apagar — a auditoria sobrevive à remoção.
+  await supabase.from("auditoria").insert({
+    tabela: "clientes",
+    registo_id: id,
+    campo: "apagado",
+    valor_anterior: `${cliente.nome_marca} (estado: ${cliente.estado})`,
+    valor_novo: null,
+    motivo: "Remoção definitiva pelo operador (confirmação por nome).",
+    autor_id: user?.id ?? null,
+  });
+
   await supabase.from("clientes").delete().eq("id", id);
   revalidatePath("/clientes");
   revalidatePath("/");
@@ -272,22 +299,22 @@ export async function ligarSedeOrg(formData: FormData) {
  */
 export async function criarAcessoSede(formData: FormData) {
   const clienteId = (formData.get("cliente_id") ?? "").toString();
-  const orgId = (formData.get("org_id") ?? "").toString();
   const email = (formData.get("email") ?? "").toString().trim().toLowerCase();
   const nome = (formData.get("nome") ?? "").toString().trim();
-  if (!clienteId || !orgId || !email.includes("@")) return;
+  if (!clienteId || !email.includes("@")) return;
 
   const svc = criarClienteServico();
   const nota = (descricao: string) =>
     svc.from("atividades").insert({ cliente_id: clienteId, tipo: "nota", descricao });
 
-  // A org tem de pertencer a ESTA ficha — nunca dar acesso a marcas alheias.
-  const { data: org } = await svc
+  // UM convite dá acesso a TODAS as orgs desta ficha (a pessoa alterna na
+  // barra de marcas dentro da Sede). Só orgs desta ficha — nunca alheias.
+  const { data: orgsFicha } = await svc
     .from("orgs")
-    .select("id, nome, cliente_id")
-    .eq("id", orgId)
-    .maybeSingle();
-  if (!org || org.cliente_id !== clienteId) return;
+    .select("id, nome")
+    .eq("cliente_id", clienteId)
+    .order("nome");
+  if (!orgsFicha?.length) return;
 
   // Guarda-corpos: se o email é de alguém da equipa, não se mexe.
   const { data: perfilExistente } = await svc
@@ -322,16 +349,18 @@ export async function criarAcessoSede(formData: FormData) {
     return;
   }
 
-  // 2) perfil externo garantido + 3) adesão à org (única, não duplica)
+  // 2) perfil externo garantido + 3) adesão a TODAS as orgs da ficha (idempotente)
   await svc
     .from("profiles")
     .upsert({ id: userId, email, ...(nome ? { nome } : {}), externo: true }, { onConflict: "id" });
-  await svc
-    .from("org_membros")
-    .upsert(
-      { org_id: orgId, profile_id: userId, papel: "cliente" },
-      { onConflict: "org_id,profile_id", ignoreDuplicates: true },
-    );
+  for (const o of orgsFicha) {
+    await svc
+      .from("org_membros")
+      .upsert(
+        { org_id: o.id, profile_id: userId, papel: "cliente" },
+        { onConflict: "org_id,profile_id", ignoreDuplicates: true },
+      );
+  }
 
   // 4) convite: magic link por email (cliente anónimo puro — sem a sessão staff)
   const { createClient } = await import("@supabase/supabase-js");
@@ -344,35 +373,38 @@ export async function criarAcessoSede(formData: FormData) {
     options: { emailRedirectTo: "https://app.numerocinco.pt/auth/callback" },
   });
 
+  const nomesOrgs = orgsFicha.map((o) => o.nome).join(" + ");
   await nota(
     erroEmail
-      ? `👤 Acesso à Sede criado para ${email} (${org.nome}) — mas o convite por email falhou (${erroEmail.message.slice(0, 80)}). Pede-lhe para entrar em app.numerocinco.pt com este email.`
-      : `👤 Acesso à Sede criado para ${email} (${org.nome}) — convite enviado por email. 🖐️`,
+      ? `👤 Acesso à Sede criado para ${email} (${nomesOrgs}) — mas o convite por email falhou (${erroEmail.message.slice(0, 80)}). Pede-lhe para entrar em app.numerocinco.pt com este email.`
+      : `👤 Acesso à Sede criado para ${email} (${nomesOrgs}) — convite enviado por email. 🖐️`,
   );
   revalidatePath(`/clientes/${clienteId}`);
 }
 
-/** Revoga o acesso de um membro a uma org da Sede (a conta fica; a adesão sai). */
+/** Revoga o acesso de uma pessoa a TODAS as orgs desta ficha (a conta fica). */
 export async function removerAcessoSede(formData: FormData) {
   const clienteId = (formData.get("cliente_id") ?? "").toString();
-  const orgId = (formData.get("org_id") ?? "").toString();
   const profileId = (formData.get("profile_id") ?? "").toString();
-  if (!clienteId || !orgId || !profileId) return;
+  if (!clienteId || !profileId) return;
 
   const svc = criarClienteServico();
-  const { data: org } = await svc
+  const { data: orgsFicha } = await svc
     .from("orgs")
-    .select("id, nome, cliente_id")
-    .eq("id", orgId)
-    .maybeSingle();
-  if (!org || org.cliente_id !== clienteId) return;
+    .select("id, nome")
+    .eq("cliente_id", clienteId);
+  if (!orgsFicha?.length) return;
 
   const { data: perfil } = await svc.from("profiles").select("email").eq("id", profileId).maybeSingle();
-  await svc.from("org_membros").delete().eq("org_id", orgId).eq("profile_id", profileId);
+  await svc
+    .from("org_membros")
+    .delete()
+    .in("org_id", orgsFicha.map((o) => o.id))
+    .eq("profile_id", profileId);
   await svc.from("atividades").insert({
     cliente_id: clienteId,
     tipo: "nota",
-    descricao: `🚪 Acesso à Sede revogado: ${perfil?.email ?? profileId} (${org.nome}).`,
+    descricao: `🚪 Acesso à Sede revogado: ${perfil?.email ?? profileId} (todas as marcas da ficha).`,
   });
   revalidatePath(`/clientes/${clienteId}`);
 }

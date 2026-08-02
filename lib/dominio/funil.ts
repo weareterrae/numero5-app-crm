@@ -53,11 +53,15 @@ export function taxaConversao(
   de: Estado,
   para: Estado,
 ): number | null {
-  const chegaram = (e: Estado) =>
-    new Set(transicoes.filter((t) => t.para_estado === e).map((t) => t.cliente_id)).size;
-  const base = chegaram(de);
-  if (base === 0) return null;
-  return chegaram(para) / base;
+  // Por COORTE: no numerador só conta quem passou pelo passo anterior.
+  // (Clientes migrados/criados diretamente num estado avançado não entram —
+  // senão a taxa passava de 100%, que era o que acontecia.)
+  const em = (e: Estado) =>
+    new Set(transicoes.filter((t) => t.para_estado === e).map((t) => t.cliente_id));
+  const base = em(de);
+  if (base.size === 0) return null;
+  const converteram = [...em(para)].filter((id) => base.has(id)).length;
+  return converteram / base.size;
 }
 
 export function formatarPercentagem(v: number | null): string {

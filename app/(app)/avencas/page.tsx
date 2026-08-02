@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { dataCurta, euros, receitaRecorrente } from "@/lib/dominio/metricas";
+import { criarAvencaManual } from "./acoes";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,17 @@ export default async function AvencasPage() {
     (Array.isArray(c) ? c[0]?.nome_marca : c?.nome_marca) ?? "Cliente";
   const mrr = receitaRecorrente(avencas);
   const ativas = avencas.filter((a) => a.estado === "ativa");
+
+  // Clientes sem avença ativa — candidatos a avença manual (migrados).
+  const comAvenca = new Set(ativas.map((a) => a.cliente_id));
+  const { data: clientesRaw } = await supabase
+    .from("clientes")
+    .select("id, nome_marca")
+    .eq("estado", "cliente")
+    .order("nome_marca");
+  const semAvenca = ((clientesRaw ?? []) as { id: string; nome_marca: string }[]).filter(
+    (c) => !comAvenca.has(c.id),
+  );
 
   return (
     <div className="space-y-5">
@@ -85,6 +97,42 @@ export default async function AvencasPage() {
           </div>
         </>
       )}
+
+      {/* Avença manual — clientes migrados sem proposta formal registada */}
+      {semAvenca.length > 0 ? (
+        <section className="rounded-xl border border-line bg-white p-5">
+          <h2 className="font-display text-lg font-extrabold">Avença manual</h2>
+          <p className="mt-0.5 text-xs text-grey">
+            Para clientes antigos/migrados sem proposta aceite no sistema. Sem avença, não entram
+            na Faturação, Rentabilidade nem Capacidade.
+          </p>
+          <form action={criarAvencaManual} className="mt-3 flex flex-wrap items-center gap-2">
+            <select name="cliente_id" required className="rounded-lg border border-line bg-cream px-2.5 py-2 text-sm">
+              <option value="">— cliente sem avença —</option>
+              {semAvenca.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nome_marca}
+                </option>
+              ))}
+            </select>
+            <input
+              name="valor_mensal"
+              inputMode="decimal"
+              required
+              placeholder="valor €/mês"
+              className="w-32 rounded-lg border border-line px-2.5 py-2 text-sm outline-none focus:border-gold"
+            />
+            <input
+              name="inicio"
+              type="date"
+              className="rounded-lg border border-line px-2.5 py-2 text-sm outline-none focus:border-gold"
+            />
+            <button className="rounded-full bg-ink px-4 py-2 text-sm font-bold text-cream hover:brightness-110">
+              Criar avença
+            </button>
+          </form>
+        </section>
+      ) : null}
     </div>
   );
 }

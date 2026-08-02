@@ -52,7 +52,7 @@ export default async function handler() {
   // Carteira ativa (id -> nome/estado/última interação).
   const { data: clientes } = await db
     .from("clientes")
-    .select("id, nome_marca, estado, ultima_interacao_at, intake_submetido_em")
+    .select("id, nome_marca, estado, ultima_interacao_at, intake_submetido_em, intake_token, idioma, created_at")
     .neq("estado", "perdido");
   const nome = new Map((clientes ?? []).map((c) => [c.id, c.nome_marca]));
 
@@ -65,7 +65,10 @@ export default async function handler() {
       .lte("followup_em", hojeISO)
       .eq("concluido", false)
       .order("followup_em", { ascending: true }),
-    db.from("propostas").select("cliente_id, estado, updated_at").eq("estado", "enviada"),
+    db
+      .from("propostas")
+      .select("cliente_id, estado, updated_at, partilha_token, partilha_ativa")
+      .eq("estado", "enviada"),
     db.from("planos").select("cliente_id, estado, mes").in("estado", ["rascunho", "alteracoes"]),
     db.from("relatorios").select("cliente_id, estado").eq("estado", "rascunho").then(
       (r) => r,
@@ -153,9 +156,132 @@ export default async function handler() {
       return { marca: nome.get(a.cliente_id), texto: `«${a.titulo}» à espera de aprovação (prazo ${dia}/${m})` };
     });
 
+  // ── Secção 6: lembretes automáticos aos clientes ───────────────────────
+  // Um ÚNICO lembrete por diagnóstico (≥3 dias por preencher) e por proposta
+  // (≥5 dias sem decisão), máx. 3+3 por dia. O marcador nas atividades
+  // garante que nunca se repete. Falhar aqui nunca trava o digest.
+  const lembretes = [];
+  try {
+    const tresDias = new Date(Date.now() - 3 * 86_400_000).toISOString();
+    const cincoDias = new Date(Date.now() - 5 * 86_400_000).toISOString();
+    const { data: contactosRaw } = await db
+      .from("contactos")
+      .select("cliente_id, nome, email")
+      .eq("principal", true)
+      .not("email", "is", null);
+    const contactoDe = new Map((contactosRaw ?? []).map((c) => [c.cliente_id, c]));
+    const { data: marcadores } = await db
+      .from("atividades")
+      .select("cliente_id, descricao")
+      .ilike("descricao", "🔔 Lembrete automático%");
+    const jaLembrado = new Set(
+      (marcadores ?? []).map((m) => `${m.cliente_id}:${m.descricao.includes("proposta") ? "p" : "d"}`),
+    );
+
+    const enviar = async (para, assunto, corpoHtml, corpoTexto) => {
+      const rr = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { authorization: `Bearer ${chaveResend}`, "content-type": "application/json" },
+        body: JSON.stringify({ from: REMETENTE, to: [para], subject: assunto, html: corpoHtml, text: corpoTexto }),
+      });
+      return rr.ok;
+    };
+    const molde = (titulo, corpo, cta, url) => `
+      <div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;color:#15181D">
+        <p style="font-size:16px;font-weight:bold">${esc(titulo)}</p>
+        <p style="font-size:15px;line-height:1.6">${esc(corpo)}</p>
+        <p style="margin:18px 0"><a href="${url}" style="background:#E8A13C;color:#15181D;font-weight:bold;padding:11px 22px;border-radius:999px;text-decoration:none">${esc(cta)}</a></p>
+        <p style="font-size:12px;color:#9aa0a6">Este é um lembrete único — não voltamos a incomodar. Nº 5 · marca operada por Os Caetanos, Lda</p>
+      </div>`;
+
+    // Diagnósticos a meio (≥3 dias)
+    const candDiag = (clientes ?? [])
+      .filter(
+        (c) =>
+          c.intake_token &&
+          !c.intake_submetido_em &&
+          c.created_at &&
+          c.created_at <= tresDias &&
+          ["lead", "contactado", "diagnostico"].includes(c.estado) &&
+          !jaLembrado.has(`${c.id}:d`) &&
+          contactoDe.get(c.id)?.email,
+      )
+      .slice(0, 3);
+    for (const c of candDiag) {
+      const ct = contactoDe.get(c.id);
+      const en = c.idioma === "en";
+      const url = `https://app.numerocinco.pt/intake/${c.intake_token}`;
+      const ok = await enviar(
+        ct.email,
+        en ? `Your Nº 5 diagnosis is waiting 🖐️` : `O teu diagnóstico Nº 5 está à tua espera 🖐️`,
+        molde(
+          en ? `Hi ${ct.nome || ""}!` : `Olá${ct.nome ? ` ${ct.nome}` : ""}!`,
+          en
+            ? `The ${c.nome_marca} diagnosis is still open — it takes just a few minutes and your answers are saved as you go. It's the first step to a concrete proposal.`
+            : `O diagnóstico da ${c.nome_marca} ficou a meio — são só uns minutos e as respostas vão ficando gravadas. É o primeiro passo para uma proposta concreta.`,
+          en ? "Continue the diagnosis →" : "Continuar o diagnóstico →",
+          url,
+        ),
+        `${en ? "Continue your diagnosis" : "Continua o teu diagnóstico"}: ${url}`,
+      );
+      if (ok) {
+        await db.from("atividades").insert({
+          cliente_id: c.id,
+          tipo: "nota",
+          descricao: `🔔 Lembrete automático do diagnóstico enviado a ${ct.email}.`,
+        });
+        lembretes.push({ marca: c.nome_marca, texto: "lembrete do diagnóstico enviado" });
+      }
+    }
+
+    // Propostas sem decisão (≥5 dias)
+    const candProp = (propostas.data ?? [])
+      .filter(
+        (p) =>
+          p.partilha_ativa &&
+          p.partilha_token &&
+          p.updated_at &&
+          p.updated_at <= cincoDias &&
+          !jaLembrado.has(`${p.cliente_id}:p`) &&
+          contactoDe.get(p.cliente_id)?.email &&
+          nome.has(p.cliente_id),
+      )
+      .slice(0, 3);
+    for (const p of candProp) {
+      const ct = contactoDe.get(p.cliente_id);
+      const cli = (clientes ?? []).find((c) => c.id === p.cliente_id);
+      const en = cli?.idioma === "en";
+      const marca = nome.get(p.cliente_id);
+      const url = `https://app.numerocinco.pt/r/proposta/${p.partilha_token}`;
+      const ok = await enviar(
+        ct.email,
+        en ? `Your Nº 5 proposal is waiting for you 🖐️` : `A tua proposta Nº 5 continua à tua espera 🖐️`,
+        molde(
+          en ? `Hi ${ct.nome || ""}!` : `Olá${ct.nome ? ` ${ct.nome}` : ""}!`,
+          en
+            ? `The proposal we prepared for ${marca} is still open. If anything needs adjusting, just reply — we'd rather adapt it than leave you in doubt.`
+            : `A proposta que preparámos para a ${marca} continua em aberto. Se algo precisar de ajuste, responde a este email — preferimos adaptá-la a deixar-te na dúvida.`,
+          en ? "Review the proposal →" : "Rever a proposta →",
+          url,
+        ),
+        `${en ? "Review your proposal" : "Revê a tua proposta"}: ${url}`,
+      );
+      if (ok) {
+        await db.from("atividades").insert({
+          cliente_id: p.cliente_id,
+          tipo: "nota",
+          descricao: `🔔 Lembrete automático da proposta enviado a ${ct.email}.`,
+        });
+        lembretes.push({ marca, texto: "lembrete da proposta enviado" });
+      }
+    }
+  } catch (e) {
+    console.log("[digest-diario] lembretes:", e);
+  }
+
   const nada =
     hoje.length === 0 && espera.length === 0 && descontos.length === 0 && aprovacoes.length === 0;
-  const { html, texto } = render({ hoje, espera, arrefecer, descontos, aprovacoes, nada });
+  const { html, texto } = render({ hoje, espera, arrefecer, descontos, aprovacoes, lembretes, nada });
 
   // Envio pelo Resend.
   const r = await fetch("https://api.resend.com/emails", {
@@ -173,7 +299,7 @@ export default async function handler() {
   return resposta(`Digest enviado para ${para}.`);
 }
 
-function render({ hoje, espera, arrefecer, descontos, aprovacoes, nada }) {
+function render({ hoje, espera, arrefecer, descontos, aprovacoes, lembretes, nada }) {
   const linhasTxt = [];
   const blocos = [];
 
@@ -199,6 +325,7 @@ function render({ hoje, espera, arrefecer, descontos, aprovacoes, nada }) {
   bloco(`👀 À espera de ti (${espera.length})`, espera, "#2B44E7");
   bloco(`✅ Aprovações em atraso (${(aprovacoes ?? []).length})`, aprovacoes ?? [], "#C0392B");
   bloco(`🏷️ Descontos a terminar (${(descontos ?? []).length})`, descontos ?? [], "#B4761A");
+  bloco(`🔔 Lembretes automáticos enviados (${(lembretes ?? []).length})`, lembretes ?? [], "#2B44E7");
   bloco(
     `❄️ A arrefecer (${arrefecer.length})`,
     arrefecer.map((a) => ({ marca: a.marca, texto: `sem mexer há ${a.dias} dias` })),

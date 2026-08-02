@@ -28,20 +28,49 @@ export async function guardarRevisao(formData: FormData) {
   // Correção é sempre incluída; retrabalho é sempre extra; alteração conforme escolha.
   const incluido = tipo === "retrabalho" ? false : formData.get("incluido") !== "extra";
 
+  const dataRev = t(formData.get("data")) ?? new Date().toISOString().slice(0, 10);
+  const valorInformado = num(formData.get("valor"));
+
   await supabase.from("revisoes").insert({
     cliente_id: clienteId,
     peca,
     versao: Math.max(1, Math.round(num(formData.get("versao")) ?? 1)),
     tipo,
-    data: t(formData.get("data")) ?? new Date().toISOString().slice(0, 10),
+    data: dataRev,
     pedido: t(formData.get("pedido")),
     origem: t(formData.get("origem")),
     horas: num(formData.get("horas")),
     incluido,
-    valor: num(formData.get("valor")),
+    valor: valorInformado,
     responsavel: t(formData.get("responsavel")),
     autor_id: user?.id ?? null,
   });
+
+  // Revisão extra (retrabalho, ou alteração marcada como extra) → item cobrável
+  // na produção, na hora. O valor vem do formulário ou do catálogo.
+  if (!incluido) {
+    let valor = valorInformado;
+    if (!valor || valor <= 0) {
+      const { data: precoCat } = await supabase
+        .from("precos_unitarios")
+        .select("preco")
+        .eq("chave", "revisoes_extra")
+        .maybeSingle();
+      valor = Number(precoCat?.preco) || 35;
+    }
+    await supabase.from("producao_itens").insert({
+      cliente_id: clienteId,
+      mes: `${dataRev.slice(0, 7)}-01`,
+      tipo: "outro",
+      descricao: `Revisão extra (${tipo}) — ${peca} · ${dataRev}`,
+      quantidade: 1,
+      extra: true,
+      valor,
+      faturado: false,
+      data: dataRev,
+      autor_id: user?.id ?? null,
+    });
+  }
 
   revalidatePath(`/clientes/${clienteId}/revisoes`);
   revalidatePath("/");

@@ -88,6 +88,11 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
       })
       .filter((a) => a.externo !== false) // esconder adesões da equipa
       .map(({ externo: _e, ...resto }) => resto);
+    // Uma pessoa = uma entrada (o acesso cobre todas as marcas da ficha).
+    const vistos = new Set<string>();
+    acessos = acessos.filter((a) =>
+      vistos.has(a.profile_id) ? false : (vistos.add(a.profile_id), true),
+    );
   }
   const orgLigada = orgsLigadas[0] ?? null;
   // Orgs livres (sem cliente) — para associar a Sede a esta ficha.
@@ -304,18 +309,18 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
           <section className="rounded-xl border border-line bg-white p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-bold">🏠 Na Sede do cliente</h2>
-              {orgsLigadas.length > 0 ? (
-                <span className="flex flex-wrap gap-2">
-                  {orgsLigadas.map((o) => (
-                    <a
-                      key={o.slug}
-                      href={`/sede/ver/${o.slug}`}
-                      className="text-xs font-bold text-gold-dark hover:underline"
-                    >
-                      👀 {orgsLigadas.length > 1 ? o.nome : "Ver como cliente"} →
-                    </a>
-                  ))}
-                </span>
+              {orgLigada ? (
+                <a
+                  href={`/sede/ver/${orgLigada.slug}`}
+                  className="text-xs font-bold text-gold-dark hover:underline"
+                  title={
+                    orgsLigadas.length > 1
+                      ? "Dentro da Sede alternas entre as marcas na barra do topo"
+                      : undefined
+                  }
+                >
+                  👀 Ver como cliente{orgsLigadas.length > 1 ? ` (${orgsLigadas.length} marcas)` : ""} →
+                </a>
               ) : null}
             </div>
             {orgsLigadas.length > 0 ? (
@@ -339,23 +344,17 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
                     <ul className="mb-2 flex flex-wrap gap-1.5">
                       {acessos.map((a) => (
                         <li
-                          key={`${a.org_id}-${a.profile_id}`}
+                          key={a.profile_id}
                           className="flex items-center gap-1.5 rounded-full border border-line bg-cream/60 py-1 pl-3 pr-1.5 text-xs"
                         >
                           <span className="font-bold">{a.email}</span>
-                          {orgsLigadas.length > 1 ? (
-                            <span className="text-soft">
-                              · {orgsLigadas.find((o) => o.id === a.org_id)?.nome}
-                            </span>
-                          ) : null}
                           <form action={removerAcessoSede}>
                             <input type="hidden" name="cliente_id" value={cliente.id} />
-                            <input type="hidden" name="org_id" value={a.org_id} />
                             <input type="hidden" name="profile_id" value={a.profile_id} />
                             <button
                               type="submit"
                               className="rounded-full px-1.5 font-bold text-soft hover:text-bad"
-                              title="Revogar este acesso"
+                              title="Revogar o acesso (todas as marcas desta ficha)"
                             >
                               ✕
                             </button>
@@ -368,17 +367,6 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
                   )}
                   <form action={criarAcessoSede} className="flex flex-wrap items-center gap-2">
                     <input type="hidden" name="cliente_id" value={cliente.id} />
-                    {orgsLigadas.length > 1 ? (
-                      <select name="org_id" className="rounded-lg border border-line bg-cream px-2 py-1.5 text-xs" required>
-                        {orgsLigadas.map((o) => (
-                          <option key={o.id} value={o.id}>
-                            {o.nome}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input type="hidden" name="org_id" value={orgsLigadas[0].id} />
-                    )}
                     <input
                       name="email"
                       type="email"
@@ -396,7 +384,9 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
                     </button>
                   </form>
                   <p className="mt-1 text-[10px] text-soft">
-                    Entra por link mágico enviado ao email — sem passwords. Repetir reenvia o convite.
+                    Entra por link mágico — sem passwords. Um convite dá acesso a todas as marcas
+                    desta ficha{orgsLigadas.length > 1 ? ` (${orgsLigadas.map((o) => o.nome).join(" + ")})` : ""}.
+                    Repetir reenvia o convite.
                   </p>
                 </div>
               </>

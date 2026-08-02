@@ -1,6 +1,38 @@
 import { describe, it, expect } from "vitest";
 import { mensagemSeguimento, situacaoSeguimento } from "./followups";
 import { metricasFunil, abandonoPorEtapa } from "./metricas-funil";
+import { taxaConversao } from "./funil";
+
+describe("taxaConversao por coorte", () => {
+  it("clientes migrados (entram direto num estado avançado) não inflacionam a taxa", () => {
+    const transicoes = [
+      // dois passaram por «contactado»; um deles chegou a «diagnostico»
+      { cliente_id: "a", para_estado: "contactado" },
+      { cliente_id: "b", para_estado: "contactado" },
+      { cliente_id: "a", para_estado: "diagnostico" },
+      // três migrados: entraram DIRETO em «diagnostico» sem passar por «contactado»
+      { cliente_id: "m1", para_estado: "diagnostico" },
+      { cliente_id: "m2", para_estado: "diagnostico" },
+      { cliente_id: "m3", para_estado: "diagnostico" },
+    ];
+    // antes: 4/2 = 200%; agora: 1/2 = 50% (só o «a» conta — passou pelos dois)
+    expect(taxaConversao(transicoes, "contactado" as never, "diagnostico" as never)).toBeCloseTo(0.5);
+  });
+
+  it("nunca ultrapassa 100%", () => {
+    const transicoes = [
+      { cliente_id: "a", para_estado: "proposta" },
+      { cliente_id: "a", para_estado: "cliente" },
+      { cliente_id: "x", para_estado: "cliente" },
+      { cliente_id: "y", para_estado: "cliente" },
+    ];
+    expect(taxaConversao(transicoes, "proposta" as never, "cliente" as never)).toBe(1);
+  });
+
+  it("sem base devolve null", () => {
+    expect(taxaConversao([], "contactado" as never, "diagnostico" as never)).toBeNull();
+  });
+});
 
 describe("follow-ups preparados (Parte G)", () => {
   it("preenche nome e empresa em PT e EN", () => {
