@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { criarClienteServidor, criarClienteServico } from "@/lib/supabase/server";
 import { ESTADOS, exigeMotivo, type Estado } from "@/lib/dominio/funil";
 import { ONBOARDING } from "@/lib/db/clientes";
+import { gerarLinkEntrada, enviarEmail } from "@/lib/auth/magic-link";
 
 function texto(v: FormDataEntryValue | null): string | null {
   const s = (v ?? "").toString().trim();
@@ -364,23 +365,11 @@ export async function criarAcessoSede(formData: FormData) {
 
   const nomesOrgs = orgsFicha.map((o) => o.nome).join(" + ");
 
-  // 4) convite: gera o token_hash e constrói um link para o NOSSO domínio
-  //    (/auth/confirmar), que o valida por verifyOtp. Funciona em qualquer
-  //    dispositivo e não depende do Site URL/Redirect URLs do Supabase.
-  const { data: linkData } = await svc.auth.admin.generateLink({
-    type: "magiclink",
-    email,
-    options: { redirectTo: "https://app.numerocinco.pt/sede" },
-  });
-  const hash = linkData?.properties?.hashed_token ?? null;
-  // Landing com botão (/auth/entrar) — o token só é consumido no clique, para
-  // os scanners de email (Safe Links) não gastarem o link antes do cliente.
-  const actionLink = hash
-    ? `https://app.numerocinco.pt/auth/entrar?token_hash=${encodeURIComponent(hash)}&type=magiclink&proximo=${encodeURIComponent("/sede")}`
-    : null;
-
+  // 4) convite: link seguro (landing + verifyOtp) pelo helper partilhado — o
+  //    mesmo mecanismo do login por email, robusto para todas as marcas.
+  const actionLink = await gerarLinkEntrada(email, "/sede");
   let enviado = false;
-  if (actionLink && process.env.RESEND_API_KEY) {
+  if (actionLink) {
     const html = `
       <div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;color:#15181D">
         <p style="font-size:16px;font-weight:bold">Olá${nome ? ` ${nome}` : ""}! 🖐️</p>
@@ -388,22 +377,12 @@ export async function criarAcessoSede(formData: FormData) {
         <p style="margin:22px 0"><a href="${actionLink}" style="background:#E8A13C;color:#15181D;font-weight:bold;padding:12px 26px;border-radius:999px;text-decoration:none;font-size:15px">Entrar na minha Sede →</a></p>
         <p style="font-size:12px;color:#9aa0a6">Este link é pessoal e válido por pouco tempo. Se expirar, entra em app.numerocinco.pt com este email e pede um novo. · Nº 5, marca operada por Os Caetanos, Lda</p>
       </div>`;
-    try {
-      const r = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, "content-type": "application/json" },
-        body: JSON.stringify({
-          from: process.env.EMAIL_REMETENTE || "Nº 5 <geral@numerocinco.pt>",
-          to: [email],
-          subject: `O teu acesso à Sede — ${nomesOrgs || "Nº 5"} 🖐️`,
-          html,
-          text: `Olá! O teu espaço de cliente está pronto. Entra aqui: ${actionLink}`,
-        }),
-      });
-      enviado = r.ok;
-    } catch {
-      enviado = false;
-    }
+    enviado = await enviarEmail(
+      email,
+      `O teu acesso à Sede — ${nomesOrgs || "Nº 5"} 🖐️`,
+      html,
+      `Olá! O teu espaço de cliente está pronto. Entra aqui: ${actionLink}`,
+    );
   }
 
   await nota(

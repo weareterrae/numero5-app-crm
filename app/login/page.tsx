@@ -49,12 +49,18 @@ export default function LoginPage() {
       return;
     }
 
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
-    });
+    // Link por email pelo mecanismo robusto (landing + verifyOtp), igual ao
+    // convite — funciona em qualquer dispositivo e resiste aos scanners de email.
+    try {
+      await fetch("/api/auth/link", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      });
+    } catch {
+      /* resposta é sempre genérica; nunca revelamos falhas */
+    }
     setOcupado(false);
-    if (error) return setErro(traduzir(error.message));
     setEnviado(true);
   }
 
@@ -69,9 +75,10 @@ export default function LoginPage() {
 
         {enviado ? (
           <div className="rounded-xl border border-line bg-white p-6">
-            <p className="mb-1 font-bold">Está no teu email. 🖐️</p>
+            <p className="mb-1 font-bold">Se houver conta, está no teu email. 🖐️</p>
             <p className="text-sm text-grey">
-              Mandámos um link para <b>{email}</b>. Abre-o neste dispositivo.
+              Enviámos um link para <b>{email}</b>. Abre-o e carrega no botão «Entrar» — funciona em
+              qualquer telemóvel ou computador.
             </p>
           </div>
         ) : (
