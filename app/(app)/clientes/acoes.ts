@@ -373,8 +373,10 @@ export async function criarAcessoSede(formData: FormData) {
     options: { redirectTo: "https://app.numerocinco.pt/sede" },
   });
   const hash = linkData?.properties?.hashed_token ?? null;
+  // Landing com botão (/auth/entrar) — o token só é consumido no clique, para
+  // os scanners de email (Safe Links) não gastarem o link antes do cliente.
   const actionLink = hash
-    ? `https://app.numerocinco.pt/auth/confirmar?token_hash=${encodeURIComponent(hash)}&type=magiclink&proximo=${encodeURIComponent("/sede")}`
+    ? `https://app.numerocinco.pt/auth/entrar?token_hash=${encodeURIComponent(hash)}&type=magiclink&proximo=${encodeURIComponent("/sede")}`
     : null;
 
   let enviado = false;
