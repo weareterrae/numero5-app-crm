@@ -4,6 +4,7 @@ import { criarClienteServico } from "@/lib/supabase/server";
 import { Simbolo } from "@/components/marca/Simbolo";
 import { mesLegivel } from "@/lib/dominio/producao";
 import { idiomaDe } from "@/lib/dominio/intake";
+import { AnunciosDoMes } from "@/components/ads/AnunciosDoMes";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -49,6 +50,20 @@ export default async function RelatorioMensalPublico({
   const idioma = idiomaDe(idiomaRow?.idioma);
   const t = TX[idioma];
 
+  // Org (marca) ligada a este cliente → resultados de anúncios do mês (0061, tolerante).
+  let contaAds: string | null = null;
+  {
+    const { data } = await supabase
+      .from("orgs")
+      .select("meta_ads_id")
+      .eq("cliente_id", relatorio.cliente_id)
+      .not("meta_ads_id", "is", null)
+      .limit(1)
+      .maybeSingle()
+      .then((r) => r, () => ({ data: null }));
+    contaAds = (data as { meta_ads_id?: string | null } | null)?.meta_ads_id ?? null;
+  }
+
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
       <header className="rounded-2xl bg-ink px-8 py-9 text-cream">
@@ -71,6 +86,8 @@ export default async function RelatorioMensalPublico({
       ) : (
         <p className="mt-6 text-center text-sm text-soft">{t.aPreparar}</p>
       )}
+
+      <AnunciosDoMes contaId={contaAds} mesISO={relatorio.mes} />
 
       <footer className="mt-6 text-center text-[11px] text-soft">
         Nº 5 · marca operada por Os Caetanos, Lda · NIF 504428918
