@@ -18,9 +18,9 @@ describe("análise interna — oportunidades (Parte 24)", () => {
       leads_followup: "nao",
     };
     const ops = oportunidades({ ...base, brief });
-    const funil = ops.find((o) => o.titulo.includes("depois do lead"));
+    const funil = ops.find((o) => o.servico === "crm_portal");
     expect(funil).toBeTruthy();
-    expect(funil?.servico).toBe("integracao_crm");
+    expect(funil?.servico).toBe("crm_portal");
     expect(funil?.prioridade).toBe("ja");
   });
 

@@ -39,12 +39,13 @@ export function oportunidades(e: EntradaAnalise): Oportunidade[] {
   const det = b.site_detetado as { temFormulario?: boolean; temLoja?: boolean } | undefined;
 
   // 1. Funil comercial furado — a prioridade nº 1 se o processo é fraco.
+  //    Oferta nossa: montar-lhe o CRM/portal (a Sede) para não perder contactos.
   if (processoComercialFraco(b)) {
     ops.push({
-      titulo: "Organizar o que acontece depois do lead",
+      titulo: "Um sítio para os contactos não se perderem (CRM/portal)",
       problema: "Os contactos não são respondidos a tempo, registados nem seguidos.",
       evidencia: "Respostas do diagnóstico sobre resposta, registo e seguimento de contactos.",
-      servico: "integracao_crm",
+      servico: "crm_portal",
       prioridade: "ja",
       confianca: "alta",
     });

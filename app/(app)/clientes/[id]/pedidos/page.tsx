@@ -24,10 +24,17 @@ export default async function PedidosOperador({ params }: { params: Promise<{ id
 
   const { data: lista } = await supabase
     .from("pedidos")
-    .select("id, texto, estado, nota_equipa, criado_em, resolvido_em")
+    .select("id, texto, estado, tipo, nota_equipa, criado_em, resolvido_em")
     .eq("cliente_id", id)
     .order("criado_em", { ascending: false });
-  const pedidos = lista ?? [];
+  const pedidos = (lista ?? []) as {
+    id: string;
+    texto: string;
+    estado: string;
+    tipo?: string | null;
+    nota_equipa: string | null;
+    criado_em: string;
+  }[];
 
   return (
     <div className="space-y-5">
@@ -46,7 +53,15 @@ export default async function PedidosOperador({ params }: { params: Promise<{ id
       ) : (
         <ul className="space-y-3">
           {pedidos.map((p) => (
-            <li key={p.id} className="rounded-xl border border-line bg-white p-4">
+            <li
+              key={p.id}
+              className={`rounded-xl border bg-white p-4 ${p.tipo === "servico" ? "border-gold" : "border-line"}`}
+            >
+              {p.tipo === "servico" ? (
+                <span className="mb-2 inline-block rounded-full bg-gold/20 px-2.5 py-0.5 text-[11px] font-bold text-gold-dark">
+                  💼 Pedido de serviço · fazer proposta
+                </span>
+              ) : null}
               <p className="text-sm font-medium">{p.texto}</p>
               <p className="mt-1 text-[11px] text-soft">
                 aberto {new Date(p.criado_em).toLocaleDateString("pt-PT", { day: "2-digit", month: "short", year: "numeric" })}

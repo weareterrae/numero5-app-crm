@@ -53,6 +53,13 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
   const supabase = await criarClienteServidor();
   // Org da Sede ligada a este cliente (para «Ver como cliente»). Tolerante.
   const { data: orgLigada } = await supabase.from("orgs").select("slug").eq("cliente_id", id).maybeSingle();
+  // Pedidos de serviço abertos na Sede (viram proposta). Tolerante a 0056.
+  const { data: pedidosServico } = await supabase
+    .from("pedidos")
+    .select("id, estado")
+    .eq("cliente_id", id)
+    .eq("tipo", "servico")
+    .neq("estado", "feito");
   const [atividades, contactos, intake, diagRes, propRes, planosRes, relatoriosRes, metricoolRes] =
     await Promise.all([
     listarAtividades(id),
@@ -270,6 +277,53 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
           />
         </div>
       </div>
+
+      {/* Na Sede do cliente — o espelho do que o cliente vê e do que espera por nós */}
+      {(() => {
+        const pedProp = pedidosServico?.length ?? 0;
+        const planosPorAprovar = planosVisiveis.filter((p) => p.estado === "enviado").length;
+        const propPorDecidir = propostas.filter((p) => p.estado === "enviada").length;
+        const relatPorAbrir = relatorios.filter((r) => r.estado === "enviado" && !r.visto_em).length;
+        const Chip = ({ n, txt, alerta }: { n: number; txt: string; alerta?: boolean }) => (
+          <span
+            className={`rounded-full px-3 py-1 text-xs font-bold ${
+              alerta ? "bg-gold/20 text-gold-dark" : "border border-line text-grey"
+            }`}
+          >
+            {n} · {txt}
+          </span>
+        );
+        return (
+          <section className="rounded-xl border border-line bg-white p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-sm font-bold">🏠 Na Sede do cliente</h2>
+              {orgLigada ? (
+                <a
+                  href={`/sede/ver/${orgLigada.slug}`}
+                  className="text-xs font-bold text-gold-dark hover:underline"
+                >
+                  👀 Ver como cliente →
+                </a>
+              ) : null}
+            </div>
+            {orgLigada ? (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {pedProp > 0 ? <Chip n={pedProp} txt="pedido(s) de serviço → fazer proposta" alerta /> : null}
+                {propPorDecidir > 0 ? <Chip n={propPorDecidir} txt="proposta(s) à espera do cliente" alerta /> : null}
+                {planosPorAprovar > 0 ? <Chip n={planosPorAprovar} txt="plano(s) a aprovar" alerta /> : null}
+                {relatPorAbrir > 0 ? <Chip n={relatPorAbrir} txt="relatório(s) por abrir" /> : null}
+                {pedProp === 0 && propPorDecidir === 0 && planosPorAprovar === 0 && relatPorAbrir === 0 ? (
+                  <span className="text-xs text-soft">Tudo em dia — nada à espera de decisão do cliente. 🖐️</span>
+                ) : null}
+              </div>
+            ) : (
+              <p className="mt-2 text-xs text-grey">
+                Este cliente ainda não tem acesso à Sede ligado. Cria/associa a conta para ele entrar.
+              </p>
+            )}
+          </section>
+        );
+      })()}
 
       {/* Follow-ups por fazer */}
       {porFazer.length > 0 && (
