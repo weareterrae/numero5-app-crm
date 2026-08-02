@@ -66,6 +66,28 @@ export default async function FinanceiroPage({ params }: { params: Promise<{ id:
   const primeiroDiaMes = inicioMes.toISOString().slice(0, 10);
   const divida = resumoDivida(cobrancas, primeiroDiaMes);
 
+  // Documentos fiscais InvoiceXpress (0059/0060) — consulta tolerante.
+  type DocFiscal = {
+    mes: string;
+    fatura_ix_numero: string | null;
+    fatura_ix_url: string | null;
+    fatura_ix_pdf: string | null;
+    fatura_ix_estado: string | null;
+    recibo_ix_url: string | null;
+    nc_ix_url: string | null;
+  };
+  const { data: docsRaw } = await supabase
+    .from("cobrancas")
+    .select("mes, fatura_ix_numero, fatura_ix_url, fatura_ix_pdf, fatura_ix_estado, recibo_ix_url, nc_ix_url")
+    .eq("cliente_id", id)
+    .not("fatura_ix_id", "is", null)
+    .order("mes", { ascending: false })
+    .then(
+      (r) => r,
+      () => ({ data: null }),
+    );
+  const docsFiscais = (docsRaw ?? []) as DocFiscal[];
+
   const estado = (fin.estado ?? "regular") as EstadoFinanceiro;
   const cor = corEstadoFinanceiro(estado);
   const corCls =
@@ -99,6 +121,43 @@ export default async function FinanceiroPage({ params }: { params: Promise<{ id:
           <p className="text-[11px] text-grey">faturas vencidas</p>
         </div>
       </div>
+
+      {/* Documentos fiscais (InvoiceXpress) */}
+      {docsFiscais.length > 0 && (
+        <section className="rounded-xl border border-line bg-white p-5">
+          <h2 className="mb-3 font-display text-lg font-extrabold">Documentos fiscais</h2>
+          <ul className="divide-y divide-line/60">
+            {docsFiscais.map((d) => (
+              <li key={d.mes} className="flex flex-wrap items-center gap-2 py-2 text-sm">
+                <span className="min-w-28 font-bold">
+                  {new Date(d.mes).toLocaleDateString("pt-PT", { month: "long", year: "numeric" })}
+                </span>
+                <a
+                  href={d.fatura_ix_pdf || d.fatura_ix_url || "#"}
+                  target="_blank"
+                  rel="noopener"
+                  className="rounded-full border border-line px-3 py-1 text-xs font-bold text-grey hover:bg-cream"
+                >
+                  🧾 {d.fatura_ix_numero || (d.fatura_ix_estado === "final" ? "fatura" : "rascunho")} ↗
+                </a>
+                {d.recibo_ix_url ? (
+                  <a href={d.recibo_ix_url} target="_blank" rel="noopener" className="rounded-full border border-line px-3 py-1 text-xs font-bold text-good hover:bg-cream">
+                    recibo ↗
+                  </a>
+                ) : null}
+                {d.nc_ix_url ? (
+                  <a href={d.nc_ix_url} target="_blank" rel="noopener" className="rounded-full border border-line px-3 py-1 text-xs font-bold text-warn hover:bg-cream">
+                    nota de crédito ↗
+                  </a>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-[11px] text-soft">
+            A emissão faz-se na página Faturação. O cliente descarrega os PDF na Sede → Pagamentos.
+          </p>
+        </section>
+      )}
 
       {/* Gestão do estado */}
       <section className="rounded-xl border border-line bg-white p-5">

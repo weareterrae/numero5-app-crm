@@ -34,6 +34,18 @@ export default async function SedePagamentos() {
     cobrado_em: string | null;
   }[];
 
+  // Documentos fiscais (0060) — consulta à parte e tolerante.
+  const docsDe = new Map<string, { numero: string | null; faturaPdf: string | null; reciboPdf: string | null }>();
+  {
+    const { data: docs } = await svc
+      .from("cobrancas")
+      .select("id, fatura_ix_numero, fatura_ix_pdf, recibo_ix_pdf")
+      .eq("cliente_id", ctx.clienteId)
+      .then((r) => r, () => ({ data: null }));
+    for (const d of (docs ?? []) as { id: string; fatura_ix_numero: string | null; fatura_ix_pdf: string | null; recibo_ix_pdf: string | null }[])
+      docsDe.set(d.id, { numero: d.fatura_ix_numero, faturaPdf: d.fatura_ix_pdf, reciboPdf: d.recibo_ix_pdf });
+  }
+
   const porRegularizar = cobrancas
     .filter((c) => c.estado !== "cobrado")
     .reduce((s, c) => s + (Number(c.valor) || 0), 0);
@@ -43,7 +55,7 @@ export default async function SedePagamentos() {
       <div className="rotulo">a tua conta</div>
       <h1 className="mt-1 font-display text-2xl font-extrabold">Pagamentos</h1>
       <p className="mt-1 text-sm text-grey">
-        O histórico da tua conta corrente com o Nº 5. As faturas certificadas seguem à parte, por email. 🖐️
+        O histórico da tua conta com o Nº 5 — com as faturas e recibos prontos a descarregar. 🖐️
       </p>
 
       {cobrancas.length === 0 ? (
@@ -72,7 +84,24 @@ export default async function SedePagamentos() {
                 >
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-bold">{c.descricao || "Serviços Nº 5"}</p>
-                    <p className="text-xs text-grey">{mesLegivel(c.mes, "pt")}</p>
+                    <p className="text-xs text-grey">
+                      {mesLegivel(c.mes, "pt")}
+                      {docsDe.get(c.id)?.numero ? ` · ${docsDe.get(c.id)!.numero}` : ""}
+                    </p>
+                    {(docsDe.get(c.id)?.faturaPdf || docsDe.get(c.id)?.reciboPdf) ? (
+                      <p className="mt-0.5 flex gap-3 text-[11px] font-bold">
+                        {docsDe.get(c.id)?.faturaPdf ? (
+                          <a href={docsDe.get(c.id)!.faturaPdf!} target="_blank" rel="noopener" className="text-gold-dark hover:underline">
+                            ⬇ fatura (PDF)
+                          </a>
+                        ) : null}
+                        {docsDe.get(c.id)?.reciboPdf ? (
+                          <a href={docsDe.get(c.id)!.reciboPdf!} target="_blank" rel="noopener" className="text-gold-dark hover:underline">
+                            ⬇ recibo (PDF)
+                          </a>
+                        ) : null}
+                      </p>
+                    ) : null}
                   </div>
                   <span className="numero w-24 text-right text-sm">{euros(c.valor)}</span>
                   <span

@@ -4,9 +4,10 @@
  *   INVOICEXPRESS_ACCOUNT  = nome da conta (o subdomínio: ACCOUNT.app.invoicexpress.com)
  *   INVOICEXPRESS_API_KEY  = a chave da API (Conta → Integrações → API)
  *
- * ⚠️ Prudência fiscal: por defeito criamos a fatura em RASCUNHO — a
- * finalização (que atribui número legal e comunica à AT) faz-se no
- * InvoiceXpress, com revisão humana. Nada é emitido «às cegas» pela app.
+ * ⚠️ Prudência fiscal: emitir (finalizar) atribui número legal e é
+ * irreversível — só se corrige com nota de crédito. Por isso a emissão é
+ * sempre um CLIQUE do operador (nunca um cron às cegas), e as notas de
+ * crédito nascem em rascunho para finalizar no InvoiceXpress.
  */
 
 export type ClienteFatura = {
@@ -107,6 +108,155 @@ export async function criarFaturaRascunho(
       estado: d.invoice?.state || "draft",
       url: `${cfg.base}/invoices/${id}`,
     };
+  } catch (e) {
+    return { ok: false, erro: String(e) };
+  }
+}
+
+// ── Ciclo completo ───────────────────────────────────────────────────────────
+
+type Cfg = { base: string; chave: string };
+function cfgOuErro(): Cfg | null {
+  const conta = process.env.INVOICEXPRESS_ACCOUNT?.trim();
+  const chave = process.env.INVOICEXPRESS_API_KEY?.trim();
+  if (!conta || !chave) return null;
+  return { base: `https://${conta}.app.invoicexpress.com`, chave };
+}
+const H = { "content-type": "application/json", accept: "application/json" };
+
+/** Finaliza a fatura (atribui o número legal). IRREVERSÍVEL — só clique humano. */
+export async function finalizarFatura(id: number): Promise<{ ok: boolean; erro?: string }> {
+  const c = cfgOuErro();
+  if (!c) return { ok: false, erro: "InvoiceXpress por configurar." };
+  try {
+    const r = await fetch(`${c.base}/invoices/${id}/change-state.json?api_key=${encodeURIComponent(c.chave)}`, {
+      method: "PUT",
+      headers: H,
+      body: JSON.stringify({ invoice: { state: "finalized" } }),
+    });
+    if (!r.ok) return { ok: false, erro: `finalizar → ${r.status}: ${(await r.text()).slice(0, 160)}` };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: String(e) };
+  }
+}
+
+/** Lê a fatura (número sequencial, estado). */
+export async function obterFatura(
+  id: number,
+): Promise<{ ok: true; numero: string | null; estado: string } | { ok: false; erro: string }> {
+  const c = cfgOuErro();
+  if (!c) return { ok: false, erro: "InvoiceXpress por configurar." };
+  try {
+    const r = await fetch(`${c.base}/invoices/${id}.json?api_key=${encodeURIComponent(c.chave)}`, { headers: H });
+    if (!r.ok) return { ok: false, erro: `obter → ${r.status}` };
+    const d = (await r.json()) as { invoice?: { inverted_sequence_number?: string; sequence_number?: string; state?: string } };
+    return {
+      ok: true,
+      numero: d.invoice?.inverted_sequence_number || d.invoice?.sequence_number || null,
+      estado: d.invoice?.state || "?",
+    };
+  } catch (e) {
+    return { ok: false, erro: String(e) };
+  }
+}
+
+/** URL do PDF (o InvoiceXpress gera-o; 202 = ainda a gerar → repetimos). */
+export async function obterPdfUrl(id: number, tentativas = 4): Promise<string | null> {
+  const c = cfgOuErro();
+  if (!c) return null;
+  for (let i = 0; i < tentativas; i++) {
+    try {
+      const r = await fetch(`${c.base}/api/pdf/${id}.json?api_key=${encodeURIComponent(c.chave)}`, { headers: H });
+      if (r.status === 200) {
+        const d = (await r.json()) as { output?: { pdfUrl?: string } };
+        if (d.output?.pdfUrl) return d.output.pdfUrl;
+      }
+      if (r.status !== 202) return null;
+    } catch {
+      return null;
+    }
+    await new Promise((res) => setTimeout(res, 1200));
+  }
+  return null;
+}
+
+/** Envia a fatura por email ao cliente, através do próprio InvoiceXpress. */
+export async function enviarFaturaEmail(id: number, email: string): Promise<{ ok: boolean; erro?: string }> {
+  const c = cfgOuErro();
+  if (!c) return { ok: false, erro: "InvoiceXpress por configurar." };
+  try {
+    const r = await fetch(`${c.base}/invoices/${id}/email-invoice.json?api_key=${encodeURIComponent(c.chave)}`, {
+      method: "PUT",
+      headers: H,
+      body: JSON.stringify({ message: { client: { email, save: "0" }, cc: "", bcc: "" } }),
+    });
+    if (!r.ok) return { ok: false, erro: `email → ${r.status}: ${(await r.text()).slice(0, 160)}` };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: String(e) };
+  }
+}
+
+/** Cria o recibo de um pagamento (total ou parcial) da fatura. */
+export async function criarRecibo(
+  invoiceId: number,
+  valor: number,
+): Promise<{ ok: true; id: number; url: string } | { ok: false; erro: string }> {
+  const c = cfgOuErro();
+  if (!c) return { ok: false, erro: "InvoiceXpress por configurar." };
+  const hoje = new Date();
+  const data = `${String(hoje.getDate()).padStart(2, "0")}/${String(hoje.getMonth() + 1).padStart(2, "0")}/${hoje.getFullYear()}`;
+  try {
+    const r = await fetch(`${c.base}/invoices/${invoiceId}/partial_payments.json?api_key=${encodeURIComponent(c.chave)}`, {
+      method: "POST",
+      headers: H,
+      body: JSON.stringify({ partial_payment: { amount: valor, payment_date: data, payment_mechanism: "TB" } }),
+    });
+    if (!r.ok) return { ok: false, erro: `recibo → ${r.status}: ${(await r.text()).slice(0, 160)}` };
+    const d = (await r.json()) as { receipt?: { id?: number } };
+    if (!d.receipt?.id) return { ok: false, erro: "Resposta sem id do recibo." };
+    return { ok: true, id: d.receipt.id, url: `${c.base}/receipts/${d.receipt.id}` };
+  } catch (e) {
+    return { ok: false, erro: String(e) };
+  }
+}
+
+/** Cria uma nota de crédito (RASCUNHO) associada à fatura — finaliza-se no IX. */
+export async function criarNotaCreditoRascunho(
+  invoiceId: number,
+  cliente: ClienteFatura,
+  itens: ItemFatura[],
+): Promise<{ ok: true; id: number; url: string } | { ok: false; erro: string }> {
+  const c = cfgOuErro();
+  if (!c) return { ok: false, erro: "InvoiceXpress por configurar." };
+  if (!itens.length) return { ok: false, erro: "Sem itens." };
+  const hoje = new Date();
+  const data = `${String(hoje.getDate()).padStart(2, "0")}/${String(hoje.getMonth() + 1).padStart(2, "0")}/${hoje.getFullYear()}`;
+  try {
+    const r = await fetch(`${c.base}/credit_notes.json?api_key=${encodeURIComponent(c.chave)}`, {
+      method: "POST",
+      headers: H,
+      body: JSON.stringify({
+        credit_note: {
+          date: data,
+          due_date: data,
+          owner_invoice_id: invoiceId,
+          client: { name: cliente.nome, code: cliente.nif || cliente.nome.slice(0, 20), ...(cliente.nif ? { fiscal_id: cliente.nif } : {}) },
+          items: itens.map((i) => ({
+            name: i.nome.slice(0, 100),
+            description: (i.descricao || i.nome).slice(0, 200),
+            unit_price: i.preco_unitario,
+            quantity: i.quantidade ?? 1,
+            tax: { name: i.iva ?? "IVA23" },
+          })),
+        },
+      }),
+    });
+    if (!r.ok) return { ok: false, erro: `nota de crédito → ${r.status}: ${(await r.text()).slice(0, 160)}` };
+    const d = (await r.json()) as { credit_note?: { id?: number } };
+    if (!d.credit_note?.id) return { ok: false, erro: "Resposta sem id da nota de crédito." };
+    return { ok: true, id: d.credit_note.id, url: `${c.base}/credit_notes/${d.credit_note.id}` };
   } catch (e) {
     return { ok: false, erro: String(e) };
   }

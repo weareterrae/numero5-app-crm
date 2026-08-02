@@ -2,7 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { criarClienteServidor } from "@/lib/supabase/server";
-import { criarFaturaRascunho } from "@/lib/faturacao/invoicexpress";
+import {
+  criarFaturaRascunho,
+  finalizarFatura,
+  obterFatura,
+  obterPdfUrl,
+  enviarFaturaEmail,
+  criarRecibo,
+  criarNotaCreditoRascunho,
+} from "@/lib/faturacao/invoicexpress";
 import { mesLegivel } from "@/lib/dominio/producao";
 
 const t = (v: FormDataEntryValue | null) => {
@@ -42,13 +50,44 @@ export async function marcarCobranca(formData: FormData) {
     { onConflict: "cliente_id,mes,tipo" },
   );
 
+  // Recibo automático: se há fatura emitida e ainda não há recibo, cria-o no
+  // InvoiceXpress e anexa. Tolerante (0060) — nunca trava o marcar cobrado.
+  if (cobrado) {
+    try {
+      const { data: cob } = await supabase
+        .from("cobrancas")
+        .select("id, valor, fatura_ix_id, fatura_ix_estado, recibo_ix_id")
+        .eq("cliente_id", clienteId)
+        .eq("mes", mes)
+        .eq("tipo", tipo)
+        .maybeSingle();
+      if (cob?.fatura_ix_id && cob.fatura_ix_estado === "final" && !cob.recibo_ix_id) {
+        const r = await criarRecibo(Number(cob.fatura_ix_id), Number(cob.valor) || 0);
+        if (r.ok) {
+          const pdf = await obterPdfUrl(r.id, 3); // PDF do recibo, para o cliente descarregar na Sede
+          await supabase
+            .from("cobrancas")
+            .update({ recibo_ix_id: r.id, recibo_ix_url: r.url, recibo_ix_pdf: pdf })
+            .eq("id", cob.id);
+          await supabase.from("atividades").insert({
+            cliente_id: clienteId,
+            tipo: "nota",
+            descricao: `🧾 Recibo criado no InvoiceXpress e anexado (pagamento da avença).`,
+          });
+        }
+      }
+    } catch {
+      /* recibo é conveniência — nunca trava a cobrança */
+    }
+  }
+
   revalidatePath("/faturacao");
 }
 
 /**
- * Cria a fatura (RASCUNHO) da avença do mês no InvoiceXpress e guarda a
- * referência na cobrança. A finalização — número legal e comunicação à AT —
- * faz-se no InvoiceXpress, com revisão humana. Nunca emitimos às cegas.
+ * EMITE a fatura da avença do mês no InvoiceXpress: cria, finaliza (número
+ * legal — irreversível, por isso é sempre um clique do operador), vai buscar
+ * o número e o PDF, e anexa tudo à cobrança (visível na ficha e na Sede).
  */
 export async function emitirFaturaIX(formData: FormData) {
   const clienteId = t(formData.get("cliente_id"));
@@ -107,6 +146,14 @@ export async function emitirFaturaIX(formData: FormData) {
   } = await supabase.auth.getUser();
 
   if (r.ok) {
+    // Finaliza (número legal) + número + PDF. Se algo falhar a meio, guardamos
+    // o que temos — o operador vê o estado e resolve no IX.
+    const fin = await finalizarFatura(r.id);
+    const info = fin.ok ? await obterFatura(r.id) : null;
+    const numero = info && info.ok ? info.numero : null;
+    const estado = fin.ok ? "final" : r.estado;
+    const pdf = fin.ok ? await obterPdfUrl(r.id) : null;
+
     await supabase.from("cobrancas").upsert(
       {
         cliente_id: clienteId,
@@ -115,7 +162,9 @@ export async function emitirFaturaIX(formData: FormData) {
         valor,
         fatura_ix_id: r.id,
         fatura_ix_url: r.url,
-        fatura_ix_estado: r.estado,
+        fatura_ix_estado: estado,
+        fatura_ix_numero: numero,
+        fatura_ix_pdf: pdf,
         criado_por: user?.id ?? null,
       },
       { onConflict: "cliente_id,mes,tipo" },
@@ -123,7 +172,9 @@ export async function emitirFaturaIX(formData: FormData) {
     await supabase.from("atividades").insert({
       cliente_id: clienteId,
       tipo: "nota",
-      descricao: `🧾 Fatura em rascunho criada no InvoiceXpress (${mesLegivel(mes)}) — rever e finalizar lá.`,
+      descricao: fin.ok
+        ? `🧾 Fatura ${numero ?? ""} emitida no InvoiceXpress (${mesLegivel(mes)}) e anexada à ficha.`
+        : `⚠️ Fatura criada mas não finalizada no InvoiceXpress (${mesLegivel(mes)}): ${fin.erro ?? "?"} — finalizar lá.`,
     });
   } else {
     await supabase.from("atividades").insert({
@@ -133,5 +184,88 @@ export async function emitirFaturaIX(formData: FormData) {
     });
   }
 
+  revalidatePath("/faturacao");
+}
+
+/** Envia a fatura ao cliente por email, pelo próprio InvoiceXpress. */
+export async function enviarFaturaEmailIX(formData: FormData) {
+  const clienteId = t(formData.get("cliente_id"));
+  const faturaId = Number(t(formData.get("fatura_ix_id")));
+  if (!clienteId || !Number.isFinite(faturaId) || faturaId <= 0) return;
+  const supabase = await criarClienteServidor();
+
+  const { data: contacto } = await supabase
+    .from("contactos")
+    .select("email")
+    .eq("cliente_id", clienteId)
+    .eq("principal", true)
+    .limit(1)
+    .maybeSingle();
+  if (!contacto?.email) {
+    await supabase.from("atividades").insert({
+      cliente_id: clienteId,
+      tipo: "nota",
+      descricao: "⚠️ Não enviei a fatura: o cliente não tem contacto principal com email.",
+    });
+    revalidatePath("/faturacao");
+    return;
+  }
+
+  const r = await enviarFaturaEmail(faturaId, contacto.email);
+  await supabase.from("atividades").insert({
+    cliente_id: clienteId,
+    tipo: "nota",
+    descricao: r.ok
+      ? `📧 Fatura enviada por email ao cliente (${contacto.email}) via InvoiceXpress.`
+      : `⚠️ Falhou o envio da fatura por email: ${r.erro ?? "?"}`,
+  });
+  revalidatePath("/faturacao");
+}
+
+/** Cria a NOTA DE CRÉDITO (rascunho) da fatura — finaliza-se no IX, com revisão. */
+export async function criarNotaCreditoIX(formData: FormData) {
+  const clienteId = t(formData.get("cliente_id"));
+  const mes = t(formData.get("mes"));
+  const tipo = t(formData.get("tipo")) ?? "avenca";
+  if (!clienteId || !mes) return;
+  const supabase = await criarClienteServidor();
+
+  const { data: cob } = await supabase
+    .from("cobrancas")
+    .select("id, valor, fatura_ix_id, nc_ix_id")
+    .eq("cliente_id", clienteId)
+    .eq("mes", mes)
+    .eq("tipo", tipo)
+    .maybeSingle();
+  if (!cob?.fatura_ix_id || cob.nc_ix_id) return; // sem fatura, ou NC já criada
+
+  const { data: cli } = await supabase
+    .from("clientes")
+    .select("nome_marca, empresa_fiscal, nif")
+    .eq("id", clienteId)
+    .maybeSingle();
+  if (!cli) return;
+
+  const r = await criarNotaCreditoRascunho(Number(cob.fatura_ix_id), {
+    nome: cli.empresa_fiscal || cli.nome_marca,
+    nif: cli.nif,
+  }, [
+    {
+      nome: `Regularização — ${mesLegivel(mes)}`,
+      descricao: `Nota de crédito sobre a avença de ${mesLegivel(mes)}`,
+      preco_unitario: Number(cob.valor) || 0,
+    },
+  ]);
+
+  if (r.ok) {
+    await supabase.from("cobrancas").update({ nc_ix_id: r.id, nc_ix_url: r.url }).eq("id", cob.id);
+  }
+  await supabase.from("atividades").insert({
+    cliente_id: clienteId,
+    tipo: "nota",
+    descricao: r.ok
+      ? `↩️ Nota de crédito em rascunho criada no InvoiceXpress (${mesLegivel(mes)}) — rever e finalizar lá.`
+      : `⚠️ Falhou criar a nota de crédito: ${r.erro}`,
+  });
   revalidatePath("/faturacao");
 }

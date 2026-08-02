@@ -2,7 +2,7 @@ import Link from "next/link";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { euros } from "@/lib/dominio/metricas";
 import { deslocarMes, mesISO, mesLegivel } from "@/lib/dominio/producao";
-import { marcarCobranca, emitirFaturaIX } from "./acoes";
+import { marcarCobranca, emitirFaturaIX, enviarFaturaEmailIX, criarNotaCreditoIX } from "./acoes";
 import { invoicexpressConfigurado } from "@/lib/faturacao/invoicexpress";
 
 export const dynamic = "force-dynamic";
@@ -38,18 +38,28 @@ export default async function FaturacaoPage({
   const cobrancas = (cobRes.data ?? []) as Cobranca[];
   const cobradoDe = new Map(cobrancas.map((c) => [c.cliente_id, c.estado === "cobrado"]));
 
-  // Faturas InvoiceXpress ligadas (0059) — consulta à parte e tolerante.
+  // Documentos InvoiceXpress ligados (0059/0060) — consulta à parte e tolerante.
+  type DocIX = {
+    cliente_id: string;
+    fatura_ix_id: number | null;
+    fatura_ix_url: string | null;
+    fatura_ix_estado: string | null;
+    fatura_ix_numero: string | null;
+    fatura_ix_pdf: string | null;
+    recibo_ix_url: string | null;
+    nc_ix_url: string | null;
+  };
   const temIX = invoicexpressConfigurado();
-  const faturaDe = new Map<string, string>();
+  const docsDe = new Map<string, DocIX>();
   if (temIX) {
     const { data: fx } = await supabase
       .from("cobrancas")
-      .select("cliente_id, fatura_ix_url")
+      .select("cliente_id, fatura_ix_id, fatura_ix_url, fatura_ix_estado, fatura_ix_numero, fatura_ix_pdf, recibo_ix_url, nc_ix_url")
       .eq("mes", mes)
       .eq("tipo", "avenca")
-      .not("fatura_ix_id", "is", null);
-    for (const f of (fx ?? []) as { cliente_id: string; fatura_ix_url: string | null }[])
-      if (f.fatura_ix_url) faturaDe.set(f.cliente_id, f.fatura_ix_url);
+      .not("fatura_ix_id", "is", null)
+      .then((r) => r, () => ({ data: null }));
+    for (const f of (fx ?? []) as DocIX[]) docsDe.set(f.cliente_id, f);
   }
   const nomeDe = (c: Avenca["clientes"]) =>
     (Array.isArray(c) ? c[0]?.nome_marca : c?.nome_marca) ?? "Cliente";
@@ -128,26 +138,81 @@ export default async function FaturacaoPage({
                     {jaCobrado ? "cobrado ✓" : "por cobrar"}
                   </span>
                   {temIX ? (
-                    faturaDe.get(a.cliente_id) ? (
-                      <a
-                        href={faturaDe.get(a.cliente_id)}
-                        target="_blank"
-                        rel="noopener"
-                        className="shrink-0 rounded-full border border-line px-3.5 py-1.5 text-xs font-bold text-grey hover:bg-cream"
-                      >
-                        🧾 ver fatura ↗
-                      </a>
-                    ) : (
-                      <form action={emitirFaturaIX} className="shrink-0">
-                        <input type="hidden" name="cliente_id" value={a.cliente_id} />
-                        <input type="hidden" name="mes" value={mes} />
-                        <input type="hidden" name="tipo" value="avenca" />
-                        <input type="hidden" name="valor" value={a.valor_mensal} />
-                        <button className="rounded-full border border-line px-3.5 py-1.5 text-xs font-bold text-grey hover:bg-cream">
-                          🧾 criar rascunho
-                        </button>
-                      </form>
-                    )
+                    (() => {
+                      const doc = docsDe.get(a.cliente_id);
+                      if (!doc)
+                        return (
+                          <form action={emitirFaturaIX} className="shrink-0">
+                            <input type="hidden" name="cliente_id" value={a.cliente_id} />
+                            <input type="hidden" name="mes" value={mes} />
+                            <input type="hidden" name="tipo" value="avenca" />
+                            <input type="hidden" name="valor" value={a.valor_mensal} />
+                            <button className="rounded-full border border-gold px-3.5 py-1.5 text-xs font-bold text-gold-dark hover:bg-gold hover:text-ink">
+                              🧾 Emitir fatura
+                            </button>
+                          </form>
+                        );
+                      return (
+                        <span className="flex shrink-0 items-center gap-1.5">
+                          <a
+                            href={doc.fatura_ix_pdf || doc.fatura_ix_url || "#"}
+                            target="_blank"
+                            rel="noopener"
+                            className="rounded-full border border-line px-3 py-1.5 text-xs font-bold text-grey hover:bg-cream"
+                            title={doc.fatura_ix_estado === "final" ? "Fatura emitida" : "Rascunho no InvoiceXpress"}
+                          >
+                            🧾 {doc.fatura_ix_numero || (doc.fatura_ix_estado === "final" ? "fatura" : "rascunho")} ↗
+                          </a>
+                          {doc.recibo_ix_url ? (
+                            <a
+                              href={doc.recibo_ix_url}
+                              target="_blank"
+                              rel="noopener"
+                              className="rounded-full border border-line px-3 py-1.5 text-xs font-bold text-good hover:bg-cream"
+                            >
+                              recibo ↗
+                            </a>
+                          ) : null}
+                          {doc.nc_ix_url ? (
+                            <a
+                              href={doc.nc_ix_url}
+                              target="_blank"
+                              rel="noopener"
+                              className="rounded-full border border-line px-3 py-1.5 text-xs font-bold text-warn hover:bg-cream"
+                            >
+                              NC ↗
+                            </a>
+                          ) : null}
+                          {doc.fatura_ix_estado === "final" ? (
+                            <>
+                              <form action={enviarFaturaEmailIX}>
+                                <input type="hidden" name="cliente_id" value={a.cliente_id} />
+                                <input type="hidden" name="fatura_ix_id" value={doc.fatura_ix_id ?? ""} />
+                                <button
+                                  className="rounded-full border border-line px-2.5 py-1.5 text-xs font-bold text-grey hover:bg-cream"
+                                  title="Enviar a fatura ao cliente por email (via InvoiceXpress)"
+                                >
+                                  📧
+                                </button>
+                              </form>
+                              {!doc.nc_ix_url ? (
+                                <form action={criarNotaCreditoIX}>
+                                  <input type="hidden" name="cliente_id" value={a.cliente_id} />
+                                  <input type="hidden" name="mes" value={mes} />
+                                  <input type="hidden" name="tipo" value="avenca" />
+                                  <button
+                                    className="rounded-full border border-line px-2.5 py-1.5 text-xs font-bold text-soft hover:bg-cream"
+                                    title="Criar nota de crédito (rascunho) para corrigir esta fatura"
+                                  >
+                                    ↩️
+                                  </button>
+                                </form>
+                              ) : null}
+                            </>
+                          ) : null}
+                        </span>
+                      );
+                    })()
                   ) : null}
                   <form action={marcarCobranca} className="shrink-0">
                     <input type="hidden" name="cliente_id" value={a.cliente_id} />
