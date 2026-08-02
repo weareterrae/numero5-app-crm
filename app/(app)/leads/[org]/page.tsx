@@ -55,6 +55,12 @@ export default async function QuadroOrg({ params }: { params: Promise<{ org: str
           </h1>
         </div>
         <div className="flex items-center gap-2">
+          <a
+            href={`/sede/ver/${slug}`}
+            className="rounded-full bg-ink px-3.5 py-1.5 text-sm font-bold text-cream hover:brightness-110"
+          >
+            Ver como cliente ↗
+          </a>
           <Link
             href={`/leads/${slug}/relatorio`}
             className="rounded-full border border-line px-3.5 py-1.5 text-sm font-bold text-grey hover:bg-cream hover:text-ink"

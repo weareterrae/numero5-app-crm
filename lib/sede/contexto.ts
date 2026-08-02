@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { criarClienteServidor } from "@/lib/supabase/server";
 
 /**
@@ -33,11 +34,17 @@ export async function contextoSede(opts?: { orgSlug?: string }): Promise<Context
   const isStaff = perfil?.externo === false;
 
   // Cliente externo → a org vem SEMPRE da sua adesão (org_membros); o URL é ignorado.
-  // Staff → pode pré-visualizar uma org por slug (?org=), apenas para inspeção.
+  // Staff → pré-visualiza a org escolhida (cookie `sede_org`, definido em /sede/ver/[slug]).
   let orgId: string | null = null;
-  if (isStaff && opts?.orgSlug) {
-    const { data } = await supabase.from("orgs").select("id").eq("slug", opts.orgSlug).maybeSingle();
-    orgId = data?.id ?? null;
+  if (isStaff) {
+    const jar = await cookies();
+    const slug = opts?.orgSlug || jar.get("sede_org")?.value;
+    if (slug) {
+      const { data } = await supabase.from("orgs").select("id").eq("slug", slug).maybeSingle();
+      orgId = data?.id ?? null;
+    }
+    // staff sem cliente escolhido → escolher no operador
+    if (!orgId) redirect("/leads");
   } else {
     const { data: mem } = await supabase
       .from("org_membros")
@@ -46,8 +53,8 @@ export async function contextoSede(opts?: { orgSlug?: string }): Promise<Context
       .limit(1)
       .maybeSingle();
     orgId = mem?.org_id ?? null;
+    if (!orgId) redirect("/login?proximo=/sede");
   }
-  if (!orgId) redirect("/login?proximo=/sede");
 
   const { data: org } = await supabase
     .from("orgs")
