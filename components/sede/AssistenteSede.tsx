@@ -6,7 +6,7 @@ type Msg = { role: "user" | "assistant"; content: string };
 
 const CHIPS = [
   "O que fizeram por mim este mês?",
-  "Quantas leads tenho por responder?",
+  "O que mais podem fazer pelo meu negócio?",
   "Dá-me 3 ideias para o próximo mês",
   "Explica-me o último relatório",
 ];
