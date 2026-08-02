@@ -14,12 +14,15 @@ export function KanbanLeads({
   orgId,
   etapas,
   leads,
+  leadBase,
 }: {
   org: string;
   orgId: string;
   etapas: Etapa[];
   leads: Lead[];
+  leadBase?: string; // base do link do detalhe (Sede usa "/sede/leads"); default = operador
 }) {
+  const base = leadBase ?? `/leads/${org}`;
   const [aArrastar, setAArrastar] = useState<string | null>(null);
   const [sobre, setSobre] = useState<string | null>(null);
   const [pendente, iniciar] = useTransition();
@@ -104,7 +107,7 @@ export function KanbanLeads({
                     } ${aArrastar === l.id ? "opacity-40" : ""} md:cursor-grab md:active:cursor-grabbing`}
                   >
                     <Link
-                      href={`/leads/${org}/${l.id}`}
+                      href={`${base}/${l.id}`}
                       className="block truncate text-sm font-bold hover:underline"
                     >
                       {nomeLead(l)}

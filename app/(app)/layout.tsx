@@ -25,13 +25,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Clientes externos só veem as suas leads; a equipa do Nº 5 vê tudo.
+  // Clientes externos vivem na Sede — nunca nas rotas do operador (que expõem
+  // dados da agência). Segurança: qualquer externo que chegue a (app) vai à Sede.
   const { data: perfil } = await supabase
     .from("profiles")
     .select("externo")
     .eq("id", user.id)
     .maybeSingle();
-  const links = perfil?.externo ? [{ href: "/leads", label: "As minhas leads" }] : LINKS;
+  if (perfil?.externo) redirect("/sede");
+  const links = LINKS;
 
   // White-label: o cliente externo vê a app com a SUA marca (cor/logótipo).
   let marcaCliente: { nome: string; cor?: string; logo?: string } | null = null;

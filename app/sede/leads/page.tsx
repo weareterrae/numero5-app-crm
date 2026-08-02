@@ -55,7 +55,7 @@ export default async function SedeLeads() {
           O teu funil ainda está a ser configurado. 🖐️
         </p>
       ) : (
-        <KanbanLeads org={ctx.org.slug} orgId={ctx.org.id} etapas={listaEtapas} leads={listaLeads} />
+        <KanbanLeads org={ctx.org.slug} orgId={ctx.org.id} etapas={listaEtapas} leads={listaLeads} leadBase="/sede/leads" />
       )}
     </div>
   );
