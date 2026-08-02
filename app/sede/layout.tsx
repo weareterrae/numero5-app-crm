@@ -9,6 +9,7 @@ const LINKS = [
   { href: "/sede/plano", label: "Plano" },
   { href: "/sede/leads", label: "Leads" },
   { href: "/sede/pedidos", label: "Pedidos" },
+  { href: "/sede/biblioteca", label: "Biblioteca" },
   { href: "/sede/ficha", label: "A minha ficha" },
 ];
 
