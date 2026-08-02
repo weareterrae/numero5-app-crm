@@ -362,22 +362,60 @@ export async function criarAcessoSede(formData: FormData) {
       );
   }
 
-  // 4) convite: magic link por email (cliente anónimo puro — sem a sessão staff)
-  const { createClient } = await import("@supabase/supabase-js");
-  const anon = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-  );
-  const { error: erroEmail } = await anon.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: "https://app.numerocinco.pt/auth/callback" },
-  });
-
   const nomesOrgs = orgsFicha.map((o) => o.nome).join(" + ");
+
+  // 4) convite: gera o magic link do tipo VERIFY (token_hash) — funciona em
+  //    qualquer dispositivo (ao contrário do fluxo PKCE do signInWithOtp, que
+  //    prende o link ao browser de origem). Envia-se pelo Resend (fiável).
+  const CALLBACK = "https://app.numerocinco.pt/auth/callback";
+  const { data: linkData, error: linkErr } = await svc.auth.admin.generateLink({
+    type: "magiclink",
+    email,
+    options: { redirectTo: CALLBACK },
+  });
+  let actionLink = linkData?.properties?.action_link ?? null;
+  // Força o redirect_to para produção (defende-se de um Site URL mal configurado).
+  if (actionLink) {
+    try {
+      const u = new URL(actionLink);
+      u.searchParams.set("redirect_to", CALLBACK);
+      actionLink = u.toString();
+    } catch {
+      /* mantém o original */
+    }
+  }
+
+  let enviado = false;
+  if (actionLink && process.env.RESEND_API_KEY) {
+    const html = `
+      <div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:0 auto;color:#15181D">
+        <p style="font-size:16px;font-weight:bold">Olá${nome ? ` ${nome}` : ""}! 🖐️</p>
+        <p style="font-size:15px;line-height:1.6">O teu espaço de cliente ${nomesOrgs ? `— <b>${nomesOrgs}</b> —` : ""} está pronto. Aqui vês o teu marketing num sítio só: plano, relatórios, leads, anúncios e mais.</p>
+        <p style="margin:22px 0"><a href="${actionLink}" style="background:#E8A13C;color:#15181D;font-weight:bold;padding:12px 26px;border-radius:999px;text-decoration:none;font-size:15px">Entrar na minha Sede →</a></p>
+        <p style="font-size:12px;color:#9aa0a6">Este link é pessoal e válido por pouco tempo. Se expirar, entra em app.numerocinco.pt com este email e pede um novo. · Nº 5, marca operada por Os Caetanos, Lda</p>
+      </div>`;
+    try {
+      const r = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { authorization: `Bearer ${process.env.RESEND_API_KEY}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          from: process.env.EMAIL_REMETENTE || "Nº 5 <geral@numerocinco.pt>",
+          to: [email],
+          subject: `O teu acesso à Sede — ${nomesOrgs || "Nº 5"} 🖐️`,
+          html,
+          text: `Olá! O teu espaço de cliente está pronto. Entra aqui: ${actionLink}`,
+        }),
+      });
+      enviado = r.ok;
+    } catch {
+      enviado = false;
+    }
+  }
+
   await nota(
-    erroEmail
-      ? `👤 Acesso à Sede criado para ${email} (${nomesOrgs}) — mas o convite por email falhou (${erroEmail.message.slice(0, 80)}). Pede-lhe para entrar em app.numerocinco.pt com este email.`
-      : `👤 Acesso à Sede criado para ${email} (${nomesOrgs}) — convite enviado por email. 🖐️`,
+    enviado
+      ? `👤 Acesso à Sede criado para ${email} (${nomesOrgs}) — convite enviado por email. 🖐️`
+      : `👤 Acesso à Sede criado para ${email} (${nomesOrgs}). Envio de email falhou — link para enviar à mão (válido ~1h): ${actionLink ?? "não gerado"}`,
   );
   revalidatePath(`/clientes/${clienteId}`);
 }
