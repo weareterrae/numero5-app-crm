@@ -16,6 +16,7 @@ import {
   invoicexpressBase,
   listarDocumentosIX,
   diasAtraso,
+  obterFatura,
 } from "@/lib/faturacao/invoicexpress";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +51,90 @@ export default async function FaturacaoPage({
   const avencas = (avRes.data ?? []) as unknown as Avenca[];
   const cobrancas = (cobRes.data ?? []) as Cobranca[];
   const cobradoDe = new Map(cobrancas.map((c) => [c.cliente_id, c.estado === "cobrado"]));
+
+  // Sincroniza pagamentos: fatura emitida cá e já PAGA no InvoiceXpress →
+  // marca a cobrança como cobrada sozinha (com nota na ficha). Tolerante.
+  if (invoicexpressConfigurado()) {
+    const { data: porSincronizar } = await supabase
+      .from("cobrancas")
+      .select("id, cliente_id, fatura_ix_id")
+      .eq("estado", "por_cobrar")
+      .not("fatura_ix_id", "is", null)
+      .limit(10)
+      .then((r) => r, () => ({ data: null }));
+    await Promise.all(
+      (porSincronizar ?? []).map(async (c) => {
+        const info = await obterFatura(Number(c.fatura_ix_id));
+        if (info.ok && info.estado === "settled") {
+          await supabase
+            .from("cobrancas")
+            .update({ estado: "cobrado", cobrado_em: new Date().toISOString() })
+            .eq("id", c.id)
+            .eq("estado", "por_cobrar");
+          await supabase.from("atividades").insert({
+            cliente_id: c.cliente_id,
+            tipo: "nota",
+            descricao: "💶 Pagamento detetado no InvoiceXpress — cobrança marcada como cobrada.",
+          });
+        }
+      }),
+    );
+  }
+
+  // Receita por recuperar — dinheiro já ganho que ainda não foi faturado/cobrado.
+  type ItemRecuperar = { rotulo: string; detalhe: string; valor: number; href: string };
+  const recuperar: ItemRecuperar[] = [];
+  {
+    const hojeISO = new Date().toISOString().slice(0, 10);
+    const [ordens, prod, desc] = await Promise.all([
+      supabase
+        .from("ordens_alteracao")
+        .select("id, titulo, preco, estado, clientes(nome_marca)")
+        .in("estado", ["aceite", "produzida"])
+        .gt("preco", 0)
+        .then((r) => r, () => ({ data: null })),
+      supabase
+        .from("producao_itens")
+        .select("cliente_id, descricao, valor, quantidade, clientes(nome_marca)")
+        .eq("extra", true)
+        .eq("faturado", false)
+        .gt("valor", 0)
+        .then((r) => r, () => ({ data: null })),
+      supabase
+        .from("descontos")
+        .select("cliente_id, valor_desconto, tipo, fim, clientes(nome_marca)")
+        .eq("estado", "ativo")
+        .not("fim", "is", null)
+        .lt("fim", hojeISO)
+        .then((r) => r, () => ({ data: null })),
+    ]);
+    const nome = (c: unknown) => {
+      const x = Array.isArray(c) ? c[0] : c;
+      return (x as { nome_marca?: string } | null)?.nome_marca ?? "Cliente";
+    };
+    for (const o of (ordens.data ?? []) as { titulo: string; preco: number; estado: string; clientes: unknown }[])
+      recuperar.push({
+        rotulo: `${nome(o.clientes)} — ordem ${o.estado === "produzida" ? "ENTREGUE" : "aceite"} por faturar`,
+        detalhe: o.titulo,
+        valor: Number(o.preco) || 0,
+        href: "/extras",
+      });
+    for (const p of (prod.data ?? []) as { cliente_id: string; descricao: string | null; valor: number; quantidade: number; clientes: unknown }[])
+      recuperar.push({
+        rotulo: `${nome(p.clientes)} — extra produzido por faturar`,
+        detalhe: `${p.descricao ?? "extra"}${p.quantidade > 1 ? ` ×${p.quantidade}` : ""}`,
+        valor: Number(p.valor) || 0,
+        href: `/clientes/${p.cliente_id}/producao`,
+      });
+    for (const d of (desc.data ?? []) as { cliente_id: string; valor_desconto: number; tipo: string; fim: string; clientes: unknown }[])
+      recuperar.push({
+        rotulo: `${nome(d.clientes)} — desconto EXPIROU (${d.fim})`,
+        detalhe: "voltar ao preço normal na próxima fatura",
+        valor: 0,
+        href: `/clientes/${d.cliente_id}`,
+      });
+  }
+  const totalRecuperar = recuperar.reduce((s, r) => s + r.valor, 0);
 
   // Mapa de faturas por regularizar no InvoiceXpress (conta inteira).
   const ixBase = invoicexpressBase();
@@ -295,6 +380,40 @@ export default async function FaturacaoPage({
           </p>
         </>
       )}
+
+      {/* Receita por recuperar — dinheiro ganho que ainda não foi faturado */}
+      {recuperar.length > 0 ? (
+        <section className="rounded-xl border-2 border-gold/50 bg-gold/5 p-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="font-display text-lg font-extrabold">💰 Receita por recuperar</h2>
+            {totalRecuperar > 0 ? (
+              <span className="font-display text-xl font-extrabold text-gold-dark tabular-nums">
+                {euros(totalRecuperar)}
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-0.5 text-xs text-grey">
+            Trabalho já ganho ou entregue que ainda não virou fatura. Nada é faturado sozinho — a decisão é tua.
+          </p>
+          <ul className="mt-3 space-y-1.5">
+            {recuperar.map((r, i) => (
+              <li key={i}>
+                <Link
+                  href={r.href}
+                  className="flex items-center gap-3 rounded-lg bg-white/70 px-3.5 py-2 text-sm transition hover:bg-white"
+                >
+                  <span className="min-w-0 flex-1">
+                    <b>{r.rotulo}</b>
+                    <span className="ml-2 text-xs text-grey">{r.detalhe}</span>
+                  </span>
+                  {r.valor > 0 ? <span className="tabular-nums font-bold">{euros(r.valor)}</span> : null}
+                  <span className="text-xs font-bold text-gold-dark">tratar →</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {/* Mapa de faturas por regularizar — conta InvoiceXpress inteira */}
       {pendentesIX ? (

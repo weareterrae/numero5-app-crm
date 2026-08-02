@@ -16,18 +16,19 @@ export default function LoginPage() {
   const [enviado, setEnviado] = useState(false);
   const [erro, setErro] = useState("");
 
+  // Mensagens genéricas e brancas: nunca revelar o fornecedor técnico.
   function traduzir(msg: string): string {
     const m = msg.toLowerCase();
     if (m.includes("rate limit"))
-      return "Limite de emails do Supabase atingido. Entra com password, ou espera uns minutos.";
-    if (m.includes("invalid login credentials")) return "Email ou password errados.";
+      return "Muitos pedidos seguidos. Espera uns minutos ou entra com palavra-passe.";
+    if (m.includes("invalid login credentials")) return "Email ou palavra-passe errados.";
     if (m.includes("email logins are disabled"))
-      return "O provider de Email está desligado no Supabase.";
+      return "A entrada por email está temporariamente indisponível. Fala com a equipa do Nº 5.";
     if (m.includes("signups not allowed"))
-      return "A criação de contas está desligada. Cria o utilizador no painel do Supabase.";
+      return "Não encontrámos uma conta com este email. Fala com a equipa do Nº 5.";
     if (m.includes("email not confirmed"))
-      return "Falta confirmar o email. No painel do Supabase, marca o utilizador como confirmado.";
-    return msg;
+      return "A tua conta ainda não está ativa. Fala com a equipa do Nº 5.";
+    return "Não conseguimos iniciar sessão. Tenta de novo ou fala com a equipa do Nº 5.";
   }
 
   async function submeter(e: React.FormEvent) {
@@ -92,7 +93,7 @@ export default function LoginPage() {
             {modo === "password" && (
               <>
                 <label htmlFor="password" className="mt-3 mb-1.5 block text-xs font-bold text-grey">
-                  Password
+                  Palavra-passe
                 </label>
                 <input
                   id="password"
@@ -126,13 +127,13 @@ export default function LoginPage() {
             >
               {modo === "password"
                 ? "Prefiro receber um link por email"
-                : "Prefiro entrar com password"}
+                : "Prefiro entrar com palavra-passe"}
             </button>
 
             <p className="mt-3 text-xs text-soft">
               {modo === "password"
-                ? "A password é definida no painel do Supabase."
-                : "O email interno do Supabase tem limite de envios."}
+                ? "Esqueceste-te da palavra-passe? Entra com o link por email, ou fala connosco."
+                : "Enviamos-te um link seguro — entras sem palavra-passe."}
             </p>
           </form>
         )}

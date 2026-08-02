@@ -18,6 +18,18 @@ const t = (v: FormDataEntryValue | null) => {
   const s = (v ?? "").toString().trim();
   return s === "" ? null : s;
 };
+
+// Trava anti-duplicação (duplo clique / re-submissão): a mesma operação com a
+// mesma chave só corre uma vez por janela. Melhor-esforço por instância — a
+// emissão por avença tem ainda a verificação na base (fatura_ix_id).
+const emCurso = new Map<string, number>();
+function travaDupla(chave: string, ttlMs = 90_000): boolean {
+  const agora = Date.now();
+  for (const [k, v] of emCurso) if (agora - v > ttlMs) emCurso.delete(k);
+  if (emCurso.has(chave)) return false; // já em curso/recente → bloqueia
+  emCurso.set(chave, agora);
+  return true;
+}
 const n = (v: FormDataEntryValue | null) => {
   const s = (v ?? "").toString().trim().replace(",", ".");
   const x = Number(s);
@@ -286,6 +298,8 @@ export async function emitirFaturaLivre(formData: FormData) {
   const vencDias = Math.max(0, Math.min(90, n(formData.get("vencimento_dias")) || 15));
   const soRascunho = formData.get("rascunho") === "1";
   if (!descricao || !(valor > 0)) redirect("/faturacao/emitir?erro=dados");
+  if (!travaDupla(`fatura:${clienteId ?? nomeManual}:${descricao}:${valor}`))
+    redirect(`/faturacao?ix_erro=${encodeURIComponent("Essa emissão já está em curso — confirma no mapa antes de repetir.")}`);
 
   const supabase = await criarClienteServidor();
 
@@ -345,6 +359,8 @@ export async function criarReciboLivre(formData: FormData) {
   const faturaId = Number(t(formData.get("fatura_id")));
   const valor = n(formData.get("valor"));
   if (!Number.isFinite(faturaId) || faturaId <= 0 || !(valor > 0)) return;
+  if (!travaDupla(`recibo:${faturaId}`))
+    redirect(`/faturacao?ix_erro=${encodeURIComponent("Esse recibo já está em curso — verifica o extrato antes de repetir.")}`);
   const r = await criarRecibo(faturaId, valor);
   revalidatePath("/faturacao");
   redirect(
@@ -361,6 +377,8 @@ export async function criarNotaCreditoLivre(formData: FormData) {
   const nomeCliente = t(formData.get("cliente_nome")) ?? "Cliente";
   const numero = t(formData.get("numero")) ?? String(faturaId);
   if (!Number.isFinite(faturaId) || faturaId <= 0 || !(valor > 0)) return;
+  if (!travaDupla(`nc:${faturaId}`))
+    redirect(`/faturacao?ix_erro=${encodeURIComponent("Essa nota de crédito já está em curso — verifica no InvoiceXpress antes de repetir.")}`);
   const r = await criarNotaCreditoRascunho(faturaId, { nome: nomeCliente }, [
     { nome: `Regularização da fatura ${numero}`, preco_unitario: valor },
   ]);
