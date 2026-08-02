@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { obterIA } from "@/lib/ia/provider";
 import { dataCurta } from "@/lib/dominio/metricas";
+import { anunciosRicosMeta, metaAdsConfigurado } from "@/lib/ads/meta";
 
 const SISTEMA = `És o QUINTO — o assistente interno do Nº 5, estúdio de marketing digital + IA para PMEs em Portugal e Angola (marca operada por Os Caetanos, Lda). Estás dentro da aplicação de negócio e falas com a EQUIPA (o Sandro ou um comercial), nunca com clientes. Ninguém de fora lê o que escreves.
 
@@ -33,6 +34,10 @@ O valor exato fecha-se depois de alinhar o âmbito. Nunca prometas um número fe
 - Diagnóstico primeiro, venda depois. Chegamos com um achado concreto na mão, não com um catálogo.
 - Números antes de adjetivos. Mostrar, não gabar.
 - Pessoas primeiro, IA como acelerador. Nunca exagerar o papel da IA.
+
+ANÚNCIOS (quando tiveres os dados do cliente abaixo)
+- A app lê ao vivo as campanhas Meta de cada marca (separador «Anúncios»). Se houver dados de anúncios do cliente em baixo, analisa o desempenho como um gestor de tráfego: o que está a resultar, o que está caro, que público responde melhor.
+- Sugere otimizações concretas à EQUIPA (o que escalar, o que pausar, que criativo ou página de destino rever, que público reforçar), sempre ancorado nos números. És interno — podes falar de custo por contacto, CTR, orçamento e margem à vontade.
 
 COMO A APP FUNCIONA (podes orientar a equipa)
 - Funil: Lead → Contactado → Diagnóstico → Proposta → Cliente (ou Perdido, sempre com motivo).
@@ -166,6 +171,29 @@ export async function POST(req: NextRequest) {
         L.push(
           `Histórico recente: ${ativs.map((a) => `${dataCurta(a.data)} ${a.tipo}: ${a.descricao}`).join(" | ")}`,
         );
+
+      // Anúncios Meta da marca deste cliente (ao vivo), se houver conta ligada.
+      if (metaAdsConfigurado()) {
+        const { data: orgAds } = await supabase
+          .from("orgs")
+          .select("meta_ads_id")
+          .eq("cliente_id", corpo.cliente_id)
+          .not("meta_ads_id", "is", null)
+          .limit(1)
+          .maybeSingle()
+          .then((r) => r, () => ({ data: null }));
+        const contaAds = (orgAds as { meta_ads_id?: string | null } | null)?.meta_ads_id ?? null;
+        if (contaAds) {
+          const r = await anunciosRicosMeta(contaAds);
+          if (r.ok && r.anuncios.length) {
+            const linhas = r.anuncios.slice(0, 8).map((a) => {
+              const cpl = a.custo_por_lead ? ` @ ${a.custo_por_lead.toFixed(2)}€/lead` : "";
+              return `• "${a.titulo || a.nome}" [${a.campanha}] público: ${a.publico} | 30d: ${a.investimento.toFixed(0)}€, ${a.alcance} alc, ${a.cliques} cliq${a.ctr != null ? ` (CTR ${(a.ctr * 100).toFixed(2)}%)` : ""}, ${a.leads} leads${cpl}`;
+            });
+            L.push(`ANÚNCIOS ATIVOS (Meta, 30d):\n${linhas.join("\n")}`);
+          }
+        }
+      }
       contexto = L.join("\n");
     }
   }

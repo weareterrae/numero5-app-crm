@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { criarClienteServidor, criarClienteServico } from "@/lib/supabase/server";
 import { obterIA } from "@/lib/ia/provider";
 import { canaisQueVendem, leadsLentas, rotuloOrigem, type LeadSinal } from "@/lib/sede/sinais";
+import { anunciosRicosMeta, metaAdsConfigurado } from "@/lib/ads/meta";
 
 // Rate-limit simples por utilizador (melhor-esforço, por instância).
 const balde = new Map<string, { t: number; c: number }>();
@@ -133,6 +134,32 @@ export async function POST(req: NextRequest) {
     if (peds) L.push(`Pedidos abertos: ${abertos}.`);
   }
 
+  // Anúncios (Meta) da marca — ao vivo, para o assistente saber explicá-los.
+  if (metaAdsConfigurado()) {
+    const { data: orgAds } = await supabase
+      .from("orgs")
+      .select("meta_ads_id")
+      .eq("id", orgId)
+      .maybeSingle()
+      .then((r) => r, () => ({ data: null }));
+    const contaAds = (orgAds as { meta_ads_id?: string | null } | null)?.meta_ads_id ?? null;
+    if (contaAds) {
+      const r = await anunciosRicosMeta(contaAds);
+      if (r.ok && r.anuncios.length) {
+        const totInv = r.anuncios.reduce((s, a) => s + a.investimento, 0);
+        const totLeads = r.anuncios.reduce((s, a) => s + a.leads, 0);
+        const totAlc = r.anuncios.reduce((s, a) => s + a.alcance, 0);
+        const linhas = r.anuncios.slice(0, 6).map((a) => {
+          const cpl = a.custo_por_lead ? ` a ${a.custo_por_lead.toFixed(2)}${a.moeda === "EUR" ? "€" : a.moeda}/contacto` : "";
+          return `• "${a.titulo || a.nome}" [${a.campanha}] — público: ${a.publico}. 30d: ${a.alcance} alcance, ${a.cliques} cliques${a.ctr != null ? ` (CTR ${(a.ctr * 100).toFixed(2)}%)` : ""}, ${a.leads} contactos${cpl}, ${a.investimento.toFixed(2)}${a.moeda === "EUR" ? "€" : a.moeda} investidos.`;
+        });
+        L.push(
+          `--- ANÚNCIOS ATIVOS (Meta, últimos 30 dias) ---\nTotais: ${totAlc} pessoas alcançadas · ${totLeads} contactos · ${totInv.toFixed(2)}€ investidos.\n${linhas.join("\n")}`,
+        );
+      }
+    }
+  }
+
   // leads (orgs-keyed) via RLS + filtro por org
   const { data: leadsRaw } = await supabase
     .from("crm_leads")
@@ -172,6 +199,11 @@ COMO ACONSELHAS
 - Dá ideias e sugestões concretas ligadas aos DADOS reais do negócio (setor, ofertas, épocas, o que dizem os números e as leads). Nada genérico.
 - Quando o dono mostrar interesse em fazer mais (ou quando os dados sugerirem uma oportunidade clara), explica o serviço e convida-o a pedir uma proposta no separador «Serviços» da Sede — a equipa analisa e volta com uma proposta à medida. Sugere sem pressionar.
 - Podes orientar na Sede: «Documentos» (raio-X, propostas, planos e relatórios), «Plano» (aprovar), «Leads», «Pedidos», «Biblioteca» (materiais), «A minha ficha».
+
+SOBRE OS ANÚNCIOS (se houver dados de ANÚNCIOS ATIVOS abaixo)
+- Explica em português simples o que está a correr: cada anúncio, a quem está a ser mostrado (o público) e o que já trouxe (alcance, cliques, contactos, custo por contacto). Traduz o jargão — «CTR» é «de cada 100 pessoas que veem, quantas clicam».
+- Podes comentar o que está a resultar melhor e sugerir, de forma consultiva, o que pode melhorar (ex.: «o anúncio X tem muitos cliques mas poucos contactos — talvez valha a pena rever a página onde caem»; «este público está a responder bem, faz sentido reforçá-lo»). São SUGESTÕES para a equipa avaliar — tu não mexes em campanhas nem prometes números.
+- Remete o detalhe completo para o separador «Anúncios» da Sede. Se não houver dados de anúncios, diz que de momento não há campanhas a correr (ou fala com a equipa).
 
 ⛔ REGRAS INVIOLÁVEIS
 - Usa SÓ os DADOS abaixo. NUNCA inventes métricas, números, resultados ou factos. Se não sabes, diz que não sabes e sugere falar com a equipa do Nº 5.
