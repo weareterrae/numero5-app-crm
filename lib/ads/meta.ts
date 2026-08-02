@@ -109,3 +109,82 @@ export async function campanhasMeta(
     return { ok: false, erro: String(e).slice(0, 140) };
   }
 }
+
+// ── Nível do anúncio (vista do operador) ─────────────────────────────────────
+
+export type AnuncioMeta = {
+  id: string;
+  nome: string;
+  campanha: string;
+  estado: string;
+  impressoes: number;
+  cliques: number;
+  ctr: number | null; // cliques / impressões
+  investimento: number;
+  leads: number;
+  custo_por_lead: number | null;
+};
+
+/** Anúncios ATIVOS da conta com métricas dos últimos 30 dias. */
+export async function anunciosAtivosMeta(
+  accountId: string,
+): Promise<{ ok: true; anuncios: AnuncioMeta[] } | { ok: false; erro: string }> {
+  const token = process.env.META_ADS_TOKEN?.trim();
+  if (!token) return { ok: false, erro: "META_ADS_TOKEN por configurar no Netlify." };
+  const acc = accountId.replace(/^act_/, "").trim();
+  if (!acc) return { ok: false, erro: "Conta de anúncios por definir." };
+
+  try {
+    const base = `https://graph.facebook.com/${V}/act_${acc}`;
+    const filtro = encodeURIComponent(
+      JSON.stringify([{ field: "effective_status", operator: "IN", value: ["ACTIVE"] }]),
+    );
+    const [rAds, rIns] = await Promise.all([
+      fetch(
+        `${base}/ads?fields=id,name,effective_status,campaign{name}&filtering=${filtro}&limit=100&access_token=${encodeURIComponent(token)}`,
+      ),
+      fetch(
+        `${base}/insights?level=ad&date_preset=last_30d&fields=ad_id,impressions,clicks,spend,actions&limit=200&access_token=${encodeURIComponent(token)}`,
+      ),
+    ]);
+    if (!rAds.ok) {
+      const t = await rAds.text();
+      return { ok: false, erro: `Meta respondeu ${rAds.status}: ${t.slice(0, 140)}` };
+    }
+    const ads = (await rAds.json()) as {
+      data?: { id: string; name: string; effective_status: string; campaign?: { name?: string } }[];
+    };
+    const ins = rIns.ok
+      ? ((await rIns.json()) as {
+          data?: { ad_id?: string; impressions?: string; clicks?: string; spend?: string; actions?: { action_type: string; value: string }[] }[];
+        })
+      : { data: [] };
+    const porAd = new Map((ins.data ?? []).map((i) => [i.ad_id, i]));
+
+    const anuncios: AnuncioMeta[] = (ads.data ?? []).map((a) => {
+      const i = porAd.get(a.id);
+      const impressoes = Number(i?.impressions) || 0;
+      const cliques = Number(i?.clicks) || 0;
+      const investimento = Number(i?.spend) || 0;
+      const leads = (i?.actions ?? [])
+        .filter((x) => ACOES_LEAD.has(x.action_type))
+        .reduce((s, x) => s + (Number(x.value) || 0), 0);
+      return {
+        id: a.id,
+        nome: a.name,
+        campanha: a.campaign?.name ?? "—",
+        estado: a.effective_status,
+        impressoes,
+        cliques,
+        ctr: impressoes > 0 ? cliques / impressoes : null,
+        investimento,
+        leads,
+        custo_por_lead: leads > 0 && investimento > 0 ? investimento / leads : null,
+      };
+    });
+    anuncios.sort((a, b) => b.investimento - a.investimento);
+    return { ok: true, anuncios };
+  } catch (e) {
+    return { ok: false, erro: String(e).slice(0, 140) };
+  }
+}

@@ -14,6 +14,7 @@ const LINKS = [
   { href: "/leads/faturacao", label: "Assinaturas" },
   { href: "/metricas", label: "Métricas" },
   { href: "/avencas", label: "Avenças" },
+  { href: "/anuncios", label: "Anúncios" },
   { href: "/faturacao", label: "Faturação" },
   { href: "/capacidade", label: "Capacidade" },
   { href: "/definicoes/precos", label: "Preços" },
