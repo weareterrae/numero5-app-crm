@@ -19,7 +19,11 @@ function rateLimit(uid: string) {
 }
 
 function semTags(html: string | null | undefined) {
-  return (html ?? "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return (html ?? "")
+    .replace(/<(style|script)[^>]*>[\s\S]*?<\/\1>/gi, " ") // fora CSS/JS embutido
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function inicioMesISO() {
