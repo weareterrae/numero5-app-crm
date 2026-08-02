@@ -28,6 +28,7 @@ import {
   ligarSedeOrg,
   criarAcessoSede,
   removerAcessoSede,
+  copiarDadosFicha,
 } from "../acoes";
 import { criarDiagnostico } from "@/app/(app)/diagnosticos/acoes";
 import { criarProposta } from "@/app/(app)/propostas/acoes";
@@ -102,6 +103,14 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
     .is("cliente_id", null)
     .order("nome");
   const orgsLivres = (orgsLivresRaw ?? []) as { id: string; slug: string; nome: string }[];
+  // Outras fichas — para copiar dados fiscais/responsáveis (grupos multi-marca).
+  const { data: outrasRaw } = await supabase
+    .from("clientes")
+    .select("id, nome_marca")
+    .neq("id", id)
+    .neq("estado", "perdido")
+    .order("nome_marca");
+  const outrasFichas = (outrasRaw ?? []) as { id: string; nome_marca: string }[];
   // Pedidos de serviço abertos na Sede (viram proposta). Tolerante a 0056.
   const { data: pedidosServico } = await supabase
     .from("pedidos")
@@ -768,7 +777,31 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
 
           {/* Dados de faturação */}
           <div className="border-t border-line/60 pt-4">
-            <p className="mb-2 text-xs font-bold text-grey">Dados de faturação</p>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-bold text-grey">Dados de faturação</p>
+              {outrasFichas.length > 0 ? (
+                <span className="flex items-center gap-1.5" title="Mesma empresa, várias marcas? Preenche uma ficha e copia para as outras.">
+                  <select
+                    name="copiar_origem"
+                    defaultValue=""
+                    className="rounded-lg border border-line bg-cream px-2 py-1 text-xs"
+                  >
+                    <option value="">⧉ copiar de outra ficha…</option>
+                    {outrasFichas.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.nome_marca}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    formAction={copiarDadosFicha}
+                    className="rounded-full border border-line px-3 py-1 text-xs font-bold text-grey hover:bg-cream"
+                  >
+                    copiar
+                  </button>
+                </span>
+              ) : null}
+            </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <Campo
                 id="empresa_fiscal"

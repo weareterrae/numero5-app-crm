@@ -408,3 +408,67 @@ export async function removerAcessoSede(formData: FormData) {
   });
   revalidatePath(`/clientes/${clienteId}`);
 }
+
+/**
+ * Copia os dados fiscais + responsáveis de outra ficha — para grupos com
+ * várias marcas (ex.: Quente e Bom / Massa Prima / Água Minda são a mesma
+ * empresa). Preenche-se UMA ficha; nas outras é um clique.
+ * Contactos: só acrescenta os que ainda não existem (por email/nome).
+ */
+export async function copiarDadosFicha(formData: FormData) {
+  const destinoId = texto(formData.get("id"));
+  const origemId = texto(formData.get("copiar_origem"));
+  if (!destinoId || !origemId || destinoId === origemId) return;
+
+  const supabase = await criarClienteServidor();
+  const { data: origem } = await supabase
+    .from("clientes")
+    .select("nome_marca, empresa_fiscal, nif, morada, codigo_postal, localidade")
+    .eq("id", origemId)
+    .maybeSingle();
+  if (!origem) return;
+
+  // Fiscais (update tolerante, à parte — regra da casa para colunas recentes).
+  await supabase
+    .from("clientes")
+    .update({
+      empresa_fiscal: origem.empresa_fiscal,
+      nif: origem.nif,
+      morada: origem.morada,
+      codigo_postal: origem.codigo_postal,
+      localidade: origem.localidade,
+    })
+    .eq("id", destinoId);
+
+  // Responsáveis: acrescenta os que faltam, sem duplicar nem roubar o «principal».
+  const [{ data: contactosOrigem }, { data: contactosDestino }] = await Promise.all([
+    supabase.from("contactos").select("nome, email, telefone, departamento, principal").eq("cliente_id", origemId),
+    supabase.from("contactos").select("nome, email, principal").eq("cliente_id", destinoId),
+  ]);
+  const jaTem = new Set(
+    (contactosDestino ?? []).map((c) => (c.email || c.nome || "").trim().toLowerCase()),
+  );
+  const destinoTemPrincipal = (contactosDestino ?? []).some((c) => c.principal);
+  let copiados = 0;
+  for (const c of contactosOrigem ?? []) {
+    const chave = (c.email || c.nome || "").trim().toLowerCase();
+    if (!chave || jaTem.has(chave)) continue;
+    await supabase.from("contactos").insert({
+      cliente_id: destinoId,
+      nome: c.nome,
+      email: c.email,
+      telefone: c.telefone,
+      departamento: c.departamento,
+      principal: c.principal && !destinoTemPrincipal,
+    });
+    jaTem.add(chave);
+    copiados++;
+  }
+
+  await supabase.from("atividades").insert({
+    cliente_id: destinoId,
+    tipo: "nota",
+    descricao: `⧉ Dados fiscais copiados da ficha «${origem.nome_marca}»${copiados ? ` + ${copiados} responsável(is)` : ""} (mesma empresa, várias marcas).`,
+  });
+  revalidatePath(`/clientes/${destinoId}`);
+}
