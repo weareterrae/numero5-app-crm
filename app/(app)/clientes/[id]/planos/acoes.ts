@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { mesISO } from "@/lib/dominio/producao";
+import { notificarClienteSede } from "@/lib/sede/notificar";
 
 const t = (v: FormDataEntryValue | null) => {
   const s = (v ?? "").toString().trim();
@@ -60,6 +61,8 @@ export async function alternarPartilhaPlano(formData: FormData) {
       ...(ativar ? { estado: "enviado", enviado_em: new Date().toISOString() } : {}),
     })
     .eq("id", id);
+  // Ao publicar, avisa o cliente na Sede por email (nunca bloqueia a partilha).
+  if (ativar && clienteId) await notificarClienteSede(clienteId, "plano");
   revalidatePath(`/clientes/${clienteId}/planos/${id}`);
 }
 
