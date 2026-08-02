@@ -2,7 +2,8 @@ import Link from "next/link";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { euros } from "@/lib/dominio/metricas";
 import { deslocarMes, mesISO, mesLegivel } from "@/lib/dominio/producao";
-import { marcarCobranca } from "./acoes";
+import { marcarCobranca, emitirFaturaIX } from "./acoes";
+import { invoicexpressConfigurado } from "@/lib/faturacao/invoicexpress";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,20 @@ export default async function FaturacaoPage({
   const avencas = (avRes.data ?? []) as unknown as Avenca[];
   const cobrancas = (cobRes.data ?? []) as Cobranca[];
   const cobradoDe = new Map(cobrancas.map((c) => [c.cliente_id, c.estado === "cobrado"]));
+
+  // Faturas InvoiceXpress ligadas (0059) — consulta à parte e tolerante.
+  const temIX = invoicexpressConfigurado();
+  const faturaDe = new Map<string, string>();
+  if (temIX) {
+    const { data: fx } = await supabase
+      .from("cobrancas")
+      .select("cliente_id, fatura_ix_url")
+      .eq("mes", mes)
+      .eq("tipo", "avenca")
+      .not("fatura_ix_id", "is", null);
+    for (const f of (fx ?? []) as { cliente_id: string; fatura_ix_url: string | null }[])
+      if (f.fatura_ix_url) faturaDe.set(f.cliente_id, f.fatura_ix_url);
+  }
   const nomeDe = (c: Avenca["clientes"]) =>
     (Array.isArray(c) ? c[0]?.nome_marca : c?.nome_marca) ?? "Cliente";
 
@@ -112,6 +127,28 @@ export default async function FaturacaoPage({
                   >
                     {jaCobrado ? "cobrado ✓" : "por cobrar"}
                   </span>
+                  {temIX ? (
+                    faturaDe.get(a.cliente_id) ? (
+                      <a
+                        href={faturaDe.get(a.cliente_id)}
+                        target="_blank"
+                        rel="noopener"
+                        className="shrink-0 rounded-full border border-line px-3.5 py-1.5 text-xs font-bold text-grey hover:bg-cream"
+                      >
+                        🧾 ver fatura ↗
+                      </a>
+                    ) : (
+                      <form action={emitirFaturaIX} className="shrink-0">
+                        <input type="hidden" name="cliente_id" value={a.cliente_id} />
+                        <input type="hidden" name="mes" value={mes} />
+                        <input type="hidden" name="tipo" value="avenca" />
+                        <input type="hidden" name="valor" value={a.valor_mensal} />
+                        <button className="rounded-full border border-line px-3.5 py-1.5 text-xs font-bold text-grey hover:bg-cream">
+                          🧾 criar rascunho
+                        </button>
+                      </form>
+                    )
+                  ) : null}
                   <form action={marcarCobranca} className="shrink-0">
                     <input type="hidden" name="cliente_id" value={a.cliente_id} />
                     <input type="hidden" name="mes" value={mes} />
