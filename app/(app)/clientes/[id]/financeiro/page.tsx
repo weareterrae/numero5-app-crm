@@ -17,6 +17,13 @@ import {
 } from "@/lib/dominio/operacao";
 import { dataCurta } from "@/lib/dominio/metricas";
 import { guardarFinanceiro, guardarArranque, guardarPausa, terminarPausa } from "./acoes";
+import {
+  invoicexpressConfigurado,
+  invoicexpressBase,
+  listarDocumentosIX,
+  diasAtraso,
+  type DocIXLista,
+} from "@/lib/faturacao/invoicexpress";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +44,7 @@ export default async function FinanceiroPage({ params }: { params: Promise<{ id:
 
   const { data: cliente } = await supabase
     .from("clientes")
-    .select("id, nome_marca")
+    .select("id, nome_marca, empresa_fiscal")
     .eq("id", id)
     .maybeSingle();
   if (!cliente) notFound();
@@ -87,6 +94,22 @@ export default async function FinanceiroPage({ params }: { params: Promise<{ id:
       () => ({ data: null }),
     );
   const docsFiscais = (docsRaw ?? []) as DocFiscal[];
+
+  // Extrato de conta corrente no InvoiceXpress (por nome fiscal/marca).
+  const nomeIX = (cliente.empresa_fiscal || cliente.nome_marca || "").trim();
+  const chaveNome = nomeIX.toLowerCase();
+  let extratoIX: DocIXLista[] = [];
+  let extratoErro: string | null = null;
+  if (invoicexpressConfigurado() && chaveNome) {
+    const r = await listarDocumentosIX({ estados: ["sent", "settled"], texto: nomeIX, maxPaginas: 3 });
+    if (r.ok) {
+      extratoIX = r.docs.filter((d) => d.cliente.toLowerCase().includes(chaveNome));
+    } else extratoErro = r.erro;
+  }
+  const ehNC = (d: DocIXLista) => d.tipo === "CreditNote";
+  const extPago = extratoIX.filter((d) => !ehNC(d) && d.estado === "settled").reduce((s, d) => s + d.total, 0);
+  const extPendente = extratoIX.filter((d) => !ehNC(d) && d.estado !== "settled").reduce((s, d) => s + d.total, 0);
+  const extNC = extratoIX.filter(ehNC).reduce((s, d) => s + d.total, 0);
 
   const estado = (fin.estado ?? "regular") as EstadoFinanceiro;
   const cor = corEstadoFinanceiro(estado);
@@ -156,6 +179,103 @@ export default async function FinanceiroPage({ params }: { params: Promise<{ id:
           <p className="mt-2 text-[11px] text-soft">
             A emissão faz-se na página Faturação. O cliente descarrega os PDF na Sede → Pagamentos.
           </p>
+        </section>
+      )}
+
+      {/* Conta corrente no InvoiceXpress */}
+      {invoicexpressConfigurado() && (
+        <section className="rounded-xl border border-line bg-white p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-display text-lg font-extrabold">Conta corrente · InvoiceXpress</h2>
+            {invoicexpressBase() ? (
+              <a
+                href={`${invoicexpressBase()}/invoices`}
+                target="_blank"
+                rel="noopener"
+                className="text-xs font-bold text-gold-dark hover:underline"
+              >
+                abrir no InvoiceXpress ↗
+              </a>
+            ) : null}
+          </div>
+          <p className="mt-0.5 text-[11px] text-soft">
+            Documentos emitidos a «{nomeIX}» na conta InvoiceXpress.
+          </p>
+          {extratoErro ? (
+            <p className="mt-2 text-sm text-soft">Não consegui ler o InvoiceXpress agora ({extratoErro}).</p>
+          ) : extratoIX.length === 0 ? (
+            <p className="mt-2 text-sm text-soft">Sem documentos no InvoiceXpress com este nome.</p>
+          ) : (
+            <>
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                <div className={`rounded-xl border p-3 ${extPendente > 0 ? "border-bad/40 bg-bad/5" : "border-line"}`}>
+                  <p className={`font-display text-xl font-extrabold tabular-nums ${extPendente > 0 ? "text-bad" : ""}`}>{euros(extPendente)}</p>
+                  <p className="text-[11px] text-grey">por regularizar</p>
+                </div>
+                <div className="rounded-xl border border-line p-3">
+                  <p className="font-display text-xl font-extrabold tabular-nums text-good">{euros(extPago)}</p>
+                  <p className="text-[11px] text-grey">pago</p>
+                </div>
+                <div className="rounded-xl border border-line p-3">
+                  <p className="font-display text-xl font-extrabold tabular-nums">{extratoIX.length}</p>
+                  <p className="text-[11px] text-grey">documentos{extNC > 0 ? ` · NC ${euros(extNC)}` : ""}</p>
+                </div>
+              </div>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full min-w-[30rem] border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-line text-left text-xs text-grey">
+                      <th className="py-1.5 pr-3 font-bold">Data</th>
+                      <th className="py-1.5 pr-3 font-bold">Documento</th>
+                      <th className="py-1.5 pr-3 text-right font-bold">Valor</th>
+                      <th className="py-1.5 pr-3 font-bold">Estado</th>
+                      <th className="py-1.5 font-bold"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {extratoIX.map((d) => {
+                      const nc = ehNC(d);
+                      const pago = d.estado === "settled";
+                      const atraso = !nc && !pago ? diasAtraso(d.vencimento) : 0;
+                      return (
+                        <tr key={d.id} className="border-b border-line/50">
+                          <td className="py-2 pr-3 text-grey">{d.data ?? "—"}</td>
+                          <td className="py-2 pr-3 font-bold">
+                            {nc ? "NC " : ""}
+                            {d.numero ?? d.id}
+                          </td>
+                          <td className={`py-2 pr-3 text-right tabular-nums ${nc ? "text-warn" : ""}`}>
+                            {nc ? "−" : ""}
+                            {euros(d.total)}
+                          </td>
+                          <td className="py-2 pr-3">
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                                nc
+                                  ? "bg-warn/15 text-warn"
+                                  : pago
+                                    ? "bg-good/15 text-good"
+                                    : "bg-bad/10 text-bad"
+                              }`}
+                            >
+                              {nc ? "nota de crédito" : pago ? "paga ✓" : atraso > 0 ? `vencida há ${atraso} d` : "por regularizar"}
+                            </span>
+                          </td>
+                          <td className="py-2 text-right">
+                            {d.permalink ? (
+                              <a href={d.permalink} target="_blank" rel="noopener" className="text-xs font-bold text-gold-dark hover:underline">
+                                ver ↗
+                              </a>
+                            ) : null}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </section>
       )}
 

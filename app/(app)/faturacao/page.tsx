@@ -3,7 +3,12 @@ import { criarClienteServidor } from "@/lib/supabase/server";
 import { euros } from "@/lib/dominio/metricas";
 import { deslocarMes, mesISO, mesLegivel } from "@/lib/dominio/producao";
 import { marcarCobranca, emitirFaturaIX, enviarFaturaEmailIX, criarNotaCreditoIX } from "./acoes";
-import { invoicexpressConfigurado } from "@/lib/faturacao/invoicexpress";
+import {
+  invoicexpressConfigurado,
+  invoicexpressBase,
+  listarDocumentosIX,
+  diasAtraso,
+} from "@/lib/faturacao/invoicexpress";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +42,20 @@ export default async function FaturacaoPage({
   const avencas = (avRes.data ?? []) as unknown as Avenca[];
   const cobrancas = (cobRes.data ?? []) as Cobranca[];
   const cobradoDe = new Map(cobrancas.map((c) => [c.cliente_id, c.estado === "cobrado"]));
+
+  // Mapa de faturas por regularizar no InvoiceXpress (conta inteira).
+  const ixBase = invoicexpressBase();
+  const pendentesIX = invoicexpressConfigurado()
+    ? await listarDocumentosIX({ estados: ["sent"], maxPaginas: 5 })
+    : null;
+  const pendentes =
+    pendentesIX && pendentesIX.ok
+      ? pendentesIX.docs
+          .filter((d) => d.tipo !== "CreditNote")
+          .sort((a, b) => diasAtraso(b.vencimento) - diasAtraso(a.vencimento))
+      : [];
+  const totalPendente = pendentes.reduce((s, d) => s + d.total, 0);
+  const vencidas = pendentes.filter((d) => diasAtraso(d.vencimento) > 0);
 
   // Documentos InvoiceXpress ligados (0059/0060) — consulta à parte e tolerante.
   type DocIX = {
@@ -82,6 +101,16 @@ export default async function FaturacaoPage({
           <p className="text-sm text-grey">{mesLegivel(mes)}</p>
         </div>
         <div className="flex items-center gap-2">
+          {ixBase ? (
+            <a
+              href={`${ixBase}/invoices`}
+              target="_blank"
+              rel="noopener"
+              className="rounded-full bg-ink px-4 py-1.5 text-xs font-bold text-cream hover:brightness-110"
+            >
+              🧾 Abrir InvoiceXpress ↗
+            </a>
+          ) : null}
           <Link href={`/faturacao?mes=${deslocarMes(mes, -1)}`} className="rounded-full border border-line px-3 py-1.5 text-sm font-bold text-grey">←</Link>
           <Link href={`/faturacao?mes=${mesISO()}`} className="rounded-full border border-line px-3 py-1.5 text-xs font-bold text-grey">este mês</Link>
           <Link href={`/faturacao?mes=${deslocarMes(mes, 1)}`} className="rounded-full border border-line px-3 py-1.5 text-sm font-bold text-grey">→</Link>
@@ -239,6 +268,66 @@ export default async function FaturacaoPage({
           </p>
         </>
       )}
+
+      {/* Mapa de faturas por regularizar — conta InvoiceXpress inteira */}
+      {pendentesIX ? (
+        <section className="rounded-xl border border-line bg-white p-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="font-display text-lg font-extrabold">Por regularizar no InvoiceXpress</h2>
+            {pendentes.length > 0 ? (
+              <p className="text-sm">
+                <span className="font-display text-xl font-extrabold text-bad tabular-nums">{euros(totalPendente)}</span>
+                <span className="ml-2 text-xs text-grey">
+                  em {pendentes.length} fatura{pendentes.length === 1 ? "" : "s"}
+                  {vencidas.length > 0 ? ` · ${vencidas.length} vencida${vencidas.length === 1 ? "" : "s"}` : ""}
+                </span>
+              </p>
+            ) : null}
+          </div>
+          {!pendentesIX.ok ? (
+            <p className="mt-2 text-sm text-soft">Não consegui ler o InvoiceXpress agora ({pendentesIX.erro}). Tenta recarregar.</p>
+          ) : pendentes.length === 0 ? (
+            <p className="mt-2 text-sm font-bold text-good">✓ Não há faturas por regularizar. Tudo em dia. 🖐️</p>
+          ) : (
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full min-w-[34rem] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-line text-left text-xs text-grey">
+                    <th className="py-1.5 pr-3 font-bold">Documento</th>
+                    <th className="py-1.5 pr-3 font-bold">Cliente</th>
+                    <th className="py-1.5 pr-3 font-bold">Vencimento</th>
+                    <th className="py-1.5 pr-3 text-right font-bold">Valor</th>
+                    <th className="py-1.5 font-bold"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendentes.map((d) => {
+                    const atraso = diasAtraso(d.vencimento);
+                    return (
+                      <tr key={d.id} className="border-b border-line/50">
+                        <td className="py-2 pr-3 font-bold">{d.numero ?? d.id}</td>
+                        <td className="max-w-[16rem] truncate py-2 pr-3">{d.cliente}</td>
+                        <td className={`py-2 pr-3 ${atraso > 0 ? "font-bold text-bad" : "text-grey"}`}>
+                          {d.vencimento ?? "—"}
+                          {atraso > 0 ? ` · há ${atraso} d` : ""}
+                        </td>
+                        <td className="py-2 pr-3 text-right tabular-nums">{euros(d.total)}</td>
+                        <td className="py-2 text-right">
+                          {d.permalink ? (
+                            <a href={d.permalink} target="_blank" rel="noopener" className="text-xs font-bold text-gold-dark hover:underline">
+                              ver ↗
+                            </a>
+                          ) : null}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      ) : null}
     </div>
   );
 }

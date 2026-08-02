@@ -261,3 +261,89 @@ export async function criarNotaCreditoRascunho(
     return { ok: false, erro: String(e) };
   }
 }
+
+// ── Listagens (conta corrente e mapa de pendentes) ───────────────────────────
+
+/** Base do backoffice (para links «abrir no InvoiceXpress»), ou null. */
+export function invoicexpressBase(): string | null {
+  const conta = process.env.INVOICEXPRESS_ACCOUNT?.trim();
+  return conta ? `https://${conta}.app.invoicexpress.com` : null;
+}
+
+export type DocIXLista = {
+  id: number;
+  tipo: string; // Invoice | InvoiceReceipt | SimplifiedInvoice | CreditNote
+  numero: string | null;
+  data: string | null; // dd/mm/yyyy
+  vencimento: string | null; // dd/mm/yyyy
+  cliente: string;
+  total: number;
+  estado: string; // draft | sent (por regularizar) | settled (paga) | canceled
+  permalink: string | null;
+};
+
+const TIPOS_DOC = ["Invoice", "SimplifiedInvoice", "InvoiceReceipt", "CreditNote"];
+
+/**
+ * Lista documentos do InvoiceXpress. `estados`: sent = emitida por regularizar,
+ * settled = paga. `texto` filtra (nome do cliente, nº…). Pagina até `maxPaginas`.
+ */
+export async function listarDocumentosIX(opts: {
+  estados: string[];
+  texto?: string;
+  maxPaginas?: number;
+}): Promise<{ ok: true; docs: DocIXLista[] } | { ok: false; erro: string }> {
+  const c = cfgOuErro();
+  if (!c) return { ok: false, erro: "InvoiceXpress por configurar." };
+  const docs: DocIXLista[] = [];
+  const maxPag = Math.min(opts.maxPaginas ?? 4, 10);
+  try {
+    for (let pag = 1; pag <= maxPag; pag++) {
+      const q = new URLSearchParams();
+      q.set("api_key", c.chave);
+      q.set("per_page", "50");
+      q.set("page", String(pag));
+      q.set("non_archived", "true");
+      for (const t of TIPOS_DOC) q.append("type[]", t);
+      for (const s of opts.estados) q.append("status[]", s);
+      if (opts.texto) q.set("text", opts.texto);
+      const r = await fetch(`${c.base}/invoices.json?${q.toString()}`, {
+        headers: { accept: "application/json" },
+      });
+      if (!r.ok) return { ok: false, erro: `listar → ${r.status}` };
+      const d = (await r.json()) as {
+        invoices?: Record<string, unknown>[];
+        pagination?: { total_pages?: number };
+      };
+      for (const raw of d.invoices ?? []) {
+        const cli = (raw.client ?? {}) as { name?: string };
+        docs.push({
+          id: Number(raw.id) || 0,
+          tipo: String(raw.type ?? "Invoice"),
+          numero: (raw.inverted_sequence_number as string) || (raw.sequence_number as string) || null,
+          data: (raw.date as string) || null,
+          vencimento: (raw.due_date as string) || null,
+          cliente: cli.name || "?",
+          total: Number(raw.total) || 0,
+          estado: String(raw.status ?? "?"),
+          permalink: (raw.permalink as string) || null,
+        });
+      }
+      const totalPags = d.pagination?.total_pages ?? 1;
+      if (pag >= totalPags) break;
+    }
+    return { ok: true, docs };
+  } catch (e) {
+    return { ok: false, erro: String(e) };
+  }
+}
+
+/** Dias de atraso face ao vencimento dd/mm/yyyy (0 se não vencida/sem data). */
+export function diasAtraso(vencimento: string | null, hoje = new Date()): number {
+  if (!vencimento) return 0;
+  const m = vencimento.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!m) return 0;
+  const v = new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+  const diff = Math.floor((hoje.getTime() - v.getTime()) / 86_400_000);
+  return Math.max(0, diff);
+}
