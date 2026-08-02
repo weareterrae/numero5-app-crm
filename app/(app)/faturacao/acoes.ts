@@ -371,3 +371,61 @@ export async function criarNotaCreditoLivre(formData: FormData) {
       : `/faturacao?ix_erro=${encodeURIComponent(r.erro.slice(0, 120))}`,
   );
 }
+
+/**
+ * Envia por email uma fatura do mapa de pendentes: cruza o nome do cliente no
+ * InvoiceXpress com as fichas (empresa fiscal/marca) para achar o email do
+ * contacto principal. Sem correspondência, avisa em vez de adivinhar.
+ */
+export async function enviarFaturaEmailLivre(formData: FormData) {
+  const faturaId = Number(t(formData.get("fatura_id")));
+  const clienteNome = (t(formData.get("cliente_nome")) ?? "").toLowerCase();
+  if (!Number.isFinite(faturaId) || faturaId <= 0 || !clienteNome) return;
+
+  const supabase = await criarClienteServidor();
+  const { data: fichas } = await supabase
+    .from("clientes")
+    .select("id, nome_marca, empresa_fiscal");
+
+  // Melhor correspondência: o nome da ficha contido no nome IX (o mais longo ganha).
+  let melhor: { id: string; nome: string } | null = null;
+  for (const f of fichas ?? []) {
+    for (const nome of [f.empresa_fiscal, f.nome_marca]) {
+      const chave = (nome ?? "").trim().toLowerCase();
+      if (chave.length >= 4 && clienteNome.includes(chave) && (!melhor || chave.length > melhor.nome.length)) {
+        melhor = { id: f.id, nome: chave };
+      }
+    }
+  }
+  if (!melhor) {
+    redirect(`/faturacao?ix_erro=${encodeURIComponent("Não encontrei ficha para este cliente — envia pelo InvoiceXpress ou cria a ficha primeiro.")}`);
+    return;
+  }
+
+  const { data: contacto } = await supabase
+    .from("contactos")
+    .select("email")
+    .eq("cliente_id", melhor.id)
+    .eq("principal", true)
+    .limit(1)
+    .maybeSingle();
+  if (!contacto?.email) {
+    redirect(`/faturacao?ix_erro=${encodeURIComponent("A ficha não tem contacto principal com email — preenche-o e volta a tentar.")}`);
+    return;
+  }
+
+  const r = await enviarFaturaEmail(faturaId, contacto.email);
+  await supabase.from("atividades").insert({
+    cliente_id: melhor.id,
+    tipo: "nota",
+    descricao: r.ok
+      ? `📧 Fatura enviada por email ao cliente (${contacto.email}) via InvoiceXpress.`
+      : `⚠️ Falhou o envio da fatura por email: ${r.erro ?? "?"}`,
+  });
+  revalidatePath("/faturacao");
+  redirect(
+    r.ok
+      ? `/faturacao?ix_ok=${encodeURIComponent(`Fatura enviada para ${contacto.email}.`)}`
+      : `/faturacao?ix_erro=${encodeURIComponent((r.erro ?? "falhou o envio").slice(0, 120))}`,
+  );
+}

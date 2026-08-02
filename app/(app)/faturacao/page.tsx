@@ -9,6 +9,7 @@ import {
   criarNotaCreditoIX,
   criarReciboLivre,
   criarNotaCreditoLivre,
+  enviarFaturaEmailLivre,
 } from "./acoes";
 import {
   invoicexpressConfigurado,
@@ -353,6 +354,16 @@ export default async function FaturacaoPage({
                                 title="Recebi — criar recibo do valor total"
                               >
                                 💶 recibo
+                              </button>
+                            </form>
+                            <form action={enviarFaturaEmailLivre}>
+                              <input type="hidden" name="fatura_id" value={d.id} />
+                              <input type="hidden" name="cliente_nome" value={d.cliente} />
+                              <button
+                                className="rounded-full border border-line px-2.5 py-1 text-[11px] font-bold text-grey hover:bg-cream"
+                                title="Enviar a fatura por email ao contacto principal da ficha"
+                              >
+                                📧
                               </button>
                             </form>
                             <form action={criarNotaCreditoLivre}>
