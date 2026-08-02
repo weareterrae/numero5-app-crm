@@ -59,7 +59,8 @@ export async function campanhasMeta(
     const [rConta, rCamp, rIns] = await Promise.all([
       fetch(`${base}?fields=currency&access_token=${encodeURIComponent(token)}`),
       fetch(
-        `${base}/campaigns?fields=id,name,effective_status,objective&limit=50&access_token=${encodeURIComponent(token)}`,
+        // effective_status explícito: sem ele a API omite campanhas (visto na Massa Prima).
+        `${base}/campaigns?fields=id,name,effective_status,objective&effective_status=${encodeURIComponent('["ACTIVE","PAUSED","ARCHIVED"]')}&limit=50&access_token=${encodeURIComponent(token)}`,
       ),
       fetch(
         `${base}/insights?level=campaign&date_preset=last_30d&fields=campaign_id,reach,impressions,clicks,spend,actions&limit=50&access_token=${encodeURIComponent(token)}`,
