@@ -25,6 +25,7 @@ import {
   concluirFollowup,
   editarContacto,
   guardarOnboarding,
+  ligarSedeOrg,
 } from "../acoes";
 import { criarDiagnostico } from "@/app/(app)/diagnosticos/acoes";
 import { criarProposta } from "@/app/(app)/propostas/acoes";
@@ -51,8 +52,22 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
   if (!cliente) notFound();
 
   const supabase = await criarClienteServidor();
-  // Org da Sede ligada a este cliente (para «Ver como cliente»). Tolerante.
-  const { data: orgLigada } = await supabase.from("orgs").select("slug").eq("cliente_id", id).maybeSingle();
+  // Orgs da Sede ligadas a este cliente (pode haver mais de uma, ex.: marca +
+  // recrutamento). maybeSingle() falhava com 2 linhas e escondia a ligação.
+  const { data: orgsLigadasRaw } = await supabase
+    .from("orgs")
+    .select("slug, nome")
+    .eq("cliente_id", id)
+    .order("slug");
+  const orgsLigadas = (orgsLigadasRaw ?? []) as { slug: string; nome: string }[];
+  const orgLigada = orgsLigadas[0] ?? null;
+  // Orgs livres (sem cliente) — para associar a Sede a esta ficha.
+  const { data: orgsLivresRaw } = await supabase
+    .from("orgs")
+    .select("id, slug, nome")
+    .is("cliente_id", null)
+    .order("nome");
+  const orgsLivres = (orgsLivresRaw ?? []) as { id: string; slug: string; nome: string }[];
   // Pedidos de serviço abertos na Sede (viram proposta). Tolerante a 0056.
   const { data: pedidosServico } = await supabase
     .from("pedidos")
@@ -187,96 +202,59 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
             <p className="mt-2 text-sm text-bad">Perdido: {cliente.motivo_perda}</p>
           )}
         </div>
-        <div className="flex flex-col items-end gap-2">
-          <div className="flex gap-2">
-            <Link
-              href={`/clientes/${cliente.id}/conteudo`}
-              className="rounded-full bg-gold px-4 py-2 text-sm font-bold text-ink"
-            >
-              🧠 Brief de conteúdo
-            </Link>
-            <Link
-              href={`/clientes/${cliente.id}/producao`}
-              className="rounded-full bg-ink px-4 py-2 text-sm font-bold text-cream"
-            >
-              📋 Produção
-            </Link>
-            <Link
-              href={`/clientes/${cliente.id}/reunioes`}
-              className="rounded-full border border-line px-4 py-2 text-sm font-bold text-ink"
-            >
-              🗓️ Reuniões
-            </Link>
-            <Link
-              href={`/clientes/${cliente.id}/aprovacoes`}
-              className="rounded-full border border-line px-4 py-2 text-sm font-bold text-ink"
-            >
-              ✅ Aprovações
-            </Link>
-            <Link
-              href={`/clientes/${cliente.id}/revisoes`}
-              className="rounded-full border border-line px-4 py-2 text-sm font-bold text-ink"
-            >
-              ✏️ Revisões
-            </Link>
-            <Link
-              href={`/clientes/${cliente.id}/financeiro`}
-              className="rounded-full border border-line px-4 py-2 text-sm font-bold text-ink"
-            >
-              💶 Financeiro
-            </Link>
-            <Link
-              href={`/clientes/${cliente.id}/rentabilidade`}
-              className="rounded-full border border-line px-4 py-2 text-sm font-bold text-ink"
-            >
-              📈 Rentabilidade
-            </Link>
-            <Link
-              href={`/clientes/${cliente.id}/extras`}
-              className="rounded-full border border-line px-4 py-2 text-sm font-bold text-ink"
-            >
-              ➕ Ordens de alteração
-            </Link>
-            <Link
-              href={`/clientes/${cliente.id}/autorizacoes`}
-              className="rounded-full border border-line px-4 py-2 text-sm font-bold text-ink"
-            >
-              🔏 Autorizações
-            </Link>
-            <Link
-              href={`/clientes/${cliente.id}/objetivos`}
-              className="rounded-full border border-line px-4 py-2 text-sm font-bold text-ink"
-            >
-              🎯 Objetivos & KPIs
-            </Link>
-            <Link
-              href={`/clientes/${cliente.id}/biblioteca`}
-              className="rounded-full border border-line px-4 py-2 text-sm font-bold text-ink"
-            >
-              📚 Biblioteca
-            </Link>
-            <Link
-              href={`/clientes/${cliente.id}/pedidos`}
-              className="rounded-full border border-line px-4 py-2 text-sm font-bold text-ink"
-            >
-              🎫 Pedidos
-            </Link>
-            {orgLigada ? (
-              <a
-                href={`/sede/ver/${orgLigada.slug}`}
-                className="rounded-full bg-ink px-4 py-2 text-sm font-bold text-cream hover:brightness-110"
-              >
-                👀 Ver como cliente
-              </a>
-            ) : null}
-          </div>
-          <MudarEstado
-            clienteId={cliente.id}
-            estadoAtual={cliente.estado}
-            estados={ESTADOS.map((e) => [e, ESTADO_LABEL[e as Estado]])}
-          />
-        </div>
+        <MudarEstado
+          clienteId={cliente.id}
+          estadoAtual={cliente.estado}
+          estados={ESTADOS.map((e) => [e, ESTADO_LABEL[e as Estado]])}
+        />
       </div>
+
+      {/* Atalhos do cliente — pills compactas, nunca quebram linha */}
+      <nav className="flex flex-wrap items-center gap-1.5">
+        <Link
+          href={`/clientes/${cliente.id}/conteudo`}
+          className="whitespace-nowrap rounded-full bg-gold px-3.5 py-1.5 text-xs font-bold text-ink hover:brightness-105"
+        >
+          🧠 Brief de conteúdo
+        </Link>
+        <Link
+          href={`/clientes/${cliente.id}/producao`}
+          className="whitespace-nowrap rounded-full bg-ink px-3.5 py-1.5 text-xs font-bold text-cream hover:brightness-110"
+        >
+          📋 Produção
+        </Link>
+        {orgLigada ? (
+          <a
+            href={`/sede/ver/${orgLigada.slug}`}
+            className="whitespace-nowrap rounded-full border-2 border-gold px-3.5 py-1 text-xs font-bold text-gold-dark hover:bg-gold hover:text-ink"
+          >
+            👀 Ver como cliente
+          </a>
+        ) : null}
+        <span className="mx-1 hidden h-4 w-px bg-line sm:block" aria-hidden />
+        {(
+          [
+            ["reunioes", "🗓️", "Reuniões"],
+            ["aprovacoes", "✅", "Aprovações"],
+            ["revisoes", "✏️", "Revisões"],
+            ["financeiro", "💶", "Financeiro"],
+            ["rentabilidade", "📈", "Rentabilidade"],
+            ["extras", "➕", "Ordens"],
+            ["autorizacoes", "🔏", "Autorizações"],
+            ["objetivos", "🎯", "Objetivos"],
+            ["biblioteca", "📚", "Biblioteca"],
+            ["pedidos", "🎫", "Pedidos"],
+          ] as const
+        ).map(([rota, icone, rotulo]) => (
+          <Link
+            key={rota}
+            href={`/clientes/${cliente.id}/${rota}`}
+            className="whitespace-nowrap rounded-full border border-line bg-white px-3 py-1.5 text-xs font-bold text-grey hover:border-gold/60 hover:text-ink"
+          >
+            {icone} {rotulo}
+          </Link>
+        ))}
+      </nav>
 
       {/* Na Sede do cliente — o espelho do que o cliente vê e do que espera por nós */}
       {(() => {
@@ -297,16 +275,21 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
           <section className="rounded-xl border border-line bg-white p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-bold">🏠 Na Sede do cliente</h2>
-              {orgLigada ? (
-                <a
-                  href={`/sede/ver/${orgLigada.slug}`}
-                  className="text-xs font-bold text-gold-dark hover:underline"
-                >
-                  👀 Ver como cliente →
-                </a>
+              {orgsLigadas.length > 0 ? (
+                <span className="flex flex-wrap gap-2">
+                  {orgsLigadas.map((o) => (
+                    <a
+                      key={o.slug}
+                      href={`/sede/ver/${o.slug}`}
+                      className="text-xs font-bold text-gold-dark hover:underline"
+                    >
+                      👀 {orgsLigadas.length > 1 ? o.nome : "Ver como cliente"} →
+                    </a>
+                  ))}
+                </span>
               ) : null}
             </div>
-            {orgLigada ? (
+            {orgsLigadas.length > 0 ? (
               <div className="mt-3 flex flex-wrap gap-2">
                 {pedProp > 0 ? <Chip n={pedProp} txt="pedido(s) de serviço → fazer proposta" alerta /> : null}
                 {propPorDecidir > 0 ? <Chip n={propPorDecidir} txt="proposta(s) à espera do cliente" alerta /> : null}
@@ -317,9 +300,36 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
                 ) : null}
               </div>
             ) : (
-              <p className="mt-2 text-xs text-grey">
-                Este cliente ainda não tem acesso à Sede ligado. Cria/associa a conta para ele entrar.
-              </p>
+              <div className="mt-2">
+                <p className="text-xs text-grey">
+                  Este cliente ainda não tem a Sede ligada. Associa uma organização para o portal
+                  (leads, relatórios, planos) ficar ligado a esta ficha.
+                </p>
+                {orgsLivres.length > 0 ? (
+                  <form action={ligarSedeOrg} className="mt-2 flex flex-wrap items-center gap-2">
+                    <input type="hidden" name="cliente_id" value={cliente.id} />
+                    <select
+                      name="org_id"
+                      className="rounded-lg border border-line bg-cream px-2.5 py-2 text-sm"
+                      required
+                    >
+                      <option value="">— escolhe a organização —</option>
+                      {orgsLivres.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.nome}
+                        </option>
+                      ))}
+                    </select>
+                    <button className="rounded-full bg-ink px-4 py-2 text-xs font-bold text-cream hover:brightness-110">
+                      Ligar à Sede
+                    </button>
+                  </form>
+                ) : (
+                  <p className="mt-1 text-xs text-soft">
+                    Não há organizações livres — cria primeiro a org do cliente (em Leads) e volta cá.
+                  </p>
+                )}
+              </div>
             )}
           </section>
         );

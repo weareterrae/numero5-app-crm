@@ -248,3 +248,19 @@ export async function guardarComplexidade(formData: FormData) {
   revalidatePath(`/clientes/${id}/rentabilidade`);
   revalidatePath(`/clientes/${id}`);
 }
+
+/** Liga uma organização da Sede (sem cliente) a esta ficha — ativa o portal. */
+export async function ligarSedeOrg(formData: FormData) {
+  const clienteId = (formData.get("cliente_id") ?? "").toString();
+  const orgId = (formData.get("org_id") ?? "").toString();
+  if (!clienteId || !orgId) return;
+  const supabase = await criarClienteServidor();
+  // Só liga orgs livres — nunca rouba a org de outro cliente.
+  await supabase.from("orgs").update({ cliente_id: clienteId }).eq("id", orgId).is("cliente_id", null);
+  await supabase.from("atividades").insert({
+    cliente_id: clienteId,
+    tipo: "nota",
+    descricao: "🏠 Sede ligada a esta ficha (org associada).",
+  });
+  revalidatePath(`/clientes/${clienteId}`);
+}
