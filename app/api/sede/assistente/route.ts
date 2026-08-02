@@ -105,6 +105,7 @@ export async function POST(req: NextRequest) {
       .from("planos")
       .select("titulo, estado")
       .eq("cliente_id", clienteId)
+      .eq("arquivado", false)
       .in("estado", ["enviado", "aprovado", "alteracoes"])
       .order("mes", { ascending: false })
       .limit(1)

@@ -74,6 +74,7 @@ export async function gerarResumoMes() {
     .from("planos")
     .select("titulo, estado")
     .eq("cliente_id", ctx.clienteId)
+    .eq("arquivado", false)
     .in("estado", ["enviado", "aprovado", "alteracoes"])
     .order("mes", { ascending: false })
     .limit(1)

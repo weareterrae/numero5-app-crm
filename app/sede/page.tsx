@@ -80,6 +80,7 @@ export default async function SedePainel() {
       .from("planos")
       .select("id")
       .eq("cliente_id", ctx.clienteId)
+      .eq("arquivado", false)
       .eq("estado", "enviado");
     aprovacoesPendentes = planos?.length ?? 0;
 

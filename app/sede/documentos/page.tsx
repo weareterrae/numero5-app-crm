@@ -57,7 +57,8 @@ export default async function SedeDocumentos() {
       .order("created_at", { ascending: false }),
     svc.from("planos")
       .select("id, mes, titulo, estado")
-      .eq("cliente_id", c).in("estado", ["enviado", "aprovado", "alteracoes", "recusado"])
+      .eq("cliente_id", c).eq("arquivado", false)
+      .in("estado", ["enviado", "aprovado", "alteracoes", "recusado"])
       .order("mes", { ascending: false }),
     svc.from("relatorios")
       .select("id, mes, titulo, estado, visto_em")

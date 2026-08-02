@@ -34,6 +34,7 @@ export default async function SedePlano({
     .from("planos")
     .select("id, mes, estado")
     .eq("cliente_id", ctx.clienteId)
+    .eq("arquivado", false) // ocultados pelo operador não entram na Sede
     .in("estado", ["enviado", "aprovado", "alteracoes", "recusado"])
     .order("mes", { ascending: false });
   const planos = lista ?? [];
