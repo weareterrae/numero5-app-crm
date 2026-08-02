@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { cookies } from "next/headers";
 import { criarClienteServidor, criarClienteServico } from "@/lib/supabase/server";
 import { obterIA } from "@/lib/ia/provider";
+import { canaisQueVendem, leadsLentas, rotuloOrigem, type LeadSinal } from "@/lib/sede/sinais";
 
 // Rate-limit simples por utilizador (melhor-esforço, por instância).
 const balde = new Map<string, { t: number; c: number }>();
@@ -116,17 +117,21 @@ export async function POST(req: NextRequest) {
   }
 
   // leads (orgs-keyed) via RLS + filtro por org
-  const { data: leads } = await supabase
+  const { data: leadsRaw } = await supabase
     .from("crm_leads")
-    .select("primeira_resposta_at, resultado, arquivado, created_at")
+    .select("primeira_resposta_at, resultado, arquivado, created_at, origem, valor_negocio, ganho_em")
     .eq("org_id", orgId)
     .eq("arquivado", false);
-  if (leads) {
+  if (leadsRaw) {
+    const leadsS = leadsRaw as LeadSinal[];
     const desde = inicioMesISO();
-    const mes = leads.filter((l) => l.created_at && l.created_at >= desde).length;
-    const porResp = leads.filter((l) => !l.primeira_resposta_at && l.resultado === "aberto").length;
-    const ganhos = leads.filter((l) => l.resultado === "ganho").length;
-    L.push(`--- LEADS ---\nEste mês: ${mes} · Por responder: ${porResp} · Vendas fechadas: ${ganhos}.`);
+    const mes = leadsS.filter((l) => l.created_at && l.created_at >= desde).length;
+    const porResp = leadsS.filter((l) => !l.primeira_resposta_at && l.resultado === "aberto").length;
+    const ganhos = leadsS.filter((l) => l.resultado === "ganho").length;
+    const lentas = leadsLentas(leadsS);
+    L.push(`--- LEADS ---\nEste mês: ${mes} · Por responder: ${porResp} · Vendas fechadas: ${ganhos} · Por responder há +24h: ${lentas}.`);
+    const canais = canaisQueVendem(leadsS).filter((c) => c.total > 0).slice(0, 3);
+    if (canais.length) L.push(`Canais que mais venderam: ${canais.map((c) => `${rotuloOrigem(c.origem)} (${c.n})`).join(", ")}.`);
   }
 
   const SISTEMA = `És o assistente de IA de ${marca} — vives dentro do portal (a Sede) e falas com o dono/equipa de ${marca}. Conheces o negócio a partir dos DADOS abaixo (a ficha que mantêm, os relatórios e o plano que o Nº 5 produz, as leads e as vendas). O Nº 5 é a agência de marketing que trabalha para ${marca}.

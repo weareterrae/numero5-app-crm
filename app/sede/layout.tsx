@@ -12,6 +12,7 @@ const LINKS = [
   { href: "/sede/pedidos", label: "Pedidos" },
   { href: "/sede/servicos", label: "Serviços" },
   { href: "/sede/biblioteca", label: "Biblioteca" },
+  { href: "/sede/pagamentos", label: "Pagamentos" },
   { href: "/sede/ficha", label: "A minha ficha" },
 ];
 
