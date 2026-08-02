@@ -2,7 +2,14 @@ import Link from "next/link";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { euros } from "@/lib/dominio/metricas";
 import { deslocarMes, mesISO, mesLegivel } from "@/lib/dominio/producao";
-import { marcarCobranca, emitirFaturaIX, enviarFaturaEmailIX, criarNotaCreditoIX } from "./acoes";
+import {
+  marcarCobranca,
+  emitirFaturaIX,
+  enviarFaturaEmailIX,
+  criarNotaCreditoIX,
+  criarReciboLivre,
+  criarNotaCreditoLivre,
+} from "./acoes";
 import {
   invoicexpressConfigurado,
   invoicexpressBase,
@@ -23,9 +30,9 @@ type Cobranca = { cliente_id: string; estado: string };
 export default async function FaturacaoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mes?: string }>;
+  searchParams: Promise<{ mes?: string; ix_ok?: string; ix_erro?: string }>;
 }) {
-  const { mes: mesQuery } = await searchParams;
+  const { mes: mesQuery, ix_ok, ix_erro } = await searchParams;
   const mes = mesQuery ?? mesISO();
   const supabase = await criarClienteServidor();
 
@@ -102,20 +109,39 @@ export default async function FaturacaoPage({
         </div>
         <div className="flex items-center gap-2">
           {ixBase ? (
-            <a
-              href={`${ixBase}/invoices`}
-              target="_blank"
-              rel="noopener"
-              className="rounded-full bg-ink px-4 py-1.5 text-xs font-bold text-cream hover:brightness-110"
-            >
-              🧾 Abrir InvoiceXpress ↗
-            </a>
+            <>
+              <Link
+                href="/faturacao/emitir"
+                className="rounded-full bg-gold px-4 py-1.5 text-xs font-bold text-ink hover:brightness-105"
+              >
+                ➕ Emitir fatura
+              </Link>
+              <a
+                href={`${ixBase}/invoices`}
+                target="_blank"
+                rel="noopener"
+                className="rounded-full bg-ink px-4 py-1.5 text-xs font-bold text-cream hover:brightness-110"
+              >
+                🧾 Abrir InvoiceXpress ↗
+              </a>
+            </>
           ) : null}
           <Link href={`/faturacao?mes=${deslocarMes(mes, -1)}`} className="rounded-full border border-line px-3 py-1.5 text-sm font-bold text-grey">←</Link>
           <Link href={`/faturacao?mes=${mesISO()}`} className="rounded-full border border-line px-3 py-1.5 text-xs font-bold text-grey">este mês</Link>
           <Link href={`/faturacao?mes=${deslocarMes(mes, 1)}`} className="rounded-full border border-line px-3 py-1.5 text-sm font-bold text-grey">→</Link>
         </div>
       </div>
+
+      {ix_ok ? (
+        <p className="rounded-xl border-2 border-good/40 bg-good/5 px-4 py-3 text-sm font-bold text-good">
+          ✓ {ix_ok}
+        </p>
+      ) : null}
+      {ix_erro ? (
+        <p className="rounded-xl border-2 border-bad/40 bg-bad/5 px-4 py-3 text-sm font-bold text-bad">
+          ⚠️ {ix_erro}
+        </p>
+      ) : null}
 
       {avencas.length === 0 ? (
         <div className="rounded-xl border border-line bg-white p-8 text-center">
@@ -313,11 +339,35 @@ export default async function FaturacaoPage({
                         </td>
                         <td className="py-2 pr-3 text-right tabular-nums">{euros(d.total)}</td>
                         <td className="py-2 text-right">
-                          {d.permalink ? (
-                            <a href={d.permalink} target="_blank" rel="noopener" className="text-xs font-bold text-gold-dark hover:underline">
-                              ver ↗
-                            </a>
-                          ) : null}
+                          <span className="flex items-center justify-end gap-1.5">
+                            {d.permalink ? (
+                              <a href={d.permalink} target="_blank" rel="noopener" className="text-xs font-bold text-gold-dark hover:underline">
+                                ver ↗
+                              </a>
+                            ) : null}
+                            <form action={criarReciboLivre}>
+                              <input type="hidden" name="fatura_id" value={d.id} />
+                              <input type="hidden" name="valor" value={d.total} />
+                              <button
+                                className="rounded-full border border-line px-2.5 py-1 text-[11px] font-bold text-good hover:bg-cream"
+                                title="Recebi — criar recibo do valor total"
+                              >
+                                💶 recibo
+                              </button>
+                            </form>
+                            <form action={criarNotaCreditoLivre}>
+                              <input type="hidden" name="fatura_id" value={d.id} />
+                              <input type="hidden" name="valor" value={d.total} />
+                              <input type="hidden" name="cliente_nome" value={d.cliente} />
+                              <input type="hidden" name="numero" value={d.numero ?? ""} />
+                              <button
+                                className="rounded-full border border-line px-2.5 py-1 text-[11px] font-bold text-soft hover:bg-cream"
+                                title="Criar nota de crédito (rascunho) desta fatura"
+                              >
+                                ↩️ NC
+                              </button>
+                            </form>
+                          </span>
                         </td>
                       </tr>
                     );

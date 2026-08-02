@@ -390,3 +390,21 @@ export async function extratoClienteIX(nome: string, maxPaginas = 3): Promise<Ex
   }
   return { ok: true, docs, pendente, pago, nc };
 }
+
+/** Impostos configurados na conta (para o seletor de IVA na emissão). */
+export async function listarImpostosIX(): Promise<{ name: string; value: number }[]> {
+  const c = cfgOuErro();
+  if (!c) return [];
+  try {
+    const r = await fetch(`${c.base}/taxes.json?api_key=${encodeURIComponent(c.chave)}`, {
+      headers: { accept: "application/json" },
+    });
+    if (!r.ok) return [];
+    const d = (await r.json()) as { taxes?: { name?: string; value?: number }[] };
+    return (d.taxes ?? [])
+      .filter((t) => t.name)
+      .map((t) => ({ name: String(t.name), value: Number(t.value) || 0 }));
+  } catch {
+    return [];
+  }
+}

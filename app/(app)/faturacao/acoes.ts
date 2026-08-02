@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import {
   criarFaturaRascunho,
@@ -268,4 +269,105 @@ export async function criarNotaCreditoIX(formData: FormData) {
       : `⚠️ Falhou criar a nota de crédito: ${r.erro}`,
   });
   revalidatePath("/faturacao");
+}
+
+/**
+ * EMISSÃO LIVRE — fatura qualquer coisa a qualquer cliente, sem depender de
+ * avença: escolhe a ficha (ou nome manual), descrição, valor e IVA. Emite
+ * (finaliza) por defeito; opção de deixar em rascunho.
+ */
+export async function emitirFaturaLivre(formData: FormData) {
+  const clienteId = t(formData.get("cliente_id"));
+  const nomeManual = t(formData.get("nome_manual"));
+  const nifManual = t(formData.get("nif_manual"));
+  const descricao = t(formData.get("descricao"));
+  const valor = n(formData.get("valor"));
+  const iva = t(formData.get("iva")) ?? "IVA23";
+  const vencDias = Math.max(0, Math.min(90, n(formData.get("vencimento_dias")) || 15));
+  const soRascunho = formData.get("rascunho") === "1";
+  if (!descricao || !(valor > 0)) redirect("/faturacao/emitir?erro=dados");
+
+  const supabase = await criarClienteServidor();
+
+  // Dados do cliente: da ficha (com fiscais) ou manuais.
+  let dest: { nome: string; nif?: string | null; email?: string | null; morada?: string | null; codigo_postal?: string | null; localidade?: string | null };
+  if (clienteId) {
+    const { data: cli } = await supabase
+      .from("clientes")
+      .select("nome_marca, empresa_fiscal, nif, morada, codigo_postal, localidade")
+      .eq("id", clienteId)
+      .maybeSingle();
+    if (!cli) redirect("/faturacao/emitir?erro=cliente");
+    dest = {
+      nome: cli.empresa_fiscal || cli.nome_marca,
+      nif: cli.nif,
+      morada: cli.morada,
+      codigo_postal: cli.codigo_postal,
+      localidade: cli.localidade,
+    };
+  } else if (nomeManual) {
+    dest = { nome: nomeManual, nif: nifManual };
+  } else {
+    redirect("/faturacao/emitir?erro=dados");
+    return;
+  }
+
+  const r = await criarFaturaRascunho(dest, [{ nome: descricao, preco_unitario: valor, iva }], {
+    vencimento_dias: vencDias,
+  });
+  if (!r.ok) redirect(`/faturacao/emitir?erro=${encodeURIComponent(r.erro.slice(0, 120))}`);
+
+  let numero: string | null = null;
+  if (!soRascunho) {
+    const fin = await finalizarFatura(r.id);
+    if (fin.ok) {
+      const info = await obterFatura(r.id);
+      numero = info.ok ? info.numero : null;
+    }
+  }
+
+  if (clienteId) {
+    await supabase.from("atividades").insert({
+      cliente_id: clienteId,
+      tipo: "nota",
+      descricao: soRascunho
+        ? `🧾 Fatura em rascunho criada no InvoiceXpress: ${descricao} (€${valor}).`
+        : `🧾 Fatura ${numero ?? ""} emitida no InvoiceXpress: ${descricao} (€${valor}).`,
+    });
+  }
+
+  revalidatePath("/faturacao");
+  redirect(`/faturacao?ix_ok=${encodeURIComponent(soRascunho ? "Rascunho criado — finaliza no InvoiceXpress." : `Fatura ${numero ?? ""} emitida.`)}`);
+}
+
+/** Cria o recibo (pagamento total) de uma fatura do mapa de pendentes. */
+export async function criarReciboLivre(formData: FormData) {
+  const faturaId = Number(t(formData.get("fatura_id")));
+  const valor = n(formData.get("valor"));
+  if (!Number.isFinite(faturaId) || faturaId <= 0 || !(valor > 0)) return;
+  const r = await criarRecibo(faturaId, valor);
+  revalidatePath("/faturacao");
+  redirect(
+    r.ok
+      ? `/faturacao?ix_ok=${encodeURIComponent("Recibo criado — a fatura fica regularizada.")}`
+      : `/faturacao?ix_erro=${encodeURIComponent(r.erro.slice(0, 120))}`,
+  );
+}
+
+/** Cria a nota de crédito (rascunho) de uma fatura do mapa de pendentes. */
+export async function criarNotaCreditoLivre(formData: FormData) {
+  const faturaId = Number(t(formData.get("fatura_id")));
+  const valor = n(formData.get("valor"));
+  const nomeCliente = t(formData.get("cliente_nome")) ?? "Cliente";
+  const numero = t(formData.get("numero")) ?? String(faturaId);
+  if (!Number.isFinite(faturaId) || faturaId <= 0 || !(valor > 0)) return;
+  const r = await criarNotaCreditoRascunho(faturaId, { nome: nomeCliente }, [
+    { nome: `Regularização da fatura ${numero}`, preco_unitario: valor },
+  ]);
+  revalidatePath("/faturacao");
+  redirect(
+    r.ok
+      ? `/faturacao?ix_ok=${encodeURIComponent("Nota de crédito em rascunho — rever e finalizar no InvoiceXpress.")}`
+      : `/faturacao?ix_erro=${encodeURIComponent(r.erro.slice(0, 120))}`,
+  );
 }
