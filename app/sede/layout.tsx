@@ -4,6 +4,7 @@ import { contextoSede } from "@/lib/sede/contexto";
 
 const LINKS = [
   { href: "/sede", label: "Início" },
+  { href: "/sede/mes", label: "O teu mês" },
   { href: "/sede/assistente", label: "Assistente" },
   { href: "/sede/relatorio", label: "Relatório" },
   { href: "/sede/plano", label: "Plano" },
