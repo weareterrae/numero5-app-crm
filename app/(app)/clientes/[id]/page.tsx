@@ -26,6 +26,8 @@ import {
   editarContacto,
   guardarOnboarding,
   ligarSedeOrg,
+  criarAcessoSede,
+  removerAcessoSede,
 } from "../acoes";
 import { criarDiagnostico } from "@/app/(app)/diagnosticos/acoes";
 import { criarProposta } from "@/app/(app)/propostas/acoes";
@@ -56,10 +58,37 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
   // recrutamento). maybeSingle() falhava com 2 linhas e escondia a ligação.
   const { data: orgsLigadasRaw } = await supabase
     .from("orgs")
-    .select("slug, nome")
+    .select("id, slug, nome")
     .eq("cliente_id", id)
     .order("slug");
-  const orgsLigadas = (orgsLigadasRaw ?? []) as { slug: string; nome: string }[];
+  const orgsLigadas = (orgsLigadasRaw ?? []) as { id: string; slug: string; nome: string }[];
+
+  // Acessos ativos à Sede: membros externos das orgs ligadas a esta ficha.
+  type Acesso = { org_id: string; profile_id: string; email: string; nome: string | null };
+  let acessos: Acesso[] = [];
+  if (orgsLigadas.length) {
+    const { data: membrosRaw } = await supabase
+      .from("org_membros")
+      .select("org_id, profile_id, profiles(email, nome, externo)")
+      .in("org_id", orgsLigadas.map((o) => o.id));
+    acessos = ((membrosRaw ?? []) as { org_id: string; profile_id: string; profiles: unknown }[])
+      .map((m) => {
+        const p = (Array.isArray(m.profiles) ? m.profiles[0] : m.profiles) as {
+          email?: string | null;
+          nome?: string | null;
+          externo?: boolean | null;
+        } | null;
+        return {
+          org_id: m.org_id,
+          profile_id: m.profile_id,
+          email: p?.email ?? "?",
+          nome: p?.nome ?? null,
+          externo: p?.externo,
+        };
+      })
+      .filter((a) => a.externo !== false) // esconder adesões da equipa
+      .map(({ externo: _e, ...resto }) => resto);
+  }
   const orgLigada = orgsLigadas[0] ?? null;
   // Orgs livres (sem cliente) — para associar a Sede a esta ficha.
   const { data: orgsLivresRaw } = await supabase
@@ -290,15 +319,87 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
               ) : null}
             </div>
             {orgsLigadas.length > 0 ? (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {pedProp > 0 ? <Chip n={pedProp} txt="pedido(s) de serviço → fazer proposta" alerta /> : null}
-                {propPorDecidir > 0 ? <Chip n={propPorDecidir} txt="proposta(s) à espera do cliente" alerta /> : null}
-                {planosPorAprovar > 0 ? <Chip n={planosPorAprovar} txt="plano(s) a aprovar" alerta /> : null}
-                {relatPorAbrir > 0 ? <Chip n={relatPorAbrir} txt="relatório(s) por abrir" /> : null}
-                {pedProp === 0 && propPorDecidir === 0 && planosPorAprovar === 0 && relatPorAbrir === 0 ? (
-                  <span className="text-xs text-soft">Tudo em dia — nada à espera de decisão do cliente. 🖐️</span>
-                ) : null}
-              </div>
+              <>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {pedProp > 0 ? <Chip n={pedProp} txt="pedido(s) de serviço → fazer proposta" alerta /> : null}
+                  {propPorDecidir > 0 ? <Chip n={propPorDecidir} txt="proposta(s) à espera do cliente" alerta /> : null}
+                  {planosPorAprovar > 0 ? <Chip n={planosPorAprovar} txt="plano(s) a aprovar" alerta /> : null}
+                  {relatPorAbrir > 0 ? <Chip n={relatPorAbrir} txt="relatório(s) por abrir" /> : null}
+                  {pedProp === 0 && propPorDecidir === 0 && planosPorAprovar === 0 && relatPorAbrir === 0 ? (
+                    <span className="text-xs text-soft">Tudo em dia — nada à espera de decisão do cliente. 🖐️</span>
+                  ) : null}
+                </div>
+
+                {/* Acessos do cliente à Sede */}
+                <div className="mt-3 border-t border-line/60 pt-3">
+                  <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wide text-grey">
+                    Quem entra na Sede
+                  </p>
+                  {acessos.length > 0 ? (
+                    <ul className="mb-2 flex flex-wrap gap-1.5">
+                      {acessos.map((a) => (
+                        <li
+                          key={`${a.org_id}-${a.profile_id}`}
+                          className="flex items-center gap-1.5 rounded-full border border-line bg-cream/60 py-1 pl-3 pr-1.5 text-xs"
+                        >
+                          <span className="font-bold">{a.email}</span>
+                          {orgsLigadas.length > 1 ? (
+                            <span className="text-soft">
+                              · {orgsLigadas.find((o) => o.id === a.org_id)?.nome}
+                            </span>
+                          ) : null}
+                          <form action={removerAcessoSede}>
+                            <input type="hidden" name="cliente_id" value={cliente.id} />
+                            <input type="hidden" name="org_id" value={a.org_id} />
+                            <input type="hidden" name="profile_id" value={a.profile_id} />
+                            <button
+                              type="submit"
+                              className="rounded-full px-1.5 font-bold text-soft hover:text-bad"
+                              title="Revogar este acesso"
+                            >
+                              ✕
+                            </button>
+                          </form>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mb-2 text-xs text-soft">Ainda ninguém tem acesso. Convida o primeiro. 🖐️</p>
+                  )}
+                  <form action={criarAcessoSede} className="flex flex-wrap items-center gap-2">
+                    <input type="hidden" name="cliente_id" value={cliente.id} />
+                    {orgsLigadas.length > 1 ? (
+                      <select name="org_id" className="rounded-lg border border-line bg-cream px-2 py-1.5 text-xs" required>
+                        {orgsLigadas.map((o) => (
+                          <option key={o.id} value={o.id}>
+                            {o.nome}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input type="hidden" name="org_id" value={orgsLigadas[0].id} />
+                    )}
+                    <input
+                      name="email"
+                      type="email"
+                      required
+                      placeholder="email do cliente"
+                      className="w-52 rounded-lg border border-line px-2.5 py-1.5 text-xs outline-none focus:border-gold"
+                    />
+                    <input
+                      name="nome"
+                      placeholder="nome (opcional)"
+                      className="w-36 rounded-lg border border-line px-2.5 py-1.5 text-xs outline-none focus:border-gold"
+                    />
+                    <button className="rounded-full bg-ink px-3.5 py-1.5 text-xs font-bold text-cream hover:brightness-110">
+                      👤 Criar acesso + convite
+                    </button>
+                  </form>
+                  <p className="mt-1 text-[10px] text-soft">
+                    Entra por link mágico enviado ao email — sem passwords. Repetir reenvia o convite.
+                  </p>
+                </div>
+              </>
             ) : (
               <div className="mt-2">
                 <p className="text-xs text-grey">

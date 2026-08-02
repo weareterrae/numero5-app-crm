@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteServidor, criarClienteServico } from "@/lib/supabase/server";
 import { ESTADOS, exigeMotivo, type Estado } from "@/lib/dominio/funil";
 import { ONBOARDING } from "@/lib/db/clientes";
 
@@ -261,6 +261,118 @@ export async function ligarSedeOrg(formData: FormData) {
     cliente_id: clienteId,
     tipo: "nota",
     descricao: "🏠 Sede ligada a esta ficha (org associada).",
+  });
+  revalidatePath(`/clientes/${clienteId}`);
+}
+
+/**
+ * Cria o acesso de um cliente à Sede: utilizador + perfil externo + adesão à
+ * org + convite por email (magic link). Idempotente: repetir reenvia o convite
+ * sem duplicar nada. NUNCA toca em contas da equipa (externo=false).
+ */
+export async function criarAcessoSede(formData: FormData) {
+  const clienteId = (formData.get("cliente_id") ?? "").toString();
+  const orgId = (formData.get("org_id") ?? "").toString();
+  const email = (formData.get("email") ?? "").toString().trim().toLowerCase();
+  const nome = (formData.get("nome") ?? "").toString().trim();
+  if (!clienteId || !orgId || !email.includes("@")) return;
+
+  const svc = criarClienteServico();
+  const nota = (descricao: string) =>
+    svc.from("atividades").insert({ cliente_id: clienteId, tipo: "nota", descricao });
+
+  // A org tem de pertencer a ESTA ficha — nunca dar acesso a marcas alheias.
+  const { data: org } = await svc
+    .from("orgs")
+    .select("id, nome, cliente_id")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (!org || org.cliente_id !== clienteId) return;
+
+  // Guarda-corpos: se o email é de alguém da equipa, não se mexe.
+  const { data: perfilExistente } = await svc
+    .from("profiles")
+    .select("id, externo")
+    .ilike("email", email)
+    .maybeSingle();
+  if (perfilExistente && perfilExistente.externo === false) {
+    await nota(`⚠️ Não criei acesso à Sede para ${email}: esse email é da equipa do Nº 5.`);
+    revalidatePath(`/clientes/${clienteId}`);
+    return;
+  }
+
+  // 1) utilizador (cria ou reutiliza)
+  let userId: string | null = perfilExistente?.id ?? null;
+  if (!userId) {
+    const criado = await svc.auth.admin.createUser({
+      email,
+      email_confirm: true,
+      user_metadata: nome ? { nome } : undefined,
+    });
+    userId = criado.data.user?.id ?? null;
+    if (!userId) {
+      // pode existir no auth sem perfil — o generateLink devolve-o sem enviar email
+      const link = await svc.auth.admin.generateLink({ type: "magiclink", email });
+      userId = link.data.user?.id ?? null;
+    }
+  }
+  if (!userId) {
+    await nota(`⚠️ Não consegui criar o acesso à Sede para ${email}. Tenta outra vez.`);
+    revalidatePath(`/clientes/${clienteId}`);
+    return;
+  }
+
+  // 2) perfil externo garantido + 3) adesão à org (única, não duplica)
+  await svc
+    .from("profiles")
+    .upsert({ id: userId, email, ...(nome ? { nome } : {}), externo: true }, { onConflict: "id" });
+  await svc
+    .from("org_membros")
+    .upsert(
+      { org_id: orgId, profile_id: userId, papel: "cliente" },
+      { onConflict: "org_id,profile_id", ignoreDuplicates: true },
+    );
+
+  // 4) convite: magic link por email (cliente anónimo puro — sem a sessão staff)
+  const { createClient } = await import("@supabase/supabase-js");
+  const anon = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  );
+  const { error: erroEmail } = await anon.auth.signInWithOtp({
+    email,
+    options: { emailRedirectTo: "https://app.numerocinco.pt/auth/callback" },
+  });
+
+  await nota(
+    erroEmail
+      ? `👤 Acesso à Sede criado para ${email} (${org.nome}) — mas o convite por email falhou (${erroEmail.message.slice(0, 80)}). Pede-lhe para entrar em app.numerocinco.pt com este email.`
+      : `👤 Acesso à Sede criado para ${email} (${org.nome}) — convite enviado por email. 🖐️`,
+  );
+  revalidatePath(`/clientes/${clienteId}`);
+}
+
+/** Revoga o acesso de um membro a uma org da Sede (a conta fica; a adesão sai). */
+export async function removerAcessoSede(formData: FormData) {
+  const clienteId = (formData.get("cliente_id") ?? "").toString();
+  const orgId = (formData.get("org_id") ?? "").toString();
+  const profileId = (formData.get("profile_id") ?? "").toString();
+  if (!clienteId || !orgId || !profileId) return;
+
+  const svc = criarClienteServico();
+  const { data: org } = await svc
+    .from("orgs")
+    .select("id, nome, cliente_id")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (!org || org.cliente_id !== clienteId) return;
+
+  const { data: perfil } = await svc.from("profiles").select("email").eq("id", profileId).maybeSingle();
+  await svc.from("org_membros").delete().eq("org_id", orgId).eq("profile_id", profileId);
+  await svc.from("atividades").insert({
+    cliente_id: clienteId,
+    tipo: "nota",
+    descricao: `🚪 Acesso à Sede revogado: ${perfil?.email ?? profileId} (${org.nome}).`,
   });
   revalidatePath(`/clientes/${clienteId}`);
 }
