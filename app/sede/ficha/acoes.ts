@@ -59,6 +59,30 @@ export async function guardarFichaSede(fd: FormData) {
     })
     .eq("id", cid);
 
+  // Kit de marca (migração 0020) — update à parte e tolerante.
+  await svc
+    .from("clientes")
+    .update({
+      kit_logo: t(fd, "kit_logo") || null,
+      kit_cores: t(fd, "kit_cores") || null,
+      kit_fontes: t(fd, "kit_fontes") || null,
+      kit_notas: t(fd, "kit_notas") || null,
+    })
+    .eq("id", cid);
+
+  // Briefing vivo (migração 0052) — update à parte e tolerante.
+  await svc
+    .from("clientes")
+    .update({
+      brief_sede: {
+        publico_alvo: t(fd, "publico_alvo") || null,
+        ofertas: t(fd, "ofertas") || null,
+        epocas: t(fd, "epocas") || null,
+        nunca_dizer: t(fd, "nunca_dizer") || null,
+      },
+    })
+    .eq("id", cid);
+
   const recado = t(fd, "recado").slice(0, 800);
   const descricao = recado
     ? `Na Sede, o cliente atualizou a ficha e deixou um recado: «${recado}»`

@@ -74,6 +74,22 @@ export default async function SedeFicha({
     .maybeSingle();
   if (f) fiscais = f as Record<string, string | null>;
 
+  // kit de marca (0020) — tolerante
+  let kit: Record<string, string | null> = {};
+  const { data: k } = await svc
+    .from("clientes")
+    .select("kit_logo, kit_cores, kit_fontes, kit_notas")
+    .eq("id", cid)
+    .maybeSingle();
+  if (k) kit = k as Record<string, string | null>;
+
+  // briefing vivo (0052) — tolerante
+  let brief: Record<string, string | null> = {};
+  const { data: b } = await svc.from("clientes").select("brief_sede").eq("id", cid).maybeSingle();
+  if (b?.brief_sede && typeof b.brief_sede === "object" && !Array.isArray(b.brief_sede)) {
+    brief = b.brief_sede as Record<string, string | null>;
+  }
+
   const { data: contactos } = await svc
     .from("contactos")
     .select("id, nome, cargo, email, telefone")
@@ -135,6 +151,46 @@ export default async function SedeFicha({
             </label>
             <Campo label="Código postal" name="codigo_postal" valor={fiscais.codigo_postal} ph="0000-000" />
             <Campo label="Localidade" name="localidade" valor={fiscais.localidade} ph="Cidade" />
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-line bg-white p-5">
+          <p className="mb-4 text-[11px] font-bold uppercase tracking-wide text-gold-dark">Kit de marca</p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Campo label="Logótipo (URL)" name="kit_logo" valor={kit.kit_logo} ph="link para o teu logótipo" />
+            <Campo label="Cores da marca" name="kit_cores" valor={kit.kit_cores} ph="ex.: #E8A13C, #15181D" />
+            <Campo label="Fontes" name="kit_fontes" valor={kit.kit_fontes} ph="ex.: Archivo, Bricolage" />
+            <div />
+            <label className="block sm:col-span-2">
+              <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-soft">Notas da marca</span>
+              <textarea name="kit_notas" rows={2} defaultValue={kit.kit_notas ?? ""} placeholder="O que é importante saber sobre a tua marca." className={inp} />
+            </label>
+          </div>
+        </section>
+
+        <section className="rounded-xl border border-line bg-white p-5">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-gold-dark">O teu negócio</p>
+          <p className="mb-4 mt-0.5 text-[13px] text-grey">
+            Quanto mais nos contares, mais afinado sai tudo o que produzimos — e melhor treinamos a
+            IA para ti.
+          </p>
+          <div className="grid gap-4">
+            <label className="block">
+              <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-soft">Público-alvo</span>
+              <textarea name="publico_alvo" rows={2} defaultValue={brief.publico_alvo ?? ""} placeholder="Quem queres alcançar? (idade, zona, perfil…)" className={inp} />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-soft">Ofertas / serviços em destaque</span>
+              <textarea name="ofertas" rows={2} defaultValue={brief.ofertas ?? ""} placeholder="O que queres empurrar neste período." className={inp} />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-soft">Épocas / datas-chave</span>
+              <textarea name="epocas" rows={2} defaultValue={brief.epocas ?? ""} placeholder="ex.: Open Day 12 set; início do ano letivo; Natal." className={inp} />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-soft">O que nunca dizer</span>
+              <textarea name="nunca_dizer" rows={2} defaultValue={brief.nunca_dizer ?? ""} placeholder="Palavras, promessas ou temas a evitar." className={inp} />
+            </label>
           </div>
         </section>
 
