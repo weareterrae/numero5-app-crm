@@ -14,9 +14,8 @@ const LABEL: Record<string, string> = {
   linkedin: "LinkedIn",
   tiktok: "TikTok",
   youtube: "YouTube",
-  gbp: "Google",
 };
-const SOCIAIS = Object.keys(LABEL);
+const SOCIAIS = Object.keys(LABEL); // gbp e web tratados à parte
 
 type Linha = {
   rede: string;
@@ -77,7 +76,32 @@ export async function lerResultados(
   const exRef = (ref.extra ?? {}) as Record<string, unknown>;
   const serie = Array.isArray(exRef.serie) ? (exRef.serie as number[]) : [];
 
+  // Evolução vs mês anterior (guardado em extra.anterior da linha de Instagram).
+  const ant = exRef.anterior as { alcance?: number } | undefined;
+  const evolucao =
+    ant && num(ant.alcance) > 0
+      ? { alcancePct: Math.round(((num(ref.alcance) - num(ant.alcance)) / num(ant.alcance)) * 100), ganhoPct: null }
+      : null;
+
+  // Post do mês (extra.top_post) e Google Business (linha rede='gbp').
+  const tp = exRef.top_post as { imagem?: string; alcance?: number; interacoes?: number; legenda?: string } | undefined;
+  const topPost = tp && tp.imagem ? { imagem: tp.imagem, alcance: num(tp.alcance), interacoes: num(tp.interacoes), legenda: tp.legenda ?? null } : null;
+
+  const gbpRow = porRede.get("gbp");
+  const gex = (gbpRow?.extra ?? {}) as Record<string, unknown>;
+  const gbp = gbpRow
+    ? {
+        visualizacoes: num(gex.visualizacoes),
+        pesquisas: num(gex.pesquisas),
+        direcoes: num(gex.direcoes),
+        chamadas: num(gex.chamadas),
+      }
+    : null;
+
   return {
+    evolucao,
+    topPost,
+    gbp,
     periodo:
       ref.periodo_ini && ref.periodo_fim
         ? `${diaMes(ref.periodo_ini)} – ${diaMes(ref.periodo_fim)}`

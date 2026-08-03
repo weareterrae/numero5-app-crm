@@ -18,6 +18,9 @@ export type ResultadosMesDados = {
   alcanceMedio: number;
   serie: number[]; // alcance dia a dia (para o sparkline)
   visitas?: number | null; // visitas ao site
+  evolucao?: { alcancePct?: number | null; ganhoPct?: number | null } | null; // vs mês anterior
+  topPost?: { imagem: string; alcance: number; interacoes: number; legenda?: string | null } | null;
+  gbp?: { visualizacoes: number; pesquisas: number; direcoes: number; chamadas: number } | null;
   fonte?: string;
 };
 
@@ -109,9 +112,21 @@ export function ResultadosMes({ d }: { d: ResultadosMesDados }) {
           <p className="font-display text-6xl font-extrabold leading-none tracking-tight" style={{ color: COBALT }}>
             {curto(d.alcance)}
           </p>
-          <p className="mt-3 font-mono text-xs font-bold uppercase tracking-wide text-soft">
-            Alcance no período
-          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <p className="font-mono text-xs font-bold uppercase tracking-wide text-soft">Alcance no período</p>
+            {d.evolucao?.alcancePct != null ? (
+              <span
+                className="rounded-full px-2 py-0.5 font-mono text-[10px] font-bold"
+                style={{
+                  color: d.evolucao.alcancePct >= 0 ? "#2FA36B" : "#D6455D",
+                  background: d.evolucao.alcancePct >= 0 ? "rgba(47,163,107,.1)" : "rgba(214,69,93,.1)",
+                }}
+              >
+                {d.evolucao.alcancePct >= 0 ? "▲ +" : "▼ "}
+                {d.evolucao.alcancePct}% vs mês anterior
+              </span>
+            ) : null}
+          </div>
           <Sparkline serie={d.serie} />
           <p className="mt-1 font-mono text-[11px] text-soft">alcance dia a dia</p>
         </div>
@@ -167,6 +182,45 @@ export function ResultadosMes({ d }: { d: ResultadosMesDados }) {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      ) : null}
+
+      {d.topPost ? (
+        <div className="mt-4">
+          <p className="mb-2 font-mono text-[11px] font-bold uppercase tracking-wide text-soft">🏆 O post do mês</p>
+          <div className="flex items-center gap-4 rounded-2xl border border-line bg-white p-4">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={d.topPost.imagem}
+              alt="Melhor publicação do mês"
+              className="h-24 w-24 shrink-0 rounded-xl border border-line object-cover"
+            />
+            <div className="min-w-0 flex-1">
+              {d.topPost.legenda ? (
+                <p className="line-clamp-2 text-sm font-semibold text-ink">{d.topPost.legenda}</p>
+              ) : (
+                <p className="text-sm font-semibold text-ink">A publicação que mais gente alcançou.</p>
+              )}
+              <p className="mt-2 font-mono text-[12px] text-grey">
+                <b style={{ color: COBALT }}>{curto(d.topPost.alcance)}</b> de alcance ·{" "}
+                <b style={{ color: COBALT }}>{milhar(d.topPost.interacoes)}</b> interações
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {d.gbp ? (
+        <div className="mt-4">
+          <p className="mb-2 font-mono text-[11px] font-bold uppercase tracking-wide text-soft">
+            📍 Google Business — quem te procurou
+          </p>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <Estatistica n={milhar(d.gbp.visualizacoes)} l="Perfil visto" />
+            <Estatistica n={milhar(d.gbp.pesquisas)} l="Pesquisas" />
+            <Estatistica n={milhar(d.gbp.direcoes)} l="Pediram direções" />
+            <Estatistica n={milhar(d.gbp.chamadas)} l="Ligaram" />
           </div>
         </div>
       ) : null}
