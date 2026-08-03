@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import {
   ESTADO_LABEL,
@@ -26,31 +25,30 @@ export const dynamic = "force-dynamic";
 export default async function Cockpit() {
   const supabase = await criarClienteServidor();
 
-  // Cliente externo não vê o cockpit da agência — vai para as suas leads.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (user) {
-    const { data: perfil } = await supabase
-      .from("profiles")
-      .select("externo")
-      .eq("id", user.id)
-      .maybeSingle();
-    if (perfil?.externo) redirect("/leads");
-  }
+  // O layout (app) já valida a sessão e manda externos para a Sede — não repetimos o check aqui.
+  const hoje = new Date().toISOString().slice(0, 10);
+  const daqui30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
 
-  const [clientesRes, avencasRes, followupsRes, historicoRes] = await Promise.all([
-    supabase.from("clientes").select("id, nome_marca, estado, valor_estimado, ultima_interacao_at, setor"),
-    supabase.from("avencas").select("valor_mensal, estado"),
-    supabase
-      .from("atividades")
-      .select("id, cliente_id, descricao, followup_em, followup_nota, clientes(nome_marca)")
-      .eq("concluido", false)
-      .not("followup_em", "is", null)
-      .order("followup_em", { ascending: true })
-      .limit(20),
-    supabase.from("estado_historico").select("cliente_id, para_estado"),
-  ]);
+  // Tudo numa só ida em PARALELO (antes: 4 em paralelo + 6 em série ≈ 500ms desperdiçados).
+  const [clientesRes, avencasRes, followupsRes, historicoRes, descRes, reuRes, apRes, revRes, finRes, ordRes] =
+    await Promise.all([
+      supabase.from("clientes").select("id, nome_marca, estado, valor_estimado, ultima_interacao_at, setor"),
+      supabase.from("avencas").select("valor_mensal, estado"),
+      supabase
+        .from("atividades")
+        .select("id, cliente_id, descricao, followup_em, followup_nota, clientes(nome_marca)")
+        .eq("concluido", false)
+        .not("followup_em", "is", null)
+        .order("followup_em", { ascending: true })
+        .limit(20),
+      supabase.from("estado_historico").select("cliente_id, para_estado"),
+      supabase.from("descontos").select("id, cliente_id, alvo, preco_durante, preco_apos, fim, clientes(nome_marca)").eq("estado", "ativo").not("fim", "is", null).lte("fim", daqui30).order("fim", { ascending: true }).then((r) => r, () => ({ data: [] })),
+      supabase.from("reunioes").select("cliente_id, data, clientes(nome_marca)").eq("incluida", false).eq("faturar", true).eq("faturada", false).order("data", { ascending: false }).then((r) => r, () => ({ data: [] })),
+      supabase.from("aprovacoes").select("cliente_id, titulo, prazo, estado, clientes(nome_marca)").in("estado", ["pendente", "sem_resposta"]).not("prazo", "is", null).lt("prazo", hoje).order("prazo", { ascending: true }).then((r) => r, () => ({ data: [] })),
+      supabase.from("revisoes").select("cliente_id, peca, valor, clientes(nome_marca)").eq("incluido", false).eq("faturada", false).order("data", { ascending: false }).then((r) => r, () => ({ data: [] })),
+      supabase.from("clientes").select("id, nome_marca, financeiro").then((r) => r, () => ({ data: [] })),
+      supabase.from("ordens_alteracao").select("cliente_id, titulo, estado, clientes(nome_marca)").in("estado", ["enviada", "esclarecimento"]).order("criado_em", { ascending: false }).then((r) => r, () => ({ data: [] })),
+    ]);
 
   const clientes = (clientesRes.data ?? []) as (ClienteMetrica & {
     nome_marca: string;
@@ -65,7 +63,6 @@ export default async function Cockpit() {
   const pipeline = valorPipeline(clientes);
   const ativos = clientesAtivos(clientes);
 
-  const hoje = new Date().toISOString().slice(0, 10);
   // O PostgREST devolve a junção como objeto, mas os tipos gerados dizem array.
   // Aceitamos as duas formas para não partir em nenhum dos casos.
   type ClienteEmbed = { nome_marca: string } | { nome_marca: string }[] | null;
@@ -84,15 +81,7 @@ export default async function Cockpit() {
     .sort((a, b) => (b.ultima_interacao_at ?? "").localeCompare(a.ultima_interacao_at ?? ""))
     .slice(0, 6);
 
-  // Descontos a terminar nos próximos 30 dias (tolerante: 0023 pode não ter corrido).
-  const daqui30 = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
-  const { data: descRows } = await supabase
-    .from("descontos")
-    .select("id, cliente_id, alvo, preco_durante, preco_apos, fim, clientes(nome_marca)")
-    .eq("estado", "ativo")
-    .not("fim", "is", null)
-    .lte("fim", daqui30)
-    .order("fim", { ascending: true });
+  const descRows = descRes.data;
   type DescontoFim = {
     id: string;
     cliente_id: string;
@@ -107,25 +96,11 @@ export default async function Cockpit() {
     .filter((d) => d.alvo === "avenca")
     .reduce((s, d) => s + Math.max(0, (d.preco_apos ?? 0) - (d.preco_durante ?? 0)), 0);
 
-  // Reuniões extra por faturar (tolerante: 0027 pode não ter corrido).
-  const { data: reuRows } = await supabase
-    .from("reunioes")
-    .select("cliente_id, data, clientes(nome_marca)")
-    .eq("incluida", false)
-    .eq("faturar", true)
-    .eq("faturada", false)
-    .order("data", { ascending: false });
+  const reuRows = reuRes.data;
   type ReuFaturar = { cliente_id: string; data: string; clientes: ClienteEmbed };
   const reunioesPorFaturar = (reuRows ?? []) as unknown as ReuFaturar[];
 
-  // Aprovações bloqueadas: pendentes com prazo passado (tolerante: 0028).
-  const { data: apRows } = await supabase
-    .from("aprovacoes")
-    .select("cliente_id, titulo, prazo, estado, clientes(nome_marca)")
-    .in("estado", ["pendente", "sem_resposta"])
-    .not("prazo", "is", null)
-    .lt("prazo", hoje)
-    .order("prazo", { ascending: true });
+  const apRows = apRes.data;
   type ApBloqueada = {
     cliente_id: string;
     titulo: string;
@@ -134,33 +109,17 @@ export default async function Cockpit() {
   };
   const aprovacoesBloqueadas = (apRows ?? []) as unknown as ApBloqueada[];
 
-  // Revisões extra/retrabalho por faturar (tolerante: 0029).
-  const { data: revRows } = await supabase
-    .from("revisoes")
-    .select("cliente_id, peca, valor, clientes(nome_marca)")
-    .eq("incluido", false)
-    .eq("faturada", false)
-    .order("data", { ascending: false });
+  const revRows = revRes.data;
   type RevFaturar = { cliente_id: string; peca: string; valor: number | null; clientes: ClienteEmbed };
   const revisoesPorFaturar = (revRows ?? []) as unknown as RevFaturar[];
 
-  // Clientes em alerta financeiro (tolerante: 0030).
-  const { data: finRows } = await supabase
-    .from("clientes")
-    .select("id, nome_marca, financeiro")
-    .then((r) => r, () => ({ data: [] }));
+  const finRows = finRes.data;
   type FinRow = { id: string; nome_marca: string; financeiro: { estado?: string } | null };
   const clientesFinanceiroAlerta = ((finRows ?? []) as FinRow[]).filter((c) =>
     ESTADOS_FINANCEIROS_ALERTA.has(c.financeiro?.estado ?? ""),
   );
 
-  // Ordens de alteração à espera do cliente (tolerante: 0033).
-  const { data: ordRows } = await supabase
-    .from("ordens_alteracao")
-    .select("cliente_id, titulo, estado, clientes(nome_marca)")
-    .in("estado", ["enviada", "esclarecimento"])
-    .order("criado_em", { ascending: false })
-    .then((r) => r, () => ({ data: [] }));
+  const ordRows = ordRes.data;
   type OrdemPend = { cliente_id: string; titulo: string; estado: string; clientes: ClienteEmbed };
   const ordensPendentes = (ordRows ?? []) as unknown as OrdemPend[];
 
