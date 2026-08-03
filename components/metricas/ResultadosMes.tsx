@@ -161,7 +161,8 @@ export function ResultadosMes({ d }: { d: ResultadosMesDados }) {
                   <p className="text-sm font-bold text-ink">{r.nome}</p>
                   <p className="font-mono text-[11px] text-grey">
                     {milhar(r.seguidores)} seguidores
-                    {r.ganho ? ` (${r.ganho >= 0 ? "+" : ""}${milhar(r.ganho)})` : ""} · {curto(r.alcance)} de alcance
+                    {r.ganho ? ` (${r.ganho >= 0 ? "+" : ""}${milhar(r.ganho)})` : ""}
+                    {r.alcance > 0 ? ` · ${curto(r.alcance)} de alcance` : ""}
                   </p>
                 </div>
               </div>
