@@ -216,9 +216,8 @@ export function ResultadosMes({ d }: { d: ResultadosMesDados }) {
           <p className="mb-2 font-mono text-[11px] font-bold uppercase tracking-wide text-soft">
             📍 Google Business — quem te procurou
           </p>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-3 gap-3">
             <Estatistica n={milhar(d.gbp.visualizacoes)} l="Perfil visto" />
-            <Estatistica n={milhar(d.gbp.pesquisas)} l="Pesquisas" />
             <Estatistica n={milhar(d.gbp.direcoes)} l="Pediram direções" />
             <Estatistica n={milhar(d.gbp.chamadas)} l="Ligaram" />
           </div>
