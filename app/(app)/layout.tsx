@@ -4,22 +4,7 @@ import { criarClienteServidor } from "@/lib/supabase/server";
 import { Simbolo } from "@/components/marca/Simbolo";
 import { Quinto } from "@/components/assistente/Quinto";
 import { ManterSessao } from "@/components/auth/ManterSessao";
-
-const LINKS = [
-  { href: "/", label: "Cockpit" },
-  { href: "/dia", label: "O meu dia" },
-  { href: "/radar", label: "Radar" },
-  { href: "/clientes", label: "Clientes" },
-  { href: "/clientes/funil", label: "Funil" },
-  { href: "/leads", label: "Leads" },
-  { href: "/leads/faturacao", label: "Assinaturas" },
-  { href: "/metricas", label: "Métricas" },
-  { href: "/avencas", label: "Avenças" },
-  { href: "/anuncios", label: "Anúncios" },
-  { href: "/faturacao", label: "Faturação" },
-  { href: "/capacidade", label: "Capacidade" },
-  { href: "/definicoes/precos", label: "Preços" },
-];
+import { NavOperador } from "@/components/nav/NavOperador";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await criarClienteServidor();
@@ -36,7 +21,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .eq("id", user.id)
     .maybeSingle();
   if (perfil?.externo) redirect("/sede");
-  const links = LINKS;
 
   // White-label: o cliente externo vê a app com a SUA marca (cor/logótipo).
   let marcaCliente: { nome: string; cor?: string; logo?: string } | null = null;
@@ -81,20 +65,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               </>
             )}
           </Link>
-          <nav className="flex-1 overflow-x-auto">
-            <ul className="flex gap-1">
-              {links.map((l) => (
-                <li key={l.href}>
-                  <Link
-                    href={l.href}
-                    className="block whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-bold text-grey hover:bg-cream hover:text-ink"
-                  >
-                    {l.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
+          <NavOperador />
           <form action="/auth/sair" method="post" className="shrink-0">
             <button className="text-xs font-bold text-soft hover:text-ink" type="submit">
               sair
