@@ -34,7 +34,7 @@ export async function gerarBriefingDia(formData: FormData) {
 
 FORMATO (PT-PT, «tu», direto, máx. ~200 palavras, 0-1 emoji), com estes títulos exatos:
 **O dia em três linhas** — o retrato honesto: o que está bem, o que está a arder.
-**Por ordem de ataque** — 3 a 5 ações concretas, a mais importante primeiro, cada uma com o porquê em meia linha. Prioriza: dinheiro parado > clientes à espera > leads a arrefecer > resto.
+**Por ordem de ataque** — 3 a 5 ações concretas, a mais importante primeiro, cada uma com o porquê em meia linha. Prioriza: dinheiro parado > marca às escuras ou publicação falhada > clientes à espera > leads a arrefecer > resto.
 **Um olho no dinheiro** — uma linha sobre cobranças/receita por recuperar, se houver.
 
 REGRAS: usa SÓ os dados abaixo, nunca inventes números nem clientes; se o dia estiver calmo, di-lo e sugere UMA coisa proativa (ex.: follow-up a um cliente frio). Números antes de adjetivos.

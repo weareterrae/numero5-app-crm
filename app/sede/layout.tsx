@@ -7,6 +7,7 @@ import { trocarMarcaSede } from "./acoes";
 const LINKS = [
   { href: "/sede", label: "Início" },
   { href: "/sede/mes", label: "O teu mês" },
+  { href: "/sede/resultados", label: "Resultados" },
   { href: "/sede/assistente", label: "Assistente" },
   { href: "/sede/documentos", label: "Documentos" },
   { href: "/sede/plano", label: "Plano" },

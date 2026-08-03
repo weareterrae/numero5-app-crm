@@ -1,0 +1,146 @@
+// Bloco «Resultados do mês» — a prova visual de que medimos e avaliamos.
+// Server component puro: recebe os números (já agregados) e desenha.
+// Usado na Sede do cliente e reaproveitável no relatório mensal.
+
+export type ResultadosMesDados = {
+  periodo: string; // ex.: "4 jul – 3 ago"
+  rede?: string; // ex.: "Instagram"
+  seguidores: number;
+  ganho: number; // seguidores ganhos no período
+  base?: number | null; // seguidores no início (para "de X para Y")
+  alcance: number;
+  interacoes: number;
+  comentarios: number;
+  partilhas?: number | null;
+  publicacoes: number;
+  alcanceMedio: number;
+  serie: number[]; // alcance dia a dia (para o sparkline)
+  visitas?: number | null; // visitas ao site
+  fonte?: string;
+};
+
+const COBALT = "#2B44E7";
+const GOLD = "#E8A13C";
+
+function milhar(n: number) {
+  return Math.round(n).toLocaleString("pt-PT");
+}
+function curto(n: number) {
+  if (n >= 10000) return `${Math.round(n / 1000)} mil`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1).replace(".", ",")} mil`;
+  return milhar(n);
+}
+
+function Sparkline({ serie }: { serie: number[] }) {
+  const W = 560,
+    H = 88,
+    pad = 6;
+  if (!serie || serie.length < 2) return null;
+  const max = Math.max(...serie);
+  const min = Math.min(...serie);
+  const span = max - min || 1;
+  const pts = serie.map((v, i) => {
+    const x = pad + (i * (W - 2 * pad)) / (serie.length - 1);
+    const y = H - pad - ((v - min) / span) * (H - 2 * pad);
+    return [x, y] as const;
+  });
+  const line = pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join(" ");
+  const area = `${line} L ${W - pad} ${H} L ${pad} ${H} Z`;
+  const last = pts[pts.length - 1];
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" preserveAspectRatio="none" className="mt-3 block">
+      <defs>
+        <linearGradient id="rmsg" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={COBALT} stopOpacity="0.22" />
+          <stop offset="1" stopColor={COBALT} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={area} fill="url(#rmsg)" />
+      <path d={line} fill="none" stroke={COBALT} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={last[0].toFixed(1)} cy={last[1].toFixed(1)} r="4.5" fill={GOLD} />
+    </svg>
+  );
+}
+
+function Estatistica({ n, l, sub }: { n: string; l: string; sub?: string }) {
+  return (
+    <div className="rounded-2xl border border-line bg-white p-4">
+      <p className="font-display text-3xl font-extrabold tracking-tight" style={{ color: COBALT }}>
+        {n}
+      </p>
+      <p className="mt-2 font-mono text-[11px] font-bold uppercase tracking-wide text-grey">{l}</p>
+      {sub ? <p className="mt-0.5 text-xs text-soft">{sub}</p> : null}
+    </div>
+  );
+}
+
+export function ResultadosMes({ d }: { d: ResultadosMesDados }) {
+  const pct = d.base && d.base > 0 ? Math.round((d.ganho / d.base) * 100) : null;
+  return (
+    <div className="rounded-3xl border border-line bg-cream p-6 sm:p-8">
+      <div className="rotulo" style={{ color: "var(--color-gold-dark, #B4761A)" }}>
+        Medimos · Avaliamos · Prestamos contas
+      </div>
+      <h2 className="mt-2 font-display text-3xl font-extrabold tracking-tight sm:text-4xl">
+        Resultados do mês
+      </h2>
+      <p className="mt-3 max-w-[60ch] text-[15px] leading-relaxed text-grey">
+        Não basta publicar — acompanhamos cada peça e medimos o que ela devolve. Este é o retrato
+        honesto do último mês, com dados diretos do Metricool.
+      </p>
+      <span className="mt-5 inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-1.5 font-mono text-[11px] font-bold uppercase tracking-wide text-grey">
+        <span className="inline-block h-2 w-2 rounded-full" style={{ background: COBALT }} />
+        {(d.rede || "Instagram") + " · " + d.periodo}
+      </span>
+
+      <div className="mt-6 grid gap-4 sm:grid-cols-[1.1fr_1fr]">
+        <div className="rounded-2xl border border-line bg-white p-6">
+          <p className="font-display text-6xl font-extrabold leading-none tracking-tight" style={{ color: COBALT }}>
+            {curto(d.alcance)}
+          </p>
+          <p className="mt-3 font-mono text-xs font-bold uppercase tracking-wide text-soft">
+            Alcance no período
+          </p>
+          <Sparkline serie={d.serie} />
+          <p className="mt-1 font-mono text-[11px] text-soft">alcance dia a dia</p>
+        </div>
+        <div className="flex flex-col justify-center rounded-2xl bg-ink p-6 text-cream">
+          <p className="font-display text-5xl font-extrabold leading-none">
+            {(d.ganho >= 0 ? "+" : "") + milhar(d.ganho)}
+            {pct !== null ? (
+              <span className="ml-2 align-baseline text-2xl font-extrabold" style={{ color: GOLD }}>
+                {(pct >= 0 ? "+" : "") + pct}%
+              </span>
+            ) : null}
+          </p>
+          <p className="mt-3 font-mono text-[11px] font-bold uppercase tracking-wide text-cream/70">
+            Seguidores ganhos
+          </p>
+          {d.base ? (
+            <p className="mt-0.5 text-xs text-cream/50">
+              de {milhar(d.base)} para {milhar(d.seguidores)} — crescimento orgânico
+            </p>
+          ) : (
+            <p className="mt-0.5 text-xs text-cream/50">total atual: {milhar(d.seguidores)}</p>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <Estatistica n={milhar(d.interacoes)} l="Interações" sub="gostos, comentários, partilhas" />
+        <Estatistica n={milhar(d.comentarios)} l="Comentários" sub="conversas geradas" />
+        {d.visitas != null ? (
+          <Estatistica n={curto(d.visitas)} l="Visitas ao site" sub="no período" />
+        ) : (
+          <Estatistica n={milhar(d.publicacoes)} l="Publicações" sub="feed, stories e reels" />
+        )}
+        <Estatistica n={curto(d.alcanceMedio)} l="Alcance médio" sub="por dia" />
+      </div>
+
+      <div className="mt-5 flex items-center justify-between border-t border-line pt-4 font-mono text-[11px] text-soft">
+        <span>Fonte: {d.fonte || "Metricool"} · dados reais</span>
+        <span>Números antes de adjetivos</span>
+      </div>
+    </div>
+  );
+}

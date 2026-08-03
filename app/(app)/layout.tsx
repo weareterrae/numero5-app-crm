@@ -8,6 +8,7 @@ import { ManterSessao } from "@/components/auth/ManterSessao";
 const LINKS = [
   { href: "/", label: "Cockpit" },
   { href: "/dia", label: "O meu dia" },
+  { href: "/radar", label: "Radar" },
   { href: "/clientes", label: "Clientes" },
   { href: "/clientes/funil", label: "Funil" },
   { href: "/leads", label: "Leads" },

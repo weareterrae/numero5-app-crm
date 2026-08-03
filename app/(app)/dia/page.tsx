@@ -18,7 +18,7 @@ export default async function OMeuDia() {
   const ha24h = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
   const mesAtual = `${hojeISO.slice(0, 7)}-01`;
 
-  const [clientesRes, followupsRes, planosRes, propostasRes, pedidosRes, leadsRes, cobrancasRes, reunioesRes, orgsRes, briefingRes] =
+  const [clientesRes, followupsRes, planosRes, propostasRes, pedidosRes, leadsRes, cobrancasRes, reunioesRes, orgsRes, comunicacaoRes, briefingRes] =
     await Promise.all([
       supabase.from("clientes").select("id, nome_marca").neq("estado", "perdido"),
       supabase
@@ -52,6 +52,10 @@ export default async function OMeuDia() {
         .eq("data", hojeISO)
         .then((r) => r, () => ({ data: null })),
       supabase.from("orgs").select("id, nome"),
+      supabase
+        .from("marca_comunicacao")
+        .select("cliente_id, estado, dias_cobertos, proximo_post, resumo, falhas")
+        .then((r) => r, () => ({ data: null })),
       supabase
         .from("configuracoes")
         .select("valor")
@@ -144,6 +148,44 @@ export default async function OMeuDia() {
       urgente: true,
     });
 
+  // Radar de comunicação — marcas às escuras, a ficar curtas, ou com falhas
+  const radar = (comunicacaoRes?.data ?? []) as {
+    cliente_id: string;
+    estado: string;
+    dias_cobertos: number | null;
+    proximo_post: string | null;
+    resumo: string | null;
+    falhas: unknown[] | null;
+  }[];
+  for (const m of radar) {
+    if (!nome.has(m.cliente_id)) continue;
+    const falhas = Array.isArray(m.falhas) ? m.falhas.length : 0;
+    if (falhas > 0)
+      tarefas.push({
+        texto: `🔴 ${falhas} publicação${falhas > 1 ? "ões" : ""} falhou — ${nome.get(m.cliente_id)}`,
+        detalhe: m.resumo || "verifica o agendamento no Metricool",
+        href: `/clientes/${m.cliente_id}`,
+        urgente: true,
+      });
+    else if (m.estado === "vermelho")
+      tarefas.push({
+        texto: `🔴 Sem comunicação agendada — ${nome.get(m.cliente_id)}`,
+        detalhe: m.proximo_post ? `próximo post só a ${m.proximo_post}` : "o feed está vazio",
+        href: `/clientes/${m.cliente_id}`,
+        urgente: true,
+      });
+    else if (m.estado === "amarelo")
+      tarefas.push({
+        texto: `🟡 Comunicação a ficar curta — ${nome.get(m.cliente_id)}`,
+        detalhe: m.resumo || `só ${m.dias_cobertos ?? 0} dias cobertos`,
+        href: `/clientes/${m.cliente_id}`,
+      });
+  }
+  const radarResumo = radar
+    .filter((m) => nome.has(m.cliente_id))
+    .map((m) => `${nome.get(m.cliente_id)}: ${m.estado}${Array.isArray(m.falhas) && m.falhas.length ? ` (${m.falhas.length} falhas)` : ""}`)
+    .join("; ");
+
   const urgentes = tarefas.filter((t) => t.urgente);
   const normais = tarefas.filter((t) => !t.urgente);
   const briefing = (briefingRes?.data as { valor?: string } | null)?.valor ?? null;
@@ -153,6 +195,7 @@ export default async function OMeuDia() {
     `Tarefas urgentes (${urgentes.length}): ${urgentes.map((t) => `${t.texto}${t.detalhe ? ` (${t.detalhe})` : ""}`).join("; ") || "nenhuma"}.`,
     `Outras (${normais.length}): ${normais.map((t) => t.texto).join("; ") || "nenhuma"}.`,
     totalVencido > 0 ? `Dinheiro vencido por cobrar: €${totalVencido}.` : "Sem cobranças vencidas de meses anteriores.",
+    `Radar de comunicação das marcas: ${radarResumo || "sem dados ainda"}.`,
   ].join("\n");
 
   const dataLegivel = new Date().toLocaleDateString("pt-PT", {
