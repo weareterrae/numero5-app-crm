@@ -2,13 +2,15 @@
 // Server component puro: recebe os números (já agregados) e desenha.
 // Usado na Sede do cliente e reaproveitável no relatório mensal.
 
+export type RedeResumo = { nome: string; seguidores: number; ganho: number; alcance: number };
+
 export type ResultadosMesDados = {
   periodo: string; // ex.: "4 jul – 3 ago"
-  rede?: string; // ex.: "Instagram"
-  seguidores: number;
-  ganho: number; // seguidores ganhos no período
+  redes: RedeResumo[]; // uma entrada por rede ligada (Instagram, Facebook, …)
+  seguidores: number; // total (soma das redes)
+  ganho: number; // seguidores ganhos no período (total)
   base?: number | null; // seguidores no início (para "de X para Y")
-  alcance: number;
+  alcance: number; // total
   interacoes: number;
   comentarios: number;
   partilhas?: number | null;
@@ -17,6 +19,15 @@ export type ResultadosMesDados = {
   serie: number[]; // alcance dia a dia (para o sparkline)
   visitas?: number | null; // visitas ao site
   fonte?: string;
+};
+
+const ICON: Record<string, string> = {
+  Instagram: "📷",
+  Facebook: "👍",
+  LinkedIn: "in",
+  TikTok: "♪",
+  YouTube: "▶",
+  Google: "G",
 };
 
 const COBALT = "#2B44E7";
@@ -90,7 +101,7 @@ export function ResultadosMes({ d }: { d: ResultadosMesDados }) {
       </p>
       <span className="mt-5 inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-1.5 font-mono text-[11px] font-bold uppercase tracking-wide text-grey">
         <span className="inline-block h-2 w-2 rounded-full" style={{ background: COBALT }} />
-        {(d.rede || "Instagram") + " · " + d.periodo}
+        {(d.redes.length ? d.redes.map((r) => r.nome).join(" + ") : "Instagram") + " · " + d.periodo}
       </span>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-[1.1fr_1fr]">
@@ -136,6 +147,28 @@ export function ResultadosMes({ d }: { d: ResultadosMesDados }) {
         )}
         <Estatistica n={curto(d.alcanceMedio)} l="Alcance médio" sub="por dia" />
       </div>
+
+      {d.redes.length > 1 ? (
+        <div className="mt-4">
+          <p className="mb-2 font-mono text-[11px] font-bold uppercase tracking-wide text-soft">Por rede</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {d.redes.map((r) => (
+              <div key={r.nome} className="flex items-center gap-3 rounded-2xl border border-line bg-white p-4">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cream font-mono text-sm font-bold text-ink">
+                  {ICON[r.nome] || r.nome.slice(0, 1)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-bold text-ink">{r.nome}</p>
+                  <p className="font-mono text-[11px] text-grey">
+                    {milhar(r.seguidores)} seguidores
+                    {r.ganho ? ` (${r.ganho >= 0 ? "+" : ""}${milhar(r.ganho)})` : ""} · {curto(r.alcance)} de alcance
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div className="mt-5 flex items-center justify-between border-t border-line pt-4 font-mono text-[11px] text-soft">
         <span>Fonte: {d.fonte || "Metricool"} · dados reais</span>

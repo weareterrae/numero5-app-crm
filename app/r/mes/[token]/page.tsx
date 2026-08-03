@@ -5,6 +5,8 @@ import { Simbolo } from "@/components/marca/Simbolo";
 import { mesLegivel } from "@/lib/dominio/producao";
 import { idiomaDe } from "@/lib/dominio/intake";
 import { AnunciosDoMes } from "@/components/ads/AnunciosDoMes";
+import { lerResultados } from "@/lib/metricas/ler";
+import { ResultadosMes } from "@/components/metricas/ResultadosMes";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -64,6 +66,8 @@ export default async function RelatorioMensalPublico({
     contaAds = (data as { meta_ads_id?: string | null } | null)?.meta_ads_id ?? null;
   }
 
+  const resultados = await lerResultados(supabase, relatorio.cliente_id);
+
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
       <header className="rounded-2xl bg-ink px-8 py-9 text-cream">
@@ -86,6 +90,12 @@ export default async function RelatorioMensalPublico({
       ) : (
         <p className="mt-6 text-center text-sm text-soft">{t.aPreparar}</p>
       )}
+
+      {resultados ? (
+        <div className="mt-6">
+          <ResultadosMes d={resultados} />
+        </div>
+      ) : null}
 
       <AnunciosDoMes contaId={contaAds} mesISO={relatorio.mes} />
 

@@ -3,6 +3,8 @@ import { contextoSede } from "@/lib/sede/contexto";
 import { criarClienteServico, criarClienteServidor } from "@/lib/supabase/server";
 import { mesLegivel } from "@/lib/dominio/producao";
 import { AnunciosDoMes } from "@/components/ads/AnunciosDoMes";
+import { lerResultados } from "@/lib/metricas/ler";
+import { ResultadosMes } from "@/components/metricas/ResultadosMes";
 
 export const dynamic = "force-dynamic";
 
@@ -74,6 +76,9 @@ export default async function SedeRelatorio({
     contaAds = (data as { meta_ads_id?: string | null } | null)?.meta_ads_id ?? null;
   }
 
+  // Bloco «Resultados do mês» — os números reais das redes (Metricool).
+  const resultados = await lerResultados(svc, ctx.clienteId);
+
   return (
     <div>
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -112,6 +117,12 @@ export default async function SedeRelatorio({
       ) : (
         <p className="mt-6 text-center text-sm text-soft">O relatório está a ser preparado.</p>
       )}
+
+      {resultados ? (
+        <div className="mt-6">
+          <ResultadosMes d={resultados} />
+        </div>
+      ) : null}
 
       {rel ? <AnunciosDoMes contaId={contaAds} mesISO={rel.mes} /> : null}
     </div>
