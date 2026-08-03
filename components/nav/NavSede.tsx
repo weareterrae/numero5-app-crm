@@ -66,8 +66,8 @@ export function NavSede({ temAnuncios }: { temAnuncios: boolean }) {
   const pill = "block whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-bold transition";
 
   return (
-    <nav ref={ref} className="flex-1 overflow-x-auto">
-      <ul className="flex items-center gap-1">
+    <nav ref={ref} className="flex-1">
+      <ul className="flex flex-wrap items-center gap-1">
         {NAV.map((e) => {
           if (!ehGrupo(e)) {
             return (
