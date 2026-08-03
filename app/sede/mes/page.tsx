@@ -1,8 +1,16 @@
 import { contextoSede } from "@/lib/sede/contexto";
 import { criarClienteServidor, criarClienteServico } from "@/lib/supabase/server";
+import { lerResultados } from "@/lib/metricas/ler";
 import MesEm60s, { type Slide } from "@/components/sede/MesEm60s";
 
 export const dynamic = "force-dynamic";
+
+const curtoN = (n: number) =>
+  n >= 10000
+    ? `${Math.round(n / 1000)} mil`
+    : n >= 1000
+      ? `${(n / 1000).toFixed(1).replace(".", ",")} mil`
+      : n.toLocaleString("pt-PT");
 
 function inicioDoMesISO() {
   const d = new Date();
@@ -98,6 +106,41 @@ export default async function SedeMes() {
       titulo: "O motor está a aquecer",
       sub: "estamos a preparar o que traz as próximas leads",
     });
+  }
+
+  // Resultados sociais do mês (alcance, seguidores ganhos, post do mês)
+  const social = ctx.clienteId ? await lerResultados(svc, ctx.clienteId) : null;
+  if (social) {
+    if (social.alcance > 0) {
+      slides.push({
+        chave: "alcance",
+        rotulo: "alcançámos",
+        valor: curtoN(social.alcance),
+        titulo: "pessoas este mês",
+        sub:
+          social.evolucao?.alcancePct != null
+            ? `${social.evolucao.alcancePct >= 0 ? "+" : ""}${social.evolucao.alcancePct}% face ao mês passado`
+            : "nas tuas redes sociais",
+      });
+    }
+    if (social.ganho > 0) {
+      slides.push({
+        chave: "seguidores",
+        rotulo: "cresceste",
+        valor: `+${social.ganho.toLocaleString("pt-PT")}`,
+        titulo: social.ganho === 1 ? "novo seguidor" : "novos seguidores",
+        sub: "a tua comunidade a aumentar",
+      });
+    }
+    if (social.topPost) {
+      slides.push({
+        chave: "toppost",
+        rotulo: "o post do mês",
+        valor: curtoN(social.topPost.alcance),
+        titulo: "pessoas na tua melhor publicação",
+        sub: `${social.topPost.interacoes.toLocaleString("pt-PT")} interações`,
+      });
+    }
   }
 
   if (roiMes > 0) {
