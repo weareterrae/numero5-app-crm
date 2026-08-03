@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ManterSessao } from "@/components/auth/ManterSessao";
+import { AssistenteFlutuante } from "@/components/sede/AssistenteFlutuante";
 import { contextoSede } from "@/lib/sede/contexto";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { trocarMarcaSede } from "./acoes";
@@ -8,7 +9,6 @@ const LINKS = [
   { href: "/sede", label: "Início" },
   { href: "/sede/mes", label: "O teu mês" },
   { href: "/sede/resultados", label: "Resultados" },
-  { href: "/sede/assistente", label: "Assistente" },
   { href: "/sede/documentos", label: "Documentos" },
   { href: "/sede/plano", label: "Plano" },
   { href: "/sede/leads", label: "Leads" },
@@ -139,6 +139,7 @@ export default async function SedeLayout({ children }: { children: React.ReactNo
       <footer className="border-t border-line py-6 text-center text-xs text-soft">
         Espaço de cliente · seguro e privado
       </footer>
+      <AssistenteFlutuante marca={marca.nome} cor={marca.cor} />
     </div>
   );
 }
