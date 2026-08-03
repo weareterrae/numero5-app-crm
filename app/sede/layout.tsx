@@ -1,23 +1,10 @@
 import Link from "next/link";
 import { ManterSessao } from "@/components/auth/ManterSessao";
 import { AssistenteFlutuante } from "@/components/sede/AssistenteFlutuante";
+import { NavSede } from "@/components/nav/NavSede";
 import { contextoSede } from "@/lib/sede/contexto";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { trocarMarcaSede } from "./acoes";
-
-const LINKS = [
-  { href: "/sede", label: "Início" },
-  { href: "/sede/mes", label: "O teu mês" },
-  { href: "/sede/resultados", label: "Resultados" },
-  { href: "/sede/documentos", label: "Documentos" },
-  { href: "/sede/plano", label: "Plano" },
-  { href: "/sede/leads", label: "Leads" },
-  { href: "/sede/pedidos", label: "Pedidos" },
-  { href: "/sede/servicos", label: "Serviços" },
-  { href: "/sede/biblioteca", label: "Biblioteca" },
-  { href: "/sede/pagamentos", label: "Pagamentos" },
-  { href: "/sede/ficha", label: "A minha ficha" },
-];
 
 export default async function SedeLayout({ children }: { children: React.ReactNode }) {
   const ctx = await contextoSede();
@@ -35,9 +22,6 @@ export default async function SedeLayout({ children }: { children: React.ReactNo
       .then((r) => r, () => ({ data: null }));
     temAnuncios = !!(data as { meta_ads_id?: string | null } | null)?.meta_ads_id;
   }
-  const links = temAnuncios
-    ? [...LINKS.slice(0, 5), { href: "/sede/anuncios", label: "Anúncios" }, ...LINKS.slice(5)]
-    : LINKS;
 
   return (
     <div className="min-h-dvh">
@@ -114,20 +98,7 @@ export default async function SedeLayout({ children }: { children: React.ReactNo
               </>
             )}
           </Link>
-          <nav className="flex-1 overflow-x-auto">
-            <ul className="flex gap-1">
-              {links.map((l) => (
-                <li key={l.href}>
-                  <Link
-                    href={l.href}
-                    className="block whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-bold text-grey hover:bg-cream hover:text-ink"
-                  >
-                    {l.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
+          <NavSede temAnuncios={temAnuncios} />
           <form action="/auth/sair" method="post" className="shrink-0">
             <button className="text-xs font-bold text-soft hover:text-ink" type="submit">
               sair
