@@ -38,12 +38,21 @@ type InsightRaw = {
   actions?: { action_type: string; value: string }[];
 };
 
-const ACOES_LEAD = new Set([
-  "lead",
+// O Meta devolve o MESMO contacto em vários action_types sobrepostos: "lead" é o total
+// canónico e os outros são as parcelas que o compõem (ex.: lead=60 = lead_grouped=56 +
+// fb_pixel_lead=4). Somá-los duplicava os contactos mostrados ao cliente.
+const ACOES_LEAD = [
   "onsite_conversion.lead_grouped",
   "leadgen_grouped",
   "offsite_conversion.fb_pixel_lead",
-]);
+];
+
+/** Contactos gerados: usa o total canónico "lead"; sem ele, a maior das parcelas. Nunca soma. */
+function contarLeads(actions?: { action_type: string; value: string }[]): number {
+  const valor = (t: string) => Number(actions?.find((a) => a.action_type === t)?.value) || 0;
+  const total = valor("lead");
+  return total > 0 ? total : Math.max(0, ...ACOES_LEAD.map(valor));
+}
 
 /** Campanhas da conta + métricas (30 dias). Nunca lança — devolve erro legível. */
 export async function campanhasMeta(
@@ -81,9 +90,7 @@ export async function campanhasMeta(
 
     const campanhas: CampanhaMeta[] = (camp.data ?? []).map((c) => {
       const i = porCampanha.get(c.id);
-      const leads = (i?.actions ?? [])
-        .filter((a) => ACOES_LEAD.has(a.action_type))
-        .reduce((s, a) => s + (Number(a.value) || 0), 0);
+      const leads = contarLeads(i?.actions);
       const investimento = Number(i?.spend) || 0;
       return {
         id: c.id,
@@ -167,9 +174,7 @@ export async function anunciosAtivosMeta(
       const impressoes = Number(i?.impressions) || 0;
       const cliques = Number(i?.clicks) || 0;
       const investimento = Number(i?.spend) || 0;
-      const leads = (i?.actions ?? [])
-        .filter((x) => ACOES_LEAD.has(x.action_type))
-        .reduce((s, x) => s + (Number(x.value) || 0), 0);
+      const leads = contarLeads(i?.actions);
       return {
         id: a.id,
         nome: a.name,
@@ -351,9 +356,7 @@ export async function anunciosRicosMeta(
       const alcance = Number(ins?.reach) || 0;
       const cliques = Number(ins?.clicks) || 0;
       const investimento = Number(ins?.spend) || 0;
-      const leads = (ins?.actions ?? [])
-        .filter((x) => ACOES_LEAD.has(x.action_type))
-        .reduce((s, x) => s + (Number(x.value) || 0), 0);
+      const leads = contarLeads(ins?.actions);
 
       return {
         id: a.id,
@@ -423,7 +426,7 @@ export async function resumoAnunciosMes(
     let investimento = 0, alcance = 0, impressoes = 0, cliques = 0, leads = 0;
     const campanhas = (d.data ?? []).map((c) => {
       const inv = Number(c.spend) || 0;
-      const l = (c.actions ?? []).filter((a) => ACOES_LEAD.has(a.action_type)).reduce((s, a) => s + (Number(a.value) || 0), 0);
+      const l = contarLeads(c.actions);
       investimento += inv;
       alcance += Number(c.reach) || 0;
       impressoes += Number(c.impressions) || 0;
