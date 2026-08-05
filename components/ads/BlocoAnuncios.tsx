@@ -18,11 +18,26 @@ export async function BlocoAnuncios({ contaId }: { contaId: string | null }) {
 
   const totInvest = camp.ok ? camp.campanhas.reduce((s, c) => s + c.investimento, 0) : 0;
   const totLeads = camp.ok ? camp.campanhas.reduce((s, c) => s + c.leads, 0) : 0;
-  const totAlcance = camp.ok ? camp.campanhas.reduce((s, c) => s + c.alcance, 0) : 0;
   const totCliques = camp.ok ? camp.campanhas.reduce((s, c) => s + c.cliques, 0) : 0;
+  // Pessoas ÚNICAS. Somar campanhas contava a mesma pessoa uma vez por campanha (1,31x na Terrae).
+  const totAlcance = (camp.ok ? camp.alcanceReal : null) ?? 0;
   const moeda = camp.ok ? camp.moeda : ricos.ok ? ricos.moeda : "EUR";
   const anuncios = ricos.ok ? ricos.anuncios : [];
   const aCorrer = anuncios.filter((a) => a.ativo).length;
+
+  // 69 cartões é uma página que ninguém lê. Mostram-se os que estão a correr mais os já
+  // terminados até cobrir 90% do investimento; o resto vai para um <details>, nunca escondido.
+  const limiar = anuncios.reduce((s, a) => s + a.investimento, 0) * 0.9;
+  let acumulado = 0;
+  let corte = 0;
+  for (const a of anuncios) {
+    corte++;
+    acumulado += a.investimento;
+    if (!a.ativo && acumulado >= limiar) break;
+  }
+  const destacados = anuncios.slice(0, Math.max(corte, aCorrer));
+  const restantes = anuncios.slice(destacados.length);
+  const investRestantes = restantes.reduce((s, a) => s + a.investimento, 0);
 
   // Marcas com campanhas de tráfego/interação não geram contactos — mostrar «—» faz parecer
   // que os anúncios não fizeram nada. Nesse caso destacamos os cliques, que é o que se pediu
@@ -62,10 +77,24 @@ export async function BlocoAnuncios({ contaId }: { contaId: string | null }) {
             {aCorrer > 0 ? ` · ${aCorrer} ainda a correr` : ""}
           </div>
           <div className="space-y-4">
-            {anuncios.map((a) => (
+            {destacados.map((a) => (
               <CartaoAnuncio key={a.id} a={a} />
             ))}
           </div>
+
+          {restantes.length > 0 ? (
+            <details className="mt-4 rounded-xl border border-line bg-cream/60">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-bold text-grey">
+                Ver os outros {restantes.length} anúncios já terminados ·{" "}
+                {din(investRestantes, moeda)}
+              </summary>
+              <div className="space-y-4 border-t border-line p-4">
+                {restantes.map((a) => (
+                  <CartaoAnuncio key={a.id} a={a} />
+                ))}
+              </div>
+            </details>
+          ) : null}
         </div>
       ) : camp.ok && camp.campanhas.some((c) => c.estado === "ACTIVE") ? (
         <p className="mt-6 rounded-xl border border-line bg-cream px-4 py-3 text-sm text-grey">
@@ -78,9 +107,17 @@ export async function BlocoAnuncios({ contaId }: { contaId: string | null }) {
         </p>
       )}
 
+      {ricos.ok && ricos.truncado ? (
+        <p className="mt-4 rounded-xl border border-gold/40 bg-gold/10 px-4 py-3 text-xs text-gold-dark">
+          A tua conta tem tantos anúncios que esta lista ficou pelo limite que conseguimos ler de
+          uma vez — há mais anúncios do que os mostrados. Os totais lá em cima continuam certos. 🖐️
+        </p>
+      ) : null}
+
       <p className="mt-6 text-[11px] text-soft">
-        Fonte: Meta Ads (Instagram + Facebook), últimos 30 dias. Google, TikTok e outras redes
-        aparecem aqui quando houver campanhas nelas.
+        Fonte: Meta Ads (Instagram + Facebook), últimos 30 dias. «Pessoas alcançadas» são pessoas
+        diferentes — quem viu vários anúncios conta uma vez. Google, TikTok e outras redes aparecem
+        aqui quando houver campanhas nelas.
       </p>
     </section>
   );

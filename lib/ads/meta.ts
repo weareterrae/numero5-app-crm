@@ -54,10 +54,19 @@ function contarLeads(actions?: { action_type: string; value: string }[]): number
   return total > 0 ? total : Math.max(0, ...ACOES_LEAD.map(valor));
 }
 
-/** Campanhas da conta + métricas (30 dias). Nunca lança — devolve erro legível. */
+/**
+ * Campanhas da conta + métricas (30 dias). Nunca lança — devolve erro legível.
+ *
+ * Devolve também `alcanceReal`: pessoas ÚNICAS alcançadas na conta, pedido a level=account.
+ * Somar o alcance de cada campanha conta a mesma pessoa uma vez por campanha em que caiu —
+ * na Terrae dava 242 997 contra 185 729 reais (1,31x). Para mostrar ao cliente usa-se este.
+ */
 export async function campanhasMeta(
   accountId: string,
-): Promise<{ ok: true; campanhas: CampanhaMeta[]; moeda: string } | { ok: false; erro: string }> {
+): Promise<
+  | { ok: true; campanhas: CampanhaMeta[]; moeda: string; alcanceReal: number | null }
+  | { ok: false; erro: string }
+> {
   const token = process.env.META_ADS_TOKEN?.trim();
   if (!token) return { ok: false, erro: "META_ADS_TOKEN por configurar no Netlify." };
   const acc = accountId.replace(/^act_/, "").trim();
@@ -65,7 +74,7 @@ export async function campanhasMeta(
 
   try {
     const base = `https://graph.facebook.com/${V}/act_${acc}`;
-    const [rConta, rCamp, rIns] = await Promise.all([
+    const [rConta, rCamp, rIns, rGlobal] = await Promise.all([
       fetch(`${base}?fields=currency&access_token=${encodeURIComponent(token)}`),
       fetch(
         // effective_status explícito: sem ele a API omite campanhas (visto na Massa Prima).
@@ -73,6 +82,9 @@ export async function campanhasMeta(
       ),
       fetch(
         `${base}/insights?level=campaign&date_preset=last_30d&fields=campaign_id,reach,impressions,clicks,spend,actions&limit=50&access_token=${encodeURIComponent(token)}`,
+      ),
+      fetch(
+        `${base}/insights?level=account&date_preset=last_30d&fields=reach&access_token=${encodeURIComponent(token)}`,
       ),
     ]);
     if (!rCamp.ok) {
@@ -112,7 +124,11 @@ export async function campanhasMeta(
         Number(b.estado === "ACTIVE") - Number(a.estado === "ACTIVE") ||
         b.investimento - a.investimento,
     );
-    return { ok: true, campanhas, moeda };
+    const global = rGlobal.ok
+      ? ((await rGlobal.json().catch(() => ({}))) as { data?: { reach?: string }[] })
+      : {};
+    const alcanceReal = Number(global.data?.[0]?.reach) || null;
+    return { ok: true, campanhas, moeda, alcanceReal };
   } catch (e) {
     return { ok: false, erro: String(e).slice(0, 140) };
   }
@@ -308,7 +324,10 @@ type CreativeRaw = {
  */
 export async function anunciosRicosMeta(
   accountId: string,
-): Promise<{ ok: true; anuncios: AnuncioRico[]; moeda: string } | { ok: false; erro: string }> {
+): Promise<
+  | { ok: true; anuncios: AnuncioRico[]; moeda: string; truncado: boolean }
+  | { ok: false; erro: string }
+> {
   const token = process.env.META_ADS_TOKEN?.trim();
   if (!token) return { ok: false, erro: "META_ADS_TOKEN por configurar." };
   const acc = accountId.replace(/^act_/, "").trim();
@@ -357,10 +376,12 @@ export async function anunciosRicosMeta(
     // O teto de 6 páginas (300) é uma rede de segurança, não um limite esperado.
     const crus: AdRaw[] = [];
     let pagina = (await rAds.json()) as Pagina;
-    for (let i = 0; i < 6; i++) {
+    let truncado = false;
+    for (let i = 0; ; i++) {
       crus.push(...(pagina.data ?? []));
       const proxima = pagina.paging?.next;
       if (!proxima) break;
+      if (i >= 5) { truncado = true; break; } // teto atingido — não fingir que a lista é completa
       const r = await fetch(proxima);
       if (!r.ok) break;
       pagina = (await r.json()) as Pagina;
@@ -418,7 +439,7 @@ export async function anunciosRicosMeta(
     const comEntrega = anuncios
       .filter((a) => a.impressoes > 0)
       .sort((a, b) => Number(b.ativo) - Number(a.ativo) || b.investimento - a.investimento);
-    return { ok: true, anuncios: comEntrega, moeda };
+    return { ok: true, anuncios: comEntrega, moeda, truncado };
   } catch (e) {
     return { ok: false, erro: String(e).slice(0, 120) };
   }
