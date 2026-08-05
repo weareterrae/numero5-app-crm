@@ -12,7 +12,24 @@ type Com = {
   falhas: unknown[] | null;
   atualizado_em: string | null;
 };
-type Met = { cliente_id: string; rede: string; data: string; seguidores: number | null; ganho: number | null; alcance: number | null };
+type Met = {
+  cliente_id: string;
+  rede: string;
+  data: string;
+  seguidores: number | null;
+  ganho: number | null;
+  alcance: number | null;
+  visitas: number | null;
+};
+
+/** Redes sociais no Radar, por ordem de apresentação. A web é tratada à parte (visitas). */
+const REDES: { rede: string; sigla: string }[] = [
+  { rede: "instagram", sigla: "IG" },
+  { rede: "facebook", sigla: "FB" },
+  { rede: "linkedin", sigla: "IN" },
+  { rede: "tiktok", sigla: "TT" },
+  { rede: "youtube", sigla: "YT" },
+];
 
 const CORES: Record<string, { dot: string; txt: string; label: string }> = {
   verde: { dot: "#2FA36B", txt: "em dia", label: "text-good" },
@@ -38,19 +55,30 @@ export default async function RadarPage() {
       .then((r) => r, () => ({ data: null })),
     supabase
       .from("marca_metricas")
-      .select("cliente_id, rede, data, seguidores, ganho, alcance")
-      .eq("rede", "instagram")
+      .select("cliente_id, rede, data, seguidores, ganho, alcance, visitas")
       .order("data", { ascending: false })
       .then((r) => r, () => ({ data: null })),
   ]);
 
   const marcas = (clientesRes.data ?? []) as { id: string; nome_marca: string }[];
   const com = new Map(((comRes?.data ?? []) as Com[]).map((c) => [c.cliente_id, c]));
-  const met = new Map<string, Met>();
-  for (const m of (metRes?.data ?? []) as Met[]) if (!met.has(m.cliente_id)) met.set(m.cliente_id, m);
+  // A fotografia mais recente de cada rede, por marca (as linhas vêm da mais nova para a mais antiga).
+  const met = new Map<string, Map<string, Met>>();
+  for (const m of (metRes?.data ?? []) as Met[]) {
+    let porRede = met.get(m.cliente_id);
+    if (!porRede) met.set(m.cliente_id, (porRede = new Map()));
+    if (!porRede.has(m.rede)) porRede.set(m.rede, m);
+  }
 
   const cards = marcas
-    .map((mrc) => ({ mrc, c: com.get(mrc.id), m: met.get(mrc.id) }))
+    .map((mrc) => {
+      const porRede = met.get(mrc.id);
+      const redes = REDES.map((r) => ({ ...r, m: porRede?.get(r.rede) })).filter((r) => r.m);
+      const seguidores = redes.reduce((s, r) => s + (r.m!.seguidores ?? 0), 0);
+      const ganho = redes.reduce((s, r) => s + (r.m!.ganho ?? 0), 0);
+      const visitas = porRede?.get("web")?.visitas ?? null;
+      return { mrc, c: com.get(mrc.id), redes, seguidores, ganho, visitas };
+    })
     .sort((a, b) => (ORDEM[a.c?.estado ?? "cinzento"] ?? 3) - (ORDEM[b.c?.estado ?? "cinzento"] ?? 3));
 
   const contagem = { vermelho: 0, amarelo: 0, verde: 0, cinzento: 0 } as Record<string, number>;
@@ -79,7 +107,7 @@ export default async function RadarPage() {
       </div>
 
       <ul className="space-y-2">
-        {cards.map(({ mrc, c, m }) => {
+        {cards.map(({ mrc, c, redes, seguidores, ganho, visitas }) => {
           const est = c?.estado ?? "cinzento";
           const cor = CORES[est];
           const falhas = Array.isArray(c?.falhas) ? c!.falhas!.length : 0;
@@ -99,12 +127,33 @@ export default async function RadarPage() {
                         ? `${cor.txt} · ${c.dias_cobertos ?? 0} dias cobertos · próximo ${diaMes(c.proximo_post)}`
                         : "à espera da 1.ª recolha"}
                   </p>
+                  {redes.length > 0 ? (
+                    <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-soft">
+                      {redes.map((r) => (
+                        <span key={r.rede}>
+                          <span className="font-bold text-grey">{r.sigla}</span> {fmt(r.m!.seguidores ?? 0)}
+                          {r.m!.ganho ? (
+                            <span className={r.m!.ganho > 0 ? "text-good" : "text-bad"}>
+                              {" "}
+                              {r.m!.ganho > 0 ? "+" : ""}
+                              {r.m!.ganho}
+                            </span>
+                          ) : null}
+                        </span>
+                      ))}
+                      {visitas != null ? (
+                        <span>
+                          <span className="font-bold text-grey">WEB</span> {fmt(visitas)} visitas
+                        </span>
+                      ) : null}
+                    </p>
+                  ) : null}
                 </div>
-                {m ? (
+                {redes.length > 0 ? (
                   <div className="hidden shrink-0 text-right sm:block">
-                    <p className="numero text-sm">{fmt(m.seguidores ?? 0)}</p>
+                    <p className="numero text-sm">{fmt(seguidores)}</p>
                     <p className="text-[10px] text-soft">
-                      seguidores{m.ganho != null ? ` (${m.ganho >= 0 ? "+" : ""}${m.ganho})` : ""}
+                      seguidores{ganho ? ` (${ganho > 0 ? "+" : ""}${ganho})` : ""}
                     </p>
                   </div>
                 ) : null}
