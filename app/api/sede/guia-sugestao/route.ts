@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { criarClienteServidor } from "@/lib/supabase/server";
+import { criarClienteServidor, criarClienteServico } from "@/lib/supabase/server";
 import { obterIA } from "@/lib/ia/provider";
 
 // Rate-limit simples por utilizador (melhor-esforço, por instância).
@@ -18,28 +18,39 @@ function rateLimit(uid: string) {
 }
 
 export async function POST(req: NextRequest) {
-  const supabase = await criarClienteServidor();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ erro: "Sem sessão." }, { status: 401 });
-  if (!rateLimit(user.id))
-    return NextResponse.json({ sugestao: "Estou a apanhar o fôlego 😅 tenta daqui a um minuto." });
-
-  const ia = obterIA();
-  if (!ia)
-    return NextResponse.json({ sugestao: "", aviso: "O assistente está em manutenção — escreve à vontade." });
-
   let c: {
     label?: string;
     marca?: { nome?: string; setor?: string; website?: string };
     respostas?: Record<string, string>;
+    token?: string;
   };
   try {
     c = await req.json();
   } catch {
     return NextResponse.json({ erro: "Pedido inválido." }, { status: 400 });
   }
+
+  // Autorização: sessão (Sede) OU token válido (link público).
+  const supabase = await criarClienteServidor();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const token = String(c?.token || "");
+  let quem = "";
+  if (user) {
+    quem = user.id;
+  } else if (token.length >= 8) {
+    const svc = criarClienteServico();
+    const { data } = await svc.from("clientes").select("id").eq("guia_token", token).maybeSingle();
+    if (data?.id) quem = "tok:" + token.slice(0, 20);
+  }
+  if (!quem) return NextResponse.json({ erro: "Sem sessão." }, { status: 401 });
+  if (!rateLimit(quem))
+    return NextResponse.json({ sugestao: "Estou a apanhar o fôlego 😅 tenta daqui a um minuto." });
+
+  const ia = obterIA();
+  if (!ia)
+    return NextResponse.json({ sugestao: "", aviso: "O assistente está em manutenção — escreve à vontade." });
 
   const label = String(c?.label || "").slice(0, 200);
   const nome = String(c?.marca?.nome || "a marca").slice(0, 120);

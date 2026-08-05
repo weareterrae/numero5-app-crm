@@ -101,11 +101,13 @@ export function GuiaForm({
   marca,
   cor,
   anexosIniciais = [],
+  token,
 }: {
   inicial: Record<string, string>;
   marca: { nome: string; setor: string; website: string };
   cor?: string;
   anexosIniciais?: Anexo[];
+  token?: string;
 }) {
   const acento = cor || "#E8A13C";
   const limpaInicial: Record<string, string> = {};
@@ -128,14 +130,14 @@ export function GuiaForm({
     for (const f of files) {
       const fd = new FormData();
       fd.append("ficheiro", f);
-      const r = await anexarMaterialGuia(fd);
+      const r = await anexarMaterialGuia(fd, token);
       if (r.ok && r.anexo) setAnexos((a) => [r.anexo as Anexo, ...a]);
     }
     setACarregar(false);
   }
 
   async function removerAnexo(id: string) {
-    const r = await removerAnexoGuia(id);
+    const r = await removerAnexoGuia(id, token);
     if (r.ok) setAnexos((a) => a.filter((x) => x.id !== id));
   }
 
@@ -146,7 +148,7 @@ export function GuiaForm({
     setEstado("guardar");
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
-      const r = await guardarGuia(next);
+      const r = await guardarGuia(next, token);
       setEstado(r.ok ? "guardado" : "idle");
     }, 900);
   }
@@ -163,7 +165,7 @@ export function GuiaForm({
       const r = await fetch("/api/sede/guia-sugestao", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ label: campo.label, marca, respostas: valores }),
+        body: JSON.stringify({ label: campo.label, marca, respostas: valores, token }),
       });
       const d = await r.json();
       const s = (d?.sugestao || "").trim();
@@ -190,7 +192,7 @@ export function GuiaForm({
 
   async function enviar() {
     setEstado("guardar");
-    const r = await concluirGuia(valores);
+    const r = await concluirGuia(valores, token);
     setEstado(r.ok ? "guardado" : "idle");
     if (r.ok) setEnviado(true);
   }

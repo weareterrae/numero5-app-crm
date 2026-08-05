@@ -10,69 +10,71 @@ const MAX_ANEXO = 25 * 1024 * 1024; // 25 MB
 export type Anexo = { id: string; nome: string; tipo: string | null; tamanho: number | null };
 
 /**
- * Guarda o Guia da Marca — autorizado SEMPRE pela sessão (nunca por URL).
- * Grava em `clientes.guia_marca` (jsonb) do próprio cliente. Auto-save silencioso.
+ * Resolve o cliente por TOKEN (link público) ou, na falta dele, pela SESSÃO (Sede).
+ * O token é a autorização do link público (padrão /r/[token]).
  */
-export async function guardarGuia(dados: Record<string, string>): Promise<{ ok: boolean }> {
+async function resolverClienteId(token?: string): Promise<string | null> {
+  if (token && typeof token === "string" && token.length >= 8) {
+    const svc = criarClienteServico();
+    const { data } = await svc.from("clientes").select("id").eq("guia_token", token).maybeSingle();
+    return (data?.id as string | undefined) ?? null;
+  }
   const ctx = await contextoSede();
-  if (!ctx.clienteId) return { ok: false };
-  const svc = criarClienteServico();
+  return ctx.clienteId;
+}
 
-  const limpo: Record<string, string> = {};
+function limpar(dados: Record<string, string>): Record<string, string> {
+  const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(dados || {})) {
     if (typeof k === "string" && typeof v === "string" && v.trim()) {
-      limpo[k.slice(0, 40)] = v.trim().slice(0, 2000);
+      out[k.slice(0, 40)] = v.trim().slice(0, 2000);
     }
   }
-  const payload = { ...limpo, _atualizado: new Date().toISOString() };
-  const { error } = await svc.from("clientes").update({ guia_marca: payload }).eq("id", ctx.clienteId);
+  return out;
+}
+
+/** Guarda o Guia da Marca (auto-save silencioso). Sessão OU token. */
+export async function guardarGuia(dados: Record<string, string>, token?: string): Promise<{ ok: boolean }> {
+  const cid = await resolverClienteId(token);
+  if (!cid) return { ok: false };
+  const svc = criarClienteServico();
+  const payload = { ...limpar(dados), _atualizado: new Date().toISOString() };
+  const { error } = await svc.from("clientes").update({ guia_marca: payload }).eq("id", cid);
   return { ok: !error };
 }
 
-/**
- * Marca o guia como enviado à equipa + deixa nota no histórico (para o operador saber).
- */
-export async function concluirGuia(dados: Record<string, string>): Promise<{ ok: boolean }> {
-  const ctx = await contextoSede();
-  if (!ctx.clienteId) return { ok: false };
+/** Marca como enviado à equipa + nota no histórico. Sessão OU token. */
+export async function concluirGuia(dados: Record<string, string>, token?: string): Promise<{ ok: boolean }> {
+  const cid = await resolverClienteId(token);
+  if (!cid) return { ok: false };
   const svc = criarClienteServico();
-
-  const limpo: Record<string, string> = {};
-  for (const [k, v] of Object.entries(dados || {})) {
-    if (typeof k === "string" && typeof v === "string" && v.trim()) {
-      limpo[k.slice(0, 40)] = v.trim().slice(0, 2000);
-    }
-  }
-  const payload = { ...limpo, _concluido: true, _atualizado: new Date().toISOString() };
-  const { error } = await svc.from("clientes").update({ guia_marca: payload }).eq("id", ctx.clienteId);
+  const payload = { ...limpar(dados), _concluido: true, _atualizado: new Date().toISOString() };
+  const { error } = await svc.from("clientes").update({ guia_marca: payload }).eq("id", cid);
   if (error) return { ok: false };
 
   await svc.from("atividades").insert({
-    cliente_id: ctx.clienteId,
+    cliente_id: cid,
     tipo: "nota",
-    descricao: "Na Sede, o cliente preencheu e enviou o Guia da Marca. 🖐️",
+    descricao: "O cliente preencheu e enviou o Guia da Marca. 🖐️",
   });
-  revalidatePath("/sede/guia");
+  revalidatePath(token ? `/guia/${token}` : "/sede/guia");
   return { ok: true };
 }
 
-/**
- * Anexa um material a partir do Guia — vai para o bucket privado `materiais`
- * e para `materiais_cliente` (aparece também na Biblioteca). Devolve o anexo
- * para o cliente atualizar a lista sem recarregar.
- */
+/** Anexa um material (bucket materiais + materiais_cliente → aparece na Biblioteca). Sessão OU token. */
 export async function anexarMaterialGuia(
   fd: FormData,
+  token?: string,
 ): Promise<{ ok: boolean; anexo?: Anexo; erro?: string }> {
-  const ctx = await contextoSede();
-  if (!ctx.clienteId) return { ok: false, erro: "sem-cliente" };
+  const cid = await resolverClienteId(token);
+  if (!cid) return { ok: false, erro: "sem-cliente" };
   const file = fd.get("ficheiro");
   if (!(file instanceof File) || file.size === 0) return { ok: false, erro: "vazio" };
   if (file.size > MAX_ANEXO) return { ok: false, erro: "grande" };
 
   const svc = criarClienteServico();
   const seguro = file.name.replace(/[^\w.\-]+/g, "_").slice(-80) || "ficheiro";
-  const caminho = `${ctx.clienteId}/${randomUUID()}-${seguro}`;
+  const caminho = `${cid}/${randomUUID()}-${seguro}`;
   const buf = Buffer.from(await file.arrayBuffer());
 
   const { error } = await svc.storage
@@ -83,7 +85,7 @@ export async function anexarMaterialGuia(
   const { data, error: e2 } = await svc
     .from("materiais_cliente")
     .insert({
-      cliente_id: ctx.clienteId,
+      cliente_id: cid,
       nome: file.name.slice(0, 120),
       caminho,
       tipo: file.type || null,
@@ -96,18 +98,18 @@ export async function anexarMaterialGuia(
   return { ok: true, anexo: data as Anexo };
 }
 
-/** Remove um anexo — só se for do cliente da sessão. */
-export async function removerAnexoGuia(id: string): Promise<{ ok: boolean }> {
-  const ctx = await contextoSede();
-  if (!ctx.clienteId) return { ok: false };
+/** Remove um anexo — só se for do cliente resolvido. Sessão OU token. */
+export async function removerAnexoGuia(id: string, token?: string): Promise<{ ok: boolean }> {
+  const cid = await resolverClienteId(token);
+  if (!cid) return { ok: false };
   const svc = criarClienteServico();
   const { data: m } = await svc
     .from("materiais_cliente")
     .select("caminho")
     .eq("id", id)
-    .eq("cliente_id", ctx.clienteId)
+    .eq("cliente_id", cid)
     .maybeSingle();
   if (m?.caminho) await svc.storage.from("materiais").remove([m.caminho]);
-  await svc.from("materiais_cliente").delete().eq("id", id).eq("cliente_id", ctx.clienteId);
+  await svc.from("materiais_cliente").delete().eq("id", id).eq("cliente_id", cid);
   return { ok: true };
 }
