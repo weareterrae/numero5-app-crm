@@ -8,6 +8,18 @@ function diaMes(iso?: string | null) {
   return `${d.getUTCDate()} ${MESES[d.getUTCMonth()]}`;
 }
 
+/**
+ * As URLs do cdninstagram trazem a validade em `oe=` (unix time em hexadecimal) e morrem
+ * ao fim de poucos dias. Melhor esconder o bloco do que mostrar uma imagem partida ao
+ * cliente — a recolha diária traz uma URL nova todos os dias.
+ */
+function imagemValida(url: string): boolean {
+  const m = /[?&]oe=([0-9A-Fa-f]+)/.exec(url);
+  if (!m) return true; // sem validade declarada: assume-se boa (ex.: imagem nossa)
+  const expira = parseInt(m[1], 16);
+  return Number.isFinite(expira) && expira * 1000 > Date.now();
+}
+
 const LABEL: Record<string, string> = {
   instagram: "Instagram",
   facebook: "Facebook",
@@ -85,7 +97,10 @@ export async function lerResultados(
 
   // Post do mês (extra.top_post) e Google Business (linha rede='gbp').
   const tp = exRef.top_post as { imagem?: string; alcance?: number; interacoes?: number; legenda?: string } | undefined;
-  const topPost = tp && tp.imagem ? { imagem: tp.imagem, alcance: num(tp.alcance), interacoes: num(tp.interacoes), legenda: tp.legenda ?? null } : null;
+  const topPost =
+    tp && tp.imagem && imagemValida(tp.imagem)
+      ? { imagem: tp.imagem, alcance: num(tp.alcance), interacoes: num(tp.interacoes), legenda: tp.legenda ?? null }
+      : null;
 
   const gbpRow = porRede.get("gbp");
   const gex = (gbpRow?.extra ?? {}) as Record<string, unknown>;

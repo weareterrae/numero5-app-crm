@@ -54,12 +54,23 @@ export function CartaoAnuncio({ a }: { a: AnuncioRico }) {
               <p className="numero text-base leading-none">{fmt(a.cliques)}</p>
               <p className="text-[10px] text-soft">cliques{a.ctr != null ? ` · ${pct(a.ctr)}` : ""}</p>
             </div>
-            <div>
-              <p className="numero text-base leading-none">{a.leads > 0 ? fmt(a.leads) : "—"}</p>
-              <p className="text-[10px] text-soft">
-                contactos{a.custo_por_lead ? ` · ${din(a.custo_por_lead, a.moeda)}` : ""}
-              </p>
-            </div>
+            {/* Anúncio de tráfego/interação não gera contactos — mostramos o custo por clique,
+                que é o que faz sentido cobrar-lhe, em vez de um traço. */}
+            {a.leads > 0 ? (
+              <div>
+                <p className="numero text-base leading-none">{fmt(a.leads)}</p>
+                <p className="text-[10px] text-soft">
+                  contactos{a.custo_por_lead ? ` · ${din(a.custo_por_lead, a.moeda)}` : ""}
+                </p>
+              </div>
+            ) : (
+              <div>
+                <p className="numero text-base leading-none">
+                  {a.cliques > 0 ? din(a.investimento / a.cliques, a.moeda) : "—"}
+                </p>
+                <p className="text-[10px] text-soft">por clique</p>
+              </div>
+            )}
             <div>
               <p className="numero text-base leading-none">{din(a.investimento, a.moeda)}</p>
               <p className="text-[10px] text-soft">investido</p>

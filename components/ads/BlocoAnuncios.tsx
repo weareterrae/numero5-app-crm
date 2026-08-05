@@ -19,8 +19,16 @@ export async function BlocoAnuncios({ contaId }: { contaId: string | null }) {
   const totInvest = camp.ok ? camp.campanhas.reduce((s, c) => s + c.investimento, 0) : 0;
   const totLeads = camp.ok ? camp.campanhas.reduce((s, c) => s + c.leads, 0) : 0;
   const totAlcance = camp.ok ? camp.campanhas.reduce((s, c) => s + c.alcance, 0) : 0;
+  const totCliques = camp.ok ? camp.campanhas.reduce((s, c) => s + c.cliques, 0) : 0;
   const moeda = camp.ok ? camp.moeda : ricos.ok ? ricos.moeda : "EUR";
   const anuncios = ricos.ok ? ricos.anuncios : [];
+
+  // Marcas com campanhas de tráfego/interação não geram contactos — mostrar «—» faz parecer
+  // que os anúncios não fizeram nada. Nesse caso destacamos os cliques, que é o que se pediu
+  // à campanha.
+  const destaque = totLeads > 0
+    ? { valor: fmt(totLeads), rotulo: "contactos gerados" }
+    : { valor: fmt(totCliques), rotulo: "cliques para o teu site" };
 
   return (
     <section className="mt-10 border-t border-line pt-8">
@@ -37,8 +45,8 @@ export async function BlocoAnuncios({ contaId }: { contaId: string | null }) {
           <p className="text-[11px] text-cream/70">pessoas alcançadas</p>
         </div>
         <div className="rounded-xl bg-ink p-4 text-cream">
-          <p className="numero text-2xl" style={{ color: "var(--color-gold)" }}>{totLeads > 0 ? fmt(totLeads) : "—"}</p>
-          <p className="text-[11px] text-cream/70">contactos gerados</p>
+          <p className="numero text-2xl" style={{ color: "var(--color-gold)" }}>{destaque.valor}</p>
+          <p className="text-[11px] text-cream/70">{destaque.rotulo}</p>
         </div>
         <div className="rounded-xl bg-ink p-4 text-cream">
           <p className="numero text-2xl" style={{ color: "var(--color-gold)" }}>{din(totInvest, moeda)}</p>
