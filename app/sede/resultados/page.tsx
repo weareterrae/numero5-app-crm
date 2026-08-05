@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { contextoSede } from "@/lib/sede/contexto";
 import { criarClienteServico, criarClienteServidor } from "@/lib/supabase/server";
 import { lerResultados } from "@/lib/metricas/ler";
@@ -25,6 +26,18 @@ const Cabecalho = () => (
   </>
 );
 
+/**
+ * Os anúncios dependem da API da Meta, que numa conta grande demora. Em Suspense para que
+ * os resultados orgânicos apareçam de imediato — sem isto, uma resposta lenta da Meta
+ * segurava a página toda e o cliente ficava a olhar para o esqueleto.
+ */
+const EsqueletoAnuncios = () => (
+  <section className="mt-10 border-t border-line pt-8">
+    <div className="rotulo">o que pagámos para chegar mais longe</div>
+    <div className="mt-4 h-24 animate-pulse rounded-xl bg-cream" />
+  </section>
+);
+
 export default async function SedeResultados() {
   const ctx = await contextoSede();
   const contaId = await contaMeta(ctx.org.id);
@@ -37,7 +50,9 @@ export default async function SedeResultados() {
           Estamos a preparar os teus números. Assim que houver histórico, aparece aqui o alcance, os
           seguidores ganhos e tudo o que medimos. 🖐️
         </p>
-        <BlocoAnuncios contaId={contaId} />
+        <Suspense fallback={<EsqueletoAnuncios />}>
+          <BlocoAnuncios contaId={contaId} />
+        </Suspense>
       </div>
     );
   }
@@ -68,7 +83,9 @@ export default async function SedeResultados() {
         </p>
       )}
 
-      <BlocoAnuncios contaId={contaId} />
+      <Suspense fallback={<EsqueletoAnuncios />}>
+        <BlocoAnuncios contaId={contaId} />
+      </Suspense>
     </div>
   );
 }
