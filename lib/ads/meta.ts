@@ -340,7 +340,11 @@ export async function anunciosRicosMeta(
         {
           field: "effective_status",
           operator: "IN",
-          value: ["ACTIVE", "PAUSED", "ADSET_PAUSED", "CAMPAIGN_PAUSED"],
+          // ARCHIVED incluído de propósito: os totais no topo contam o gasto de campanhas
+          // arquivadas, por isso os anúncios delas têm de poder aparecer. Sem isto, arrumar
+          // a conta fazia a lista deixar de explicar os totais. O corte a sério é a entrega
+          // no período, feita a seguir.
+          value: ["ACTIVE", "PAUSED", "ADSET_PAUSED", "CAMPAIGN_PAUSED", "ARCHIVED"],
         },
       ]),
     );
@@ -373,7 +377,8 @@ export async function anunciosRicosMeta(
     const moeda = ((await (await rConta).json().catch(() => ({}))) as { currency?: string }).currency || "EUR";
 
     // Contas com histórico têm centenas de anúncios — sem paginar, perdiam-se os do fim.
-    // O teto de 6 páginas (300) é uma rede de segurança, não um limite esperado.
+    // Incluir os arquivados triplica o volume: a Terrae devolve 273 em 6 páginas. O teto de
+    // 12 (600) é rede de segurança com folga, e quando é atingido dizemo-lo na página.
     const crus: AdRaw[] = [];
     let pagina = (await rAds.json()) as Pagina;
     let truncado = false;
@@ -381,7 +386,7 @@ export async function anunciosRicosMeta(
       crus.push(...(pagina.data ?? []));
       const proxima = pagina.paging?.next;
       if (!proxima) break;
-      if (i >= 5) { truncado = true; break; } // teto atingido — não fingir que a lista é completa
+      if (i >= 11) { truncado = true; break; } // teto atingido — não fingir que a lista é completa
       const r = await fetch(proxima);
       if (!r.ok) break;
       pagina = (await r.json()) as Pagina;
