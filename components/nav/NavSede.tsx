@@ -38,6 +38,7 @@ export function NavSede() {
     {
       label: "Conta",
       items: [
+        { href: "/sede/guia", label: "Guia da marca" },
         { href: "/sede/pagamentos", label: "Pagamentos" },
         { href: "/sede/ficha", label: "A minha ficha" },
       ],
