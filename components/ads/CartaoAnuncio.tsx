@@ -19,16 +19,33 @@ export function CartaoAnuncio({ a }: { a: AnuncioRico }) {
       <div className="grid sm:grid-cols-[210px_1fr]">
         {a.imagem ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={a.imagem} alt={a.titulo ?? "anúncio"} className="h-52 w-full object-cover sm:h-full" />
+          <img
+            src={a.imagem}
+            alt={a.titulo ?? "anúncio"}
+            loading="lazy"
+            decoding="async"
+            className="h-52 w-full object-cover sm:h-full"
+          />
         ) : (
           <div className="grid h-52 place-items-center bg-cream text-3xl sm:h-full">📢</div>
         )}
         <div className="p-5">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="rotulo !text-[10px]">{a.campanha}</p>
-            <span className="rounded-full bg-cream px-2.5 py-0.5 text-[10px] font-bold text-grey">
-              {FORMATO[a.formato] ?? a.formato}
-            </span>
+            <div className="flex items-center gap-1.5">
+              {/* A lista inclui anúncios que já pararam mas entregaram no período — sem isto
+                  o cliente não distingue o que está no ar do que já terminou. */}
+              <span
+                className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                  a.ativo ? "bg-good/10 text-good" : "bg-cream text-soft"
+                }`}
+              >
+                {a.ativo ? "● a correr" : "terminado"}
+              </span>
+              <span className="rounded-full bg-cream px-2.5 py-0.5 text-[10px] font-bold text-grey">
+                {FORMATO[a.formato] ?? a.formato}
+              </span>
+            </div>
           </div>
           {a.titulo ? (
             <h3 className="mt-1 font-display text-lg font-extrabold leading-snug">{a.titulo}</h3>

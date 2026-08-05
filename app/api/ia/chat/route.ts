@@ -188,9 +188,10 @@ export async function POST(req: NextRequest) {
           if (r.ok && r.anuncios.length) {
             const linhas = r.anuncios.slice(0, 8).map((a) => {
               const cpl = a.custo_por_lead ? ` @ ${a.custo_por_lead.toFixed(2)}€/lead` : "";
-              return `• "${a.titulo || a.nome}" [${a.campanha}] público: ${a.publico} | 30d: ${a.investimento.toFixed(0)}€, ${a.alcance} alc, ${a.cliques} cliq${a.ctr != null ? ` (CTR ${(a.ctr * 100).toFixed(2)}%)` : ""}, ${a.leads} leads${cpl}`;
+              return `• [${a.ativo ? "a correr" : "parado"}] "${a.titulo || a.nome}" [${a.campanha}] público: ${a.publico} | 30d: ${a.investimento.toFixed(0)}€, ${a.alcance} alc, ${a.cliques} cliq${a.ctr != null ? ` (CTR ${(a.ctr * 100).toFixed(2)}%)` : ""}, ${a.leads} leads${cpl}`;
             });
-            L.push(`ANÚNCIOS ATIVOS (Meta, 30d):\n${linhas.join("\n")}`);
+            const aCorrer = r.anuncios.filter((a) => a.ativo).length;
+            L.push(`ANÚNCIOS COM ENTREGA (Meta, 30d) — ${r.anuncios.length} no total, ${aCorrer} ainda a correr:\n${linhas.join("\n")}`);
           }
         }
       }

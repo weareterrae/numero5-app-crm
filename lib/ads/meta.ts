@@ -202,6 +202,7 @@ export type AnuncioRico = {
   nome: string;
   campanha: string;
   campanhaAtiva: boolean;
+  ativo: boolean; // ainda a correr agora (vs. já parado, mas com entrega no período)
   publico: string; // em português simples
   imagem: string | null;
   titulo: string | null;
@@ -297,7 +298,14 @@ type CreativeRaw = {
   };
 };
 
-/** Anúncios ATIVOS com criativo, público e métricas (30 dias). Um pedido/conta. */
+/**
+ * Anúncios COM ENTREGA nos últimos 30 dias — não só os que ainda estão a correr.
+ *
+ * Filtrar por effective_status=ACTIVE escondia o essencial: na Terrae havia 4 anúncios
+ * ativos mas 27 com gasto na última semana. Como os totais no topo vêm de TODAS as
+ * campanhas do período, a lista não explicava para onde tinha ido o dinheiro. Agora
+ * mostram-se os que entregaram, marcando quais continuam a correr.
+ */
 export async function anunciosRicosMeta(
   accountId: string,
 ): Promise<{ ok: true; anuncios: AnuncioRico[]; moeda: string } | { ok: false; erro: string }> {
@@ -308,33 +316,57 @@ export async function anunciosRicosMeta(
 
   try {
     const base = `https://graph.facebook.com/${V}/act_${acc}`;
-    const filtro = encodeURIComponent(JSON.stringify([{ field: "effective_status", operator: "IN", value: ["ACTIVE"] }]));
+    const filtro = encodeURIComponent(
+      JSON.stringify([
+        {
+          field: "effective_status",
+          operator: "IN",
+          value: ["ACTIVE", "PAUSED", "ADSET_PAUSED", "CAMPAIGN_PAUSED"],
+        },
+      ]),
+    );
     const campos = [
       "id",
       "name",
+      "effective_status",
       "campaign{name,effective_status}",
       "adset{targeting}",
       "creative{title,body,image_url,thumbnail_url,object_type,call_to_action_type,object_story_spec}",
       "insights.date_preset(last_30d){impressions,reach,frequency,clicks,ctr,spend,actions}",
     ].join(",");
-    const [rConta, rAds] = await Promise.all([
-      fetch(`${base}?fields=currency&access_token=${encodeURIComponent(token)}`),
-      fetch(`${base}/ads?fields=${encodeURIComponent(campos)}&filtering=${filtro}&limit=50&access_token=${encodeURIComponent(token)}`),
-    ]);
-    if (!rAds.ok) return { ok: false, erro: `Meta respondeu ${rAds.status}: ${(await rAds.text()).slice(0, 120)}` };
-    const moeda = ((await rConta.json().catch(() => ({}))) as { currency?: string }).currency || "EUR";
-    const d = (await rAds.json()) as {
-      data?: {
-        id: string;
-        name: string;
-        campaign?: { name?: string; effective_status?: string };
-        adset?: { targeting?: Targeting };
-        creative?: CreativeRaw;
-        insights?: { data?: { impressions?: string; reach?: string; frequency?: string; clicks?: string; ctr?: string; spend?: string; actions?: { action_type: string; value: string }[] }[] };
-      }[];
-    };
 
-    const anuncios: AnuncioRico[] = (d.data ?? []).map((a) => {
+    type AdRaw = {
+      id: string;
+      name: string;
+      effective_status?: string;
+      campaign?: { name?: string; effective_status?: string };
+      adset?: { targeting?: Targeting };
+      creative?: CreativeRaw;
+      insights?: { data?: { impressions?: string; reach?: string; frequency?: string; clicks?: string; ctr?: string; spend?: string; actions?: { action_type: string; value: string }[] }[] };
+    };
+    type Pagina = { data?: AdRaw[]; paging?: { next?: string } };
+
+    const rConta = fetch(`${base}?fields=currency&access_token=${encodeURIComponent(token)}`);
+    const rAds = await fetch(
+      `${base}/ads?fields=${encodeURIComponent(campos)}&filtering=${filtro}&limit=50&access_token=${encodeURIComponent(token)}`,
+    );
+    if (!rAds.ok) return { ok: false, erro: `Meta respondeu ${rAds.status}: ${(await rAds.text()).slice(0, 120)}` };
+    const moeda = ((await (await rConta).json().catch(() => ({}))) as { currency?: string }).currency || "EUR";
+
+    // Contas com histórico têm centenas de anúncios — sem paginar, perdiam-se os do fim.
+    // O teto de 6 páginas (300) é uma rede de segurança, não um limite esperado.
+    const crus: AdRaw[] = [];
+    let pagina = (await rAds.json()) as Pagina;
+    for (let i = 0; i < 6; i++) {
+      crus.push(...(pagina.data ?? []));
+      const proxima = pagina.paging?.next;
+      if (!proxima) break;
+      const r = await fetch(proxima);
+      if (!r.ok) break;
+      pagina = (await r.json()) as Pagina;
+    }
+
+    const anuncios: AnuncioRico[] = crus.map((a) => {
       const c = a.creative ?? {};
       const oss = c.object_story_spec ?? {};
       const imagem =
@@ -363,6 +395,7 @@ export async function anunciosRicosMeta(
         nome: a.name,
         campanha: a.campaign?.name ?? "—",
         campanhaAtiva: a.campaign?.effective_status === "ACTIVE",
+        ativo: a.effective_status === "ACTIVE",
         publico: humanizarPublico(a.adset?.targeting),
         imagem,
         titulo,
@@ -380,8 +413,12 @@ export async function anunciosRicosMeta(
         moeda,
       };
     });
-    anuncios.sort((a, b) => b.investimento - a.investimento);
-    return { ok: true, anuncios, moeda };
+    // Só os que entregaram no período — os outros não têm nada para contar ao cliente.
+    // A correr primeiro, depois por investimento.
+    const comEntrega = anuncios
+      .filter((a) => a.impressoes > 0)
+      .sort((a, b) => Number(b.ativo) - Number(a.ativo) || b.investimento - a.investimento);
+    return { ok: true, anuncios: comEntrega, moeda };
   } catch (e) {
     return { ok: false, erro: String(e).slice(0, 120) };
   }

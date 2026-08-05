@@ -151,10 +151,11 @@ export async function POST(req: NextRequest) {
         const totAlc = r.anuncios.reduce((s, a) => s + a.alcance, 0);
         const linhas = r.anuncios.slice(0, 6).map((a) => {
           const cpl = a.custo_por_lead ? ` a ${a.custo_por_lead.toFixed(2)}${a.moeda === "EUR" ? "€" : a.moeda}/contacto` : "";
-          return `• "${a.titulo || a.nome}" [${a.campanha}] — público: ${a.publico}. 30d: ${a.alcance} alcance, ${a.cliques} cliques${a.ctr != null ? ` (CTR ${(a.ctr * 100).toFixed(2)}%)` : ""}, ${a.leads} contactos${cpl}, ${a.investimento.toFixed(2)}${a.moeda === "EUR" ? "€" : a.moeda} investidos.`;
+          return `• [${a.ativo ? "A CORRER" : "JÁ PAROU"}] "${a.titulo || a.nome}" [${a.campanha}] — público: ${a.publico}. 30d: ${a.alcance} alcance, ${a.cliques} cliques${a.ctr != null ? ` (CTR ${(a.ctr * 100).toFixed(2)}%)` : ""}, ${a.leads} contactos${cpl}, ${a.investimento.toFixed(2)}${a.moeda === "EUR" ? "€" : a.moeda} investidos.`;
         });
+        const aCorrer = r.anuncios.filter((a) => a.ativo).length;
         L.push(
-          `--- ANÚNCIOS ATIVOS (Meta, últimos 30 dias) ---\nTotais: ${totAlc} pessoas alcançadas · ${totLeads} contactos · ${totInv.toFixed(2)}€ investidos.\n${linhas.join("\n")}`,
+          `--- ANÚNCIOS COM ENTREGA (Meta, últimos 30 dias) ---\n${r.anuncios.length} anúncios entregaram no período, dos quais ${aCorrer} ainda a correr. NÃO digas que um anúncio marcado JÁ PAROU está a correr.\nTotais: ${totAlc} pessoas alcançadas · ${totLeads} contactos · ${totInv.toFixed(2)}€ investidos.\n${linhas.join("\n")}`,
         );
       }
     }

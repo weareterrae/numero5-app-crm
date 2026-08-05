@@ -22,6 +22,7 @@ export async function BlocoAnuncios({ contaId }: { contaId: string | null }) {
   const totCliques = camp.ok ? camp.campanhas.reduce((s, c) => s + c.cliques, 0) : 0;
   const moeda = camp.ok ? camp.moeda : ricos.ok ? ricos.moeda : "EUR";
   const anuncios = ricos.ok ? ricos.anuncios : [];
+  const aCorrer = anuncios.filter((a) => a.ativo).length;
 
   // Marcas com campanhas de tráfego/interação não geram contactos — mostrar «—» faz parecer
   // que os anúncios não fizeram nada. Nesse caso destacamos os cliques, que é o que se pediu
@@ -56,7 +57,10 @@ export async function BlocoAnuncios({ contaId }: { contaId: string | null }) {
 
       {anuncios.length > 0 ? (
         <div className="mt-7">
-          <div className="rotulo mb-3">os anúncios a correr ({anuncios.length})</div>
+          <div className="rotulo mb-3">
+            os teus anúncios ({anuncios.length})
+            {aCorrer > 0 ? ` · ${aCorrer} ainda a correr` : ""}
+          </div>
           <div className="space-y-4">
             {anuncios.map((a) => (
               <CartaoAnuncio key={a.id} a={a} />
