@@ -1,6 +1,7 @@
 import { contextoSede } from "@/lib/sede/contexto";
 import { criarClienteServico } from "@/lib/supabase/server";
 import { GuiaForm } from "./GuiaForm";
+import type { Anexo } from "./acoes";
 
 export const dynamic = "force-dynamic";
 
@@ -40,5 +41,18 @@ export default async function SedeGuia() {
     // coluna ainda não existe → guia vazio, form funciona na mesma
   }
 
-  return <GuiaForm inicial={guia} marca={marca} cor={ctx.marca.cor} />;
+  let anexos: Anexo[] = [];
+  try {
+    const { data } = await svc
+      .from("materiais_cliente")
+      .select("id, nome, tipo, tamanho")
+      .eq("cliente_id", ctx.clienteId)
+      .order("criado_em", { ascending: false })
+      .limit(60);
+    anexos = (data as Anexo[]) ?? [];
+  } catch {
+    // sem tabela → sem anexos
+  }
+
+  return <GuiaForm inicial={guia} marca={marca} cor={ctx.marca.cor} anexosIniciais={anexos} />;
 }

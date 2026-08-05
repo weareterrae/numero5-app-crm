@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { guardarGuia, concluirGuia } from "./acoes";
+import { useMemo, useRef, useState, type ChangeEvent } from "react";
+import { guardarGuia, concluirGuia, anexarMaterialGuia, removerAnexoGuia, type Anexo } from "./acoes";
 
 type Campo = { id: string; label: string; ajuda?: string; sugerivel?: boolean; linhas?: number };
 type Seccao = { titulo: string; icone: string; campos: Campo[] };
@@ -79,6 +79,19 @@ const SECOES: Seccao[] = [
       { id: "prat_materiais", label: "Que materiais já têm?", ajuda: "fotos, catálogos, logótipos, vídeos…", linhas: 2 },
     ],
   },
+  {
+    titulo: "Ideias fora da caixa 💡",
+    icone: "⑨",
+    campos: [
+      {
+        id: "ideias_sonho",
+        label: "O que gostavam MESMO de ter, mesmo que pareça impossível?",
+        ajuda: "sonhem alto — nós vemos o que dá para fazer",
+        sugerivel: true,
+        linhas: 4,
+      },
+    ],
+  },
 ];
 
 const TODOS = SECOES.flatMap((s) => s.campos.map((c) => c.id));
@@ -87,10 +100,12 @@ export function GuiaForm({
   inicial,
   marca,
   cor,
+  anexosIniciais = [],
 }: {
   inicial: Record<string, string>;
   marca: { nome: string; setor: string; website: string };
   cor?: string;
+  anexosIniciais?: Anexo[];
 }) {
   const acento = cor || "#E8A13C";
   const limpaInicial: Record<string, string> = {};
@@ -101,7 +116,28 @@ export function GuiaForm({
   const [aSugerir, setASugerir] = useState<Record<string, boolean>>({});
   const [sugestao, setSugestao] = useState<Record<string, string>>({});
   const [enviado, setEnviado] = useState<boolean>(Boolean(inicial._concluido));
+  const [anexos, setAnexos] = useState<Anexo[]>(anexosIniciais);
+  const [aCarregar, setACarregar] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  async function anexar(e: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (!files.length) return;
+    setACarregar(true);
+    for (const f of files) {
+      const fd = new FormData();
+      fd.append("ficheiro", f);
+      const r = await anexarMaterialGuia(fd);
+      if (r.ok && r.anexo) setAnexos((a) => [r.anexo as Anexo, ...a]);
+    }
+    setACarregar(false);
+  }
+
+  async function removerAnexo(id: string) {
+    const r = await removerAnexoGuia(id);
+    if (r.ok) setAnexos((a) => a.filter((x) => x.id !== id));
+  }
 
   const preenchidos = useMemo(() => TODOS.filter((id) => (valores[id] || "").trim()).length, [valores]);
   const pct = Math.round((preenchidos / TODOS.length) * 100);
@@ -257,6 +293,45 @@ export function GuiaForm({
           </div>
         </section>
       ))}
+
+      {/* anexos */}
+      <section className="mt-9">
+        <h2 className="font-display text-xl font-extrabold">
+          <span className="mr-2 text-grey">📎</span>Materiais e anexos
+        </h2>
+        <p className="mt-1 text-sm text-grey">
+          Junta tudo o que já tenham — logótipos, mockups, fichas técnicas, fotos, catálogos. Fica logo do nosso
+          lado (e na Biblioteca). Até 25 MB por ficheiro.
+        </p>
+        <label
+          className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-full px-5 py-2.5 text-sm font-bold text-cream"
+          style={{ background: "#15181D", opacity: aCarregar ? 0.6 : 1 }}
+        >
+          {aCarregar ? "A carregar…" : "＋ Anexar ficheiros"}
+          <input type="file" multiple className="hidden" onChange={anexar} disabled={aCarregar} />
+        </label>
+        {anexos.length ? (
+          <ul className="mt-4 space-y-2">
+            {anexos.map((a) => (
+              <li
+                key={a.id}
+                className="flex items-center justify-between gap-3 rounded-xl border border-line bg-cream px-3.5 py-2.5"
+              >
+                <span className="min-w-0 truncate text-sm text-ink">📄 {a.nome}</span>
+                <button
+                  type="button"
+                  onClick={() => removerAnexo(a.id)}
+                  className="shrink-0 text-xs font-bold text-grey hover:text-bad"
+                >
+                  remover
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-3 text-xs text-grey">Ainda sem anexos.</p>
+        )}
+      </section>
 
       {/* enviar */}
       <div className="mt-9 rounded-2xl border border-line bg-cream p-5">
