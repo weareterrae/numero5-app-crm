@@ -3,25 +3,11 @@ import { ManterSessao } from "@/components/auth/ManterSessao";
 import { AssistenteFlutuante } from "@/components/sede/AssistenteFlutuante";
 import { NavSede } from "@/components/nav/NavSede";
 import { contextoSede } from "@/lib/sede/contexto";
-import { criarClienteServidor } from "@/lib/supabase/server";
 import { trocarMarcaSede } from "./acoes";
 
 export default async function SedeLayout({ children }: { children: React.ReactNode }) {
   const ctx = await contextoSede();
   const marca = ctx.marca;
-
-  // «Anúncios» só entra no menu quando a marca tem conta ligada (0061, tolerante).
-  let temAnuncios = false;
-  {
-    const supabase = await criarClienteServidor();
-    const { data } = await supabase
-      .from("orgs")
-      .select("meta_ads_id")
-      .eq("id", ctx.org.id)
-      .maybeSingle()
-      .then((r) => r, () => ({ data: null }));
-    temAnuncios = !!(data as { meta_ads_id?: string | null } | null)?.meta_ads_id;
-  }
 
   return (
     <div className="min-h-dvh">
@@ -98,7 +84,7 @@ export default async function SedeLayout({ children }: { children: React.ReactNo
               </>
             )}
           </Link>
-          <NavSede temAnuncios={temAnuncios} />
+          <NavSede />
           <form action="/auth/sair" method="post" className="shrink-0">
             <button className="text-xs font-bold text-soft hover:text-ink" type="submit">
               sair

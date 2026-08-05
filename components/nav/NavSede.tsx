@@ -10,7 +10,7 @@ type Entrada = Item | Grupo;
 
 const ehGrupo = (e: Entrada): e is Grupo => "items" in e;
 
-export function NavSede({ temAnuncios }: { temAnuncios: boolean }) {
+export function NavSede() {
   const pathname = usePathname();
   const [aberto, setAberto] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
@@ -23,7 +23,6 @@ export function NavSede({ temAnuncios }: { temAnuncios: boolean }) {
       label: "Marketing",
       items: [
         { href: "/sede/plano", label: "Plano" },
-        ...(temAnuncios ? [{ href: "/sede/anuncios", label: "Anúncios" }] : []),
         { href: "/sede/documentos", label: "Documentos" },
         { href: "/sede/biblioteca", label: "Biblioteca" },
       ],
