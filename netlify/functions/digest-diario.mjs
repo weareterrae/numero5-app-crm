@@ -103,16 +103,20 @@ export default async function handler() {
     respostas = (recentes ?? [])
       .filter((a) => nome.has(a.cliente_id))
       .filter((a) => /(^|[^a-zçãõáéí])o cliente/i.test(a.descricao || "") || /proposta aceite/i.test(a.descricao || ""))
-      .map((a) => ({
-        marca: nome.get(a.cliente_id),
-        texto: (a.descricao || "")
+      .map((a) => {
+        const limpo = (a.descricao || "")
           .replace(/^🚀\s*/, "")
           .replace(/^💼\s*/, "")
           .replace(/^na sede,\s*o cliente\s*/i, "")
           .replace(/^o cliente\s*/i, "")
           .replace(/\s*🖐️\s*$/, "")
-          .trim(),
-      }))
+          .replace(/\s+/g, " ") // uma linha só (fichas grandes não rebentam o email)
+          .trim();
+        return {
+          marca: nome.get(a.cliente_id),
+          texto: limpo.length > 160 ? limpo.slice(0, 159) + "…" : limpo,
+        };
+      })
       .slice(0, 20);
   } catch (e) {
     console.log("[digest-diario] respostas 24h:", e);
