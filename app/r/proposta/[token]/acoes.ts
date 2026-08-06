@@ -1,6 +1,7 @@
 "use server";
 
 import { criarClienteServico } from "@/lib/supabase/server";
+import { avisarStaffAcao } from "@/lib/sede/notificar";
 
 /**
  * O cliente decide a proposta a partir da página pública. Sem sessão: o
@@ -19,7 +20,7 @@ export async function decidirProposta(
   const supabase = criarClienteServico();
   const { data: p } = await supabase
     .from("propostas")
-    .select("id, estado")
+    .select("id, estado, cliente_id")
     .eq("partilha_token", token)
     .eq("partilha_ativa", true)
     .maybeSingle();
@@ -50,6 +51,12 @@ export async function decidirProposta(
       console.error("arranqueAutomatico:", e);
     }
   }
+
+  await avisarStaffAcao({
+    clienteId: p.cliente_id,
+    titulo: decisao === "aceite" ? "ACEITOU a proposta 🎉" : "recusou a proposta",
+    detalhe: comentario ? `Comentário: «${comentario}»` : undefined,
+  });
 
   return { ok: true as const, estado: decisao };
 }
@@ -163,6 +170,11 @@ export async function pedirAtualizacaoProposta(token: string, nota: string) {
     cliente_id: p.cliente_id,
     tipo: "nota",
     descricao: `O cliente pediu uma atualização da proposta expirada.${comentario ? ` «${comentario}»` : ""} 🖐️`,
+  });
+  await avisarStaffAcao({
+    clienteId: p.cliente_id,
+    titulo: "pediu uma atualização da proposta",
+    detalhe: comentario ? `«${comentario}»` : undefined,
   });
   return { ok: true as const };
 }

@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { criarClienteServico } from "@/lib/supabase/server";
 import { contextoSede } from "@/lib/sede/contexto";
+import { avisarStaffAcao } from "@/lib/sede/notificar";
 
 const MAX_ANEXO = 25 * 1024 * 1024; // 25 MB
 
@@ -58,6 +59,7 @@ export async function concluirGuia(dados: Record<string, string>, token?: string
     tipo: "nota",
     descricao: "O cliente preencheu e enviou o Guia da Marca. 🖐️",
   });
+  await avisarStaffAcao({ clienteId: cid, titulo: "preencheu e enviou o Guia da Marca", caminho: "/guias" });
   revalidatePath(token ? `/guia/${token}` : "/sede/guia");
   return { ok: true };
 }

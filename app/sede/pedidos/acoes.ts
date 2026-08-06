@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { criarClienteServico } from "@/lib/supabase/server";
 import { contextoSede } from "@/lib/sede/contexto";
+import { avisarStaffAcao } from "@/lib/sede/notificar";
 
 const t = (fd: FormData, k: string) => (fd.get(k)?.toString() ?? "").trim();
 
@@ -20,6 +21,12 @@ export async function abrirPedidoSede(fd: FormData) {
     cliente_id: ctx.clienteId,
     tipo: "nota",
     descricao: `Na Sede, o cliente abriu um pedido: «${texto}»`,
+  });
+  await avisarStaffAcao({
+    clienteId: ctx.clienteId,
+    titulo: "abriu um novo pedido",
+    detalhe: `«${texto}»`,
+    caminho: `/clientes/${ctx.clienteId}/pedidos`,
   });
 
   revalidatePath("/sede/pedidos");

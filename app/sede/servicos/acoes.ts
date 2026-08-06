@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { criarClienteServico } from "@/lib/supabase/server";
 import { contextoSede } from "@/lib/sede/contexto";
+import { avisarStaffAcao } from "@/lib/sede/notificar";
 
 const ROTULOS: Record<string, string> = {
   conteudo: "Mais conteúdo",
@@ -44,6 +45,11 @@ export async function pedirServicoSede(fd: FormData) {
     cliente_id: ctx.clienteId,
     tipo: "nota",
     descricao: `💼 Na Sede, o cliente pediu proposta — ${texto || "sem detalhe"}`,
+  });
+  await avisarStaffAcao({
+    clienteId: ctx.clienteId,
+    titulo: "pediu uma proposta de serviço 💼",
+    detalhe: texto || undefined,
   });
 
   revalidatePath("/sede/servicos");

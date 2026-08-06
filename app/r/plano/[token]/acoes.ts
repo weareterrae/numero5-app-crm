@@ -1,6 +1,7 @@
 "use server";
 
 import { criarClienteServico } from "@/lib/supabase/server";
+import { avisarStaffAcao } from "@/lib/sede/notificar";
 
 /** O cliente decide o plano na página pública. Sem sessão: o token é a chave. */
 export async function decidirPlano(
@@ -48,6 +49,12 @@ export async function decidirPlano(
     cliente_id: plano.cliente_id,
     tipo: "nota",
     descricao: `O cliente ${rotulo}.${comentario ? ` Disse: «${comentario}»` : ""}`,
+  });
+
+  await avisarStaffAcao({
+    clienteId: plano.cliente_id,
+    titulo: `${rotulo} mensal`,
+    detalhe: comentario ? `Comentário: «${comentario}»` : undefined,
   });
 
   return { ok: true as const, estado: decisao };

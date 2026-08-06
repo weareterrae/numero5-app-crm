@@ -1,6 +1,7 @@
 "use server";
 
 import { criarClienteServico } from "@/lib/supabase/server";
+import { avisarStaffAcao } from "@/lib/sede/notificar";
 import { obterContexto } from "@/lib/dominio/diagnostico/analisar-site";
 import { extrairInfoSite, type InfoSite } from "@/lib/dominio/diagnostico/extrair-site";
 import { correrTodas } from "@/lib/dominio/diagnostico/verificacoes";
@@ -89,6 +90,7 @@ export async function submeterIntake(dados: SubmissaoIntake) {
     tipo: "nota",
     descricao: "O cliente preencheu o diagnóstico pelo link. 🖐️",
   });
+  await avisarStaffAcao({ clienteId: cliente.id, titulo: "preencheu o diagnóstico inicial" });
 
   // Limpar o rascunho — o diagnóstico final passa a ser a fonte (tolerante).
   await supabase

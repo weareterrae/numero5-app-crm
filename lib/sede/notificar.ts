@@ -55,3 +55,41 @@ export async function notificarClienteSede(
     /* nunca partir a publicação por causa do email */
   }
 }
+
+const APP_URL = "https://app.numerocinco.pt";
+
+/**
+ * Aviso ao STAFF (a nós) sempre que um cliente RESPONDE ou AGE — aprova/recusa
+ * um plano ou proposta, preenche o guia ou o diagnóstico, abre um pedido, etc.
+ * Serve para saber quando é preciso ir trabalhar à app.
+ * Fire-and-forget: falhar o email nunca falha a ação do cliente.
+ *
+ *   EMAIL_AVISOS = para onde vão os avisos (default: sandro.sousa@numerocinco.pt)
+ */
+export async function avisarStaffAcao(opts: {
+  clienteId: string;
+  titulo: string; // ex.: "aprovou o plano mensal"
+  detalhe?: string; // linha extra opcional (ex.: comentário do cliente)
+  caminho?: string; // rota do operador a abrir (default: ficha do cliente)
+}): Promise<void> {
+  try {
+    const svc = criarClienteServico();
+    let marca = "Um cliente";
+    try {
+      const { data } = await svc.from("clientes").select("nome_marca").eq("id", opts.clienteId).maybeSingle();
+      if (data?.nome_marca) marca = data.nome_marca as string;
+    } catch {
+      /* nome é opcional */
+    }
+    const para = process.env.EMAIL_AVISOS || "sandro.sousa@numerocinco.pt";
+    const link = APP_URL + (opts.caminho || `/clientes/${opts.clienteId}`);
+    await enviarEmailResend({
+      para,
+      assunto: `🖐️ ${marca} — ${opts.titulo}`,
+      texto: `${marca} ${opts.titulo}.${opts.detalhe ? `\n\n${opts.detalhe}` : ""}\n\nHá trabalho à tua espera na app.`,
+      link,
+    });
+  } catch {
+    /* nunca partir a ação do cliente por causa do email */
+  }
+}

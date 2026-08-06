@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { criarClienteServico } from "@/lib/supabase/server";
 import { contextoSede } from "@/lib/sede/contexto";
+import { avisarStaffAcao } from "@/lib/sede/notificar";
 
 type Decisao = "aprovado" | "alteracoes" | "recusado";
 type Res = { ok: true; estado?: string; jaDecidido?: boolean } | { ok: false; erro: string };
@@ -50,6 +51,12 @@ export async function decidirPlanoSede(planoId: string, decisao: Decisao, nota: 
     cliente_id: plano.cliente_id,
     tipo: "nota",
     descricao: `Na Sede, o cliente ${rotulo}.${comentario ? ` Disse: «${comentario}»` : ""}`,
+  });
+
+  await avisarStaffAcao({
+    clienteId: plano.cliente_id,
+    titulo: `${rotulo} mensal`,
+    detalhe: comentario ? `Comentário: «${comentario}»` : undefined,
   });
 
   revalidatePath("/sede/plano");
