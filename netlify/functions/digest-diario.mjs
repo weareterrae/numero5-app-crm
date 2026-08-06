@@ -36,11 +36,10 @@ export default async function handler() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const chaveDb = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const chaveResend = process.env.RESEND_API_KEY;
-  const para = process.env.DIGEST_EMAIL;
+  const para = process.env.DIGEST_EMAIL || "sandro.sousa@numerocinco.pt";
 
   if (!url || !chaveDb) return resposta("Falta configurar o Supabase.");
   if (!chaveResend) return resposta("Falta a RESEND_API_KEY.");
-  if (!para) return resposta("Falta a DIGEST_EMAIL — define para onde vai o digest.");
 
   const db = createClient(url, chaveDb, { auth: { persistSession: false } });
   const hojeISO = new Date().toISOString().slice(0, 10);
@@ -89,6 +88,35 @@ export default async function handler() {
       .lte("prazo", hojeISO)
       .then((r) => r, () => ({ data: [] })),
   ]);
+
+  // ── Secção 0: o que os clientes fizeram (últimas 24h) ──────────────────
+  // Lê as atividades recentes e destila as que foram AÇÃO DO CLIENTE
+  // (aprovou/recusou plano ou proposta, preencheu guia/diagnóstico, pediu algo).
+  const desde24h = new Date(Date.now() - 24 * 86_400_000).toISOString();
+  let respostas = [];
+  try {
+    const { data: recentes } = await db
+      .from("atividades")
+      .select("cliente_id, descricao, data")
+      .gte("data", desde24h)
+      .order("data", { ascending: false });
+    respostas = (recentes ?? [])
+      .filter((a) => nome.has(a.cliente_id))
+      .filter((a) => /(^|[^a-zçãõáéí])o cliente/i.test(a.descricao || "") || /proposta aceite/i.test(a.descricao || ""))
+      .map((a) => ({
+        marca: nome.get(a.cliente_id),
+        texto: (a.descricao || "")
+          .replace(/^🚀\s*/, "")
+          .replace(/^💼\s*/, "")
+          .replace(/^na sede,\s*o cliente\s*/i, "")
+          .replace(/^o cliente\s*/i, "")
+          .replace(/\s*🖐️\s*$/, "")
+          .trim(),
+      }))
+      .slice(0, 20);
+  } catch (e) {
+    console.log("[digest-diario] respostas 24h:", e);
+  }
 
   // ── Secção 1: hoje / atrasado ──────────────────────────────────────────
   const hoje = (followups.data ?? [])
@@ -280,8 +308,12 @@ export default async function handler() {
   }
 
   const nada =
-    hoje.length === 0 && espera.length === 0 && descontos.length === 0 && aprovacoes.length === 0;
-  const { html, texto } = render({ hoje, espera, arrefecer, descontos, aprovacoes, lembretes, nada });
+    respostas.length === 0 &&
+    hoje.length === 0 &&
+    espera.length === 0 &&
+    descontos.length === 0 &&
+    aprovacoes.length === 0;
+  const { html, texto } = render({ respostas, hoje, espera, arrefecer, descontos, aprovacoes, lembretes, nada });
 
   // Envio pelo Resend.
   const r = await fetch("https://api.resend.com/emails", {
@@ -299,7 +331,7 @@ export default async function handler() {
   return resposta(`Digest enviado para ${para}.`);
 }
 
-function render({ hoje, espera, arrefecer, descontos, aprovacoes, lembretes, nada }) {
+function render({ respostas, hoje, espera, arrefecer, descontos, aprovacoes, lembretes, nada }) {
   const linhasTxt = [];
   const blocos = [];
 
@@ -317,6 +349,7 @@ function render({ hoje, espera, arrefecer, descontos, aprovacoes, lembretes, nad
     );
   }
 
+  bloco(`🎉 Os clientes responderam (${(respostas ?? []).length})`, respostas ?? [], "#1E7A43");
   bloco(
     `⏰ Hoje (${hoje.length})`,
     hoje.map((h) => ({ marca: h.marca, texto: (h.atrasado ? "⚠️ atrasado · " : "") + h.texto })),
