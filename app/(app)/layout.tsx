@@ -6,6 +6,7 @@ import { Quinto } from "@/components/assistente/Quinto";
 import { ManterSessao } from "@/components/auth/ManterSessao";
 import { NavOperador } from "@/components/nav/NavOperador";
 import { EstadoBadge } from "@/components/estado/EstadoBadge";
+import { contarGuiasNovos } from "@/lib/db/guias";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await criarClienteServidor();
@@ -22,6 +23,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .eq("id", user.id)
     .maybeSingle();
   if (perfil?.externo) redirect("/sede");
+
+  // Aviso: guias da marca concluídos que ainda não foram vistos.
+  const guiasNovos = await contarGuiasNovos(user.id);
 
   // White-label: o cliente externo vê a app com a SUA marca (cor/logótipo).
   let marcaCliente: { nome: string; cor?: string; logo?: string } | null = null;
@@ -66,7 +70,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               </>
             )}
           </Link>
-          <NavOperador />
+          <NavOperador badges={{ "/guias": guiasNovos }} />
           <EstadoBadge />
           <form action="/auth/sair" method="post" className="shrink-0">
             <button className="text-xs font-bold text-soft hover:text-ink" type="submit">

@@ -48,7 +48,8 @@ export async function concluirGuia(dados: Record<string, string>, token?: string
   const cid = await resolverClienteId(token);
   if (!cid) return { ok: false };
   const svc = criarClienteServico();
-  const payload = { ...limpar(dados), _concluido: true, _atualizado: new Date().toISOString() };
+  const agora = new Date().toISOString();
+  const payload = { ...limpar(dados), _concluido: true, _atualizado: agora, _concluido_em: agora };
   const { error } = await svc.from("clientes").update({ guia_marca: payload }).eq("id", cid);
   if (error) return { ok: false };
 

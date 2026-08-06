@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { CopiarLink } from "@/components/guia/CopiarLink";
+import { marcarGuiasVistos } from "@/lib/db/guias";
 
 export const dynamic = "force-dynamic";
 
@@ -98,6 +99,17 @@ async function carregar(): Promise<Linha[]> {
 
 export default async function GuiasPage() {
   const linhas = await carregar();
+
+  // Ao abrir esta vista, o staff "viu" os guias — limpa o aviso no menu.
+  try {
+    const sb = await criarClienteServidor();
+    const {
+      data: { user },
+    } = await sb.auth.getUser();
+    if (user) await marcarGuiasVistos(user.id);
+  } catch {
+    /* sem sessão — o layout já protege */
+  }
   const concluidos = linhas.filter((l) => l.concluido).length;
   const emCurso = linhas.filter((l) => !l.concluido && l.preenchidos > 0).length;
 

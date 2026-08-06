@@ -42,12 +42,14 @@ const NAV: Entrada[] = [
 
 const ehGrupo = (e: Entrada): e is Grupo => "items" in e;
 
-export function NavOperador() {
+export function NavOperador({ badges }: { badges?: Record<string, number> }) {
   const pathname = usePathname();
   const [aberto, setAberto] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   const ativo = (href: string) => (href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(href + "/"));
+  const badge = (href: string) => badges?.[href] ?? 0;
+  const badgeGrupo = (g: Grupo) => g.items.reduce((n, i) => n + badge(i.href), 0);
 
   useEffect(() => setAberto(null), [pathname]);
   useEffect(() => {
@@ -90,6 +92,9 @@ export function NavOperador() {
                 className={`${pill} flex items-center gap-1 ${grupoAtivo || estaAberto ? "bg-cream text-ink" : "text-grey hover:bg-cream hover:text-ink"}`}
               >
                 {e.label}
+                {badgeGrupo(e) > 0 ? (
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-gold" aria-label="novidades" />
+                ) : null}
                 <span className={`text-[10px] transition-transform ${estaAberto ? "rotate-180" : ""}`}>▾</span>
               </button>
               {estaAberto ? (
@@ -98,9 +103,12 @@ export function NavOperador() {
                     <Link
                       key={i.href}
                       href={i.href}
-                      className={`block rounded-xl px-3.5 py-2 text-sm font-bold ${ativo(i.href) ? "bg-ink text-cream" : "text-grey hover:bg-cream hover:text-ink"}`}
+                      className={`flex items-center justify-between gap-2 rounded-xl px-3.5 py-2 text-sm font-bold ${ativo(i.href) ? "bg-ink text-cream" : "text-grey hover:bg-cream hover:text-ink"}`}
                     >
-                      {i.label}
+                      <span>{i.label}</span>
+                      {badge(i.href) > 0 ? (
+                        <span className="rounded-full bg-gold px-1.5 text-[10px] font-bold text-ink">{badge(i.href)}</span>
+                      ) : null}
                     </Link>
                   ))}
                 </div>
