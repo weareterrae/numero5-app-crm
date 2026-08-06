@@ -17,6 +17,7 @@ const NAV: Entrada[] = [
     items: [
       { href: "/clientes", label: "Clientes" },
       { href: "/clientes/funil", label: "Funil" },
+      { href: "/guias", label: "Guias" },
       { href: "/leads", label: "Leads" },
       { href: "/leads/faturacao", label: "Assinaturas" },
       { href: "/avencas", label: "Avenças" },
