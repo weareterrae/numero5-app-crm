@@ -5,6 +5,7 @@ import { Simbolo } from "@/components/marca/Simbolo";
 import { Quinto } from "@/components/assistente/Quinto";
 import { ManterSessao } from "@/components/auth/ManterSessao";
 import { NavOperador } from "@/components/nav/NavOperador";
+import { EstadoBadge } from "@/components/estado/EstadoBadge";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const supabase = await criarClienteServidor();
@@ -66,6 +67,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             )}
           </Link>
           <NavOperador />
+          <EstadoBadge />
           <form action="/auth/sair" method="post" className="shrink-0">
             <button className="text-xs font-bold text-soft hover:text-ink" type="submit">
               sair
