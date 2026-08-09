@@ -13,3 +13,17 @@ export async function alternarPlanoMensal(formData: FormData) {
   await supabase.from("clientes").update({ plano_mensal: ativar }).eq("id", id);
   revalidatePath("/producao");
 }
+
+/** Marca (ou desmarca) um plano como "já agendado" — a marca manual, sem depender do Metricool. */
+export async function alternarAgendado(formData: FormData) {
+  const planoId = (formData.get("plano_id") ?? "").toString().trim();
+  const marcar = (formData.get("marcar") ?? "").toString() === "1";
+  if (!planoId) return;
+
+  const supabase = await criarClienteServidor();
+  await supabase
+    .from("planos")
+    .update({ agendado_em: marcar ? new Date().toISOString() : null })
+    .eq("id", planoId);
+  revalidatePath("/producao");
+}

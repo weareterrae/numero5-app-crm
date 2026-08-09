@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { lerQuadroProducao, type LinhaQuadro, type MesQuadro, type Semaforo } from "@/lib/producao/quadro";
-import { alternarPlanoMensal } from "./acoes";
+import { alternarPlanoMensal, alternarAgendado } from "./acoes";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Produção · Nº 5" };
@@ -54,7 +54,26 @@ function Linha({ linha }: { linha: LinhaQuadro }) {
       </div>
       <div className="hidden shrink-0 text-right sm:block">
         <BadgePlano m={linha.proximo} />
-        <p className="mt-0.5 text-[11px] text-soft">{agendadoTexto(linha.proximo)}</p>
+        <div className="mt-0.5">
+          {linha.proximo.agendados != null ? (
+            <p className="text-[11px] text-soft">{agendadoTexto(linha.proximo)}</p>
+          ) : linha.proximo.planoId ? (
+            <form action={alternarAgendado}>
+              <input type="hidden" name="plano_id" value={linha.proximo.planoId} />
+              <input type="hidden" name="marcar" value={linha.proximo.agendadoEm ? "0" : "1"} />
+              <button
+                type="submit"
+                className={`text-[11px] font-bold ${
+                  linha.proximo.agendadoEm ? "text-good" : "text-soft hover:text-ink"
+                }`}
+              >
+                {linha.proximo.agendadoEm ? "✓ agendado" : "marcar agendado"}
+              </button>
+            </form>
+          ) : (
+            <p className="text-[11px] text-soft">—</p>
+          )}
+        </div>
       </div>
       <div className="hidden w-24 shrink-0 text-right md:block">
         <p className="text-[10px] uppercase tracking-wide text-soft">este mês</p>
