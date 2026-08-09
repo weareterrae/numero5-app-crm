@@ -311,13 +311,56 @@ export default async function handler() {
     console.log("[digest-diario] lembretes:", e);
   }
 
+  // ── Secção 7: produção do próximo mês (só na janela de 20 dias) ────────
+  // Reforça o alerta dedicado: enquanto faltarem ≤20 dias e houver planos do
+  // próximo mês por fechar, mostra-os todas as manhãs. Tolerante à migração 0066.
+  let producao = [];
+  try {
+    const ano = new Date().getUTCFullYear();
+    const mesN = new Date().getUTCMonth();
+    const ultimoDia = new Date(Date.UTC(ano, mesN + 1, 0)).getUTCDate();
+    const diasAteFim = ultimoDia - new Date().getUTCDate();
+    if (diasAteFim <= 20) {
+      const proximoISO = new Date(Date.UTC(ano, mesN + 1, 1)).toISOString().slice(0, 10);
+      const { data: mensais, error } = await db
+        .from("clientes")
+        .select("id, nome_marca")
+        .eq("plano_mensal", true);
+      if (!error && mensais && mensais.length) {
+        const idsM = mensais.map((c) => c.id);
+        const pls = await db
+          .from("planos")
+          .select("cliente_id, estado")
+          .eq("mes", proximoISO)
+          .in("cliente_id", idsM)
+          .then((r) => r.data ?? [], () => []);
+        const est = new Map(pls.map((p) => [p.cliente_id, p.estado]));
+        producao = mensais
+          .filter((c) => est.get(c.id) !== "aprovado")
+          .map((c) => {
+            const e = est.get(c.id) ?? null;
+            const texto =
+              e === "rascunho" ? "em produção — por enviar"
+                : e === "enviado" ? "enviado — a aguardar cliente"
+                : e === "alteracoes" ? "alterações pedidas"
+                : e === "recusado" ? "recusado — rever"
+                : `por começar — faltam ${diasAteFim} dias`;
+            return { marca: c.nome_marca, texto };
+          });
+      }
+    }
+  } catch (e) {
+    console.log("[digest-diario] produção:", e);
+  }
+
   const nada =
     respostas.length === 0 &&
     hoje.length === 0 &&
     espera.length === 0 &&
     descontos.length === 0 &&
-    aprovacoes.length === 0;
-  const { html, texto } = render({ respostas, hoje, espera, arrefecer, descontos, aprovacoes, lembretes, nada });
+    aprovacoes.length === 0 &&
+    producao.length === 0;
+  const { html, texto } = render({ respostas, hoje, espera, arrefecer, descontos, aprovacoes, lembretes, producao, nada });
 
   // Envio pelo Resend.
   const r = await fetch("https://api.resend.com/emails", {
@@ -335,7 +378,7 @@ export default async function handler() {
   return resposta(`Digest enviado para ${para}.`);
 }
 
-function render({ respostas, hoje, espera, arrefecer, descontos, aprovacoes, lembretes, nada }) {
+function render({ respostas, hoje, espera, arrefecer, descontos, aprovacoes, lembretes, producao, nada }) {
   const linhasTxt = [];
   const blocos = [];
 
@@ -360,6 +403,7 @@ function render({ respostas, hoje, espera, arrefecer, descontos, aprovacoes, lem
     "#B4761A",
   );
   bloco(`👀 À espera de ti (${espera.length})`, espera, "#2B44E7");
+  bloco(`🗓️ Produção do próximo mês (${(producao ?? []).length})`, producao ?? [], "#B4761A");
   bloco(`✅ Aprovações em atraso (${(aprovacoes ?? []).length})`, aprovacoes ?? [], "#C0392B");
   bloco(`🏷️ Descontos a terminar (${(descontos ?? []).length})`, descontos ?? [], "#B4761A");
   bloco(`🔔 Lembretes automáticos enviados (${(lembretes ?? []).length})`, lembretes ?? [], "#2B44E7");

@@ -11,6 +11,7 @@ type Entrada = Item | Grupo;
 const NAV: Entrada[] = [
   { href: "/", label: "Cockpit" },
   { href: "/dia", label: "O meu dia" },
+  { href: "/producao", label: "Produção" },
   { href: "/radar", label: "Radar" },
   {
     label: "Comercial",
