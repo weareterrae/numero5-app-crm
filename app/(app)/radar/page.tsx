@@ -84,14 +84,24 @@ export default async function RadarPage() {
   const contagem = { vermelho: 0, amarelo: 0, verde: 0, cinzento: 0 } as Record<string, number>;
   for (const { c } of cards) contagem[c?.estado ?? "cinzento"]++;
 
+  // Última atualização real dos dados (honesto: mostra se está fresco ou parado).
+  const ultima = [...com.values()]
+    .map((c) => c.atualizado_em)
+    .filter(Boolean)
+    .sort()
+    .pop();
+  const ultimaTxt = ultima
+    ? new Date(ultima).toLocaleDateString("pt-PT", { day: "numeric", month: "short" })
+    : null;
+
   return (
     <div className="mx-auto max-w-4xl space-y-5">
       <div>
         <p className="rotulo">o que estamos a comunicar</p>
         <h1 className="font-display text-3xl font-extrabold tracking-tight">Radar de comunicação</h1>
         <p className="mt-1 text-sm text-grey">
-          O estado de cada marca — se o feed está em dia, a ficar curto ou às escuras. Atualizado
-          todos os dias a partir do Metricool. 🖐️
+          O estado de cada marca — se o feed está em dia, a ficar curto ou às escuras. Dados do
+          Metricool{ultimaTxt ? ` · última atualização a ${ultimaTxt}` : ""}. 🖐️
         </p>
       </div>
 
