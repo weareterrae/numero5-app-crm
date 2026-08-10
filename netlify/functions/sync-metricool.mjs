@@ -79,6 +79,32 @@ function resumirPorMes(posts) {
   return porMes;
 }
 
+/** Resume o estado de comunicação (Radar) a partir dos posts: cobertura futura + próximo. */
+function resumoRadar(posts, hoje) {
+  const hojeISO = hoje.toISOString().slice(0, 10);
+  const dias = new Set();          // dias futuros com QUALQUER post agendado (feed ou story)
+  const feed = [];                 // posts de feed (não-story) futuros, para a lista 'agendados'
+  for (const p of posts) {
+    if (p?.draft === true) continue;
+    const iso = (p?.publicationDate?.dateTime || p?.publicationDate || "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso) || iso < hojeISO) continue;
+    dias.add(iso);
+    const tipo = String(p?.instagramData?.type || p?.facebookData?.type || "post").toLowerCase();
+    if (tipo !== "story") {
+      const rede = (Array.isArray(p.providers) ? p.providers : []).map((x) => x?.network).filter(Boolean)[0] || "";
+      feed.push({ data: iso, tipo, rede: String(rede).toLowerCase() });
+    }
+  }
+  if (dias.size === 0) return { estado: "cinzento", dias_cobertos: 0, proximo_post: null, agendados: [] };
+  const ordenados = [...dias].sort();
+  const proximo = ordenados[0];
+  const ultimo = ordenados[ordenados.length - 1];
+  const diasCobertos = Math.round((Date.parse(ultimo) - Date.parse(hojeISO)) / 86_400_000);
+  const estado = diasCobertos >= 7 ? "verde" : diasCobertos >= 3 ? "amarelo" : "vermelho";
+  const agendados = feed.sort((a, b) => a.data.localeCompare(b.data)).slice(0, 20);
+  return { estado, dias_cobertos: diasCobertos, proximo_post: proximo, agendados };
+}
+
 export default async function handler() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const chaveDb = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -93,11 +119,10 @@ export default async function handler() {
   // Só as contas com plano mensal E blog_id (poupa chamadas). Tolerante à migração.
   const { data: clientes, error } = await db
     .from("clientes")
-    .select("id, nome_marca, metricool_blog_id")
-    .eq("plano_mensal", true)
+    .select("id, nome_marca, metricool_blog_id, plano_mensal")
     .not("metricool_blog_id", "is", null);
-  if (error) return resposta("Migração 0066 ainda não correu (coluna plano_mensal em falta).");
-  if (!clientes || clientes.length === 0) return resposta("Nenhuma conta com plano mensal + blog_id.");
+  if (error) return resposta("Erro a ler clientes: " + error.message);
+  if (!clientes || clientes.length === 0) return resposta("Nenhuma conta com blog_id do Metricool.");
 
   const hoje = new Date();
   const ano = hoje.getUTCFullYear();
@@ -109,6 +134,25 @@ export default async function handler() {
   let gravados = 0;
   for (const c of clientes) {
     const posts = await buscarPosts(c.metricool_blog_id, userId, token, inicio, fim);
+
+    // Radar (marca_comunicacao) — para todas as marcas com blog_id.
+    const rd = resumoRadar(posts, hoje);
+    await db.from("marca_comunicacao").upsert(
+      {
+        cliente_id: c.id,
+        estado: rd.estado,
+        dias_cobertos: rd.dias_cobertos,
+        proximo_post: rd.proximo_post,
+        agendados: rd.agendados,
+        falhas: [],
+        metricool_blog_id: c.metricool_blog_id,
+        atualizado_em: new Date().toISOString(),
+      },
+      { onConflict: "cliente_id" },
+    );
+
+    // Quadro de produção (metricool_agendados) — só faz sentido para quem tem plano mensal.
+    if (!c.plano_mensal) continue;
     const porMes = resumirPorMes(posts);
     for (const mesISO of mesesAlvo) {
       const r = porMes.get(mesISO) || { total: 0, pendentes: 0, publicados: 0, por_rede: {}, por_tipo: {} };
