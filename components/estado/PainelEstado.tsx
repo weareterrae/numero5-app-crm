@@ -77,7 +77,7 @@ export function PainelEstado() {
             ? `verificado às ${new Date(dados.verificado).toLocaleTimeString("pt-PT", {
                 hour: "2-digit",
                 minute: "2-digit",
-              })} · atualiza a cada minuto`
+              })} · usa "Atualizar agora" para verificar já`
             : "—"}
         </p>
         <button
