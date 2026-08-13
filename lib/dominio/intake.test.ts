@@ -5,6 +5,7 @@ import {
   temSite,
   ehB2B,
   ehB2C,
+  ehConsultorImobiliario,
   processoComercialFraco,
   recomendacaoSite,
   diferencasMapa,
@@ -51,6 +52,16 @@ describe("diagnóstico adaptativo (Parte 6)", () => {
     expect(processoComercialFraco({ leads_followup: "nao", leads_registo: "cabeca" })).toBe(true);
     expect(processoComercialFraco({ leads_resposta: "mais" })).toBe(false); // 1 sinal
     expect(processoComercialFraco({ leads_resposta: "na_hora", leads_registo: "crm", leads_followup: "sempre" })).toBe(false);
+  });
+
+  it("ehConsultorImobiliario: deteta o setor imobiliário (tolerante a acentos)", () => {
+    expect(ehConsultorImobiliario("Imobiliário")).toBe(true);
+    expect(ehConsultorImobiliario("Consultora imobiliária")).toBe(true);
+    expect(ehConsultorImobiliario("mediação imobiliária")).toBe(true);
+    expect(ehConsultorImobiliario("Real Estate")).toBe(true);
+    expect(ehConsultorImobiliario("Restauração")).toBe(false);
+    expect(ehConsultorImobiliario(null)).toBe(false);
+    expect(ehConsultorImobiliario("")).toBe(false);
   });
 
   it("rotulo traduz as chaves novas nos dois idiomas", () => {
