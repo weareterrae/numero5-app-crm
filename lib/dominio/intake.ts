@@ -241,6 +241,22 @@ export const DECISORES = [
   ["varios", "Várias pessoas", "Several people"],
 ] as const;
 
+// ── Consultor(a) imobiliário(a) — bloco à medida do setor ────────────────────
+export const IMO_TIPOS = [
+  ["apartamentos", "Apartamentos", "Apartments"],
+  ["moradias", "Moradias", "Houses"],
+  ["terrenos", "Terrenos", "Land"],
+  ["luxo", "Imóveis de luxo", "Luxury"],
+  ["arrendamento", "Arrendamento", "Rentals"],
+  ["comercial", "Comercial / escritórios", "Commercial / offices"],
+] as const;
+
+export const IMO_FOCO = [
+  ["angariacao", "Angariar (vender por proprietários)", "Listings (sell for owners)"],
+  ["compradores", "Encontrar casa para compradores", "Find homes for buyers"],
+  ["ambos", "Um pouco dos dois", "A bit of both"],
+] as const;
+
 /** Tudo o que o cliente conta no diagnóstico profundo. Guardado em diagnosticos.brief. */
 export type Brief = {
   presenca?: string;
@@ -294,6 +310,14 @@ export type Brief = {
   decisor_contacto?: string;
   // Detetado no website (verificável, para o cliente confirmar/corrigir)
   site_detetado?: Record<string, unknown>;
+  // Consultor(a) imobiliário(a) — só preenchido quando o setor é imobiliário
+  imo_zonas?: string;
+  imo_tipos?: string[];
+  imo_foco?: string;
+  imo_porque?: string;
+  imo_orgulho?: string;
+  imo_distingue?: string;
+  imo_frase?: string;
 };
 
 /** Todas as listas juntas, para traduzir chaves → rótulos. */
@@ -323,6 +347,8 @@ export const LISTAS_BRIEF: Record<string, readonly (readonly [string, string, st
   intencao: INTENCAO,
   orcamento_arranque: FAIXAS_ARRANQUE,
   quem_decide: DECISORES,
+  imo_tipos: IMO_TIPOS,
+  imo_foco: IMO_FOCO,
 };
 
 // ── Lógica adaptativa (Parte 6): que perguntas fazem sentido mostrar ─────────
@@ -351,6 +377,14 @@ export function ehB2B(b: Brief): boolean {
 /** O cliente tem site? (senão, não perguntar problemas técnicos do site). */
 export function temSite(b: Brief): boolean {
   return !!b.site_estado && b.site_estado !== "nao";
+}
+
+/**
+ * O cliente é um(a) consultor(a) imobiliário(a)? (ativa o bloco à medida do
+ * setor no intake). Tolerante a acentos e variações do setor.
+ */
+export function ehConsultorImobiliario(setor?: string | null): boolean {
+  return /imobil|real estate|media(c|ç)[aã]o imob/i.test(setor ?? "");
 }
 
 // ── Comparação entre versões do diagnóstico (Parte 6) ───────────────────────

@@ -7,6 +7,8 @@ import {
   AUTOMACAO,
   CICLO_DECISAO,
   DECISORES,
+  IMO_FOCO,
+  IMO_TIPOS,
   MATERIAIS,
   FAIXAS_ORCAMENTO,
   FAIXAS_ARRANQUE,
@@ -34,6 +36,7 @@ import {
   TRATAMENTO,
   ehB2B,
   ehB2C,
+  ehConsultorImobiliario,
   investeAnuncios,
   recebeContactos,
   recomendacaoSite,
@@ -198,6 +201,20 @@ const TX = {
     ferramentasQ: "Que ferramentas já usas? (opcional)",
     intencaoQ: "O que procuras neste momento?",
     arranqueQ: "E para o arranque (pagamento único)?",
+    imoT: "O teu trabalho de consultor(a)",
+    imoS: "É a tua marca pessoal que vende. Conta-nos quem és a trabalhar.",
+    imoZonasQ: "Em que zonas trabalhas?",
+    imoZonasPH: "Concelhos, freguesias, a tua região…",
+    imoTiposQ: "Que tipo de imóveis?",
+    imoFocoQ: "Trabalhas mais…",
+    imoPorqueQ: "Porque entraste no imobiliário? O que te move?",
+    imoPorquePH: "Conta à tua maneira, sem pressa.",
+    imoOrgulhoQ: "Um negócio ou momento de que te orgulhas",
+    imoOrgulhoPH: "Uma história concreta vale mais que mil frases bonitas.",
+    imoDistingueQ: "O que te distingue dos outros consultores da zona?",
+    imoDistinguePH: "Aquilo que só tu fazes assim.",
+    imoFraseQ: "Uma frase que os teus clientes costumam dizer sobre ti",
+    imoFrasePH: "O que ouves muitas vezes.",
   },
   en: {
     eyebrow: "free diagnostic",
@@ -339,6 +356,20 @@ const TX = {
     detetadoTitulo: "We found this on your site. Confirm or correct.",
     usarRedes: "Use the detected socials",
     analiseFalhou: "We couldn't reach the site — no problem, carry on and tell us yourself.",
+    imoT: "Your work as an agent",
+    imoS: "It's your personal brand that sells. Tell us who you are at work.",
+    imoZonasQ: "Which areas do you work in?",
+    imoZonasPH: "Towns, neighbourhoods, your region…",
+    imoTiposQ: "What kind of properties?",
+    imoFocoQ: "Do you mostly…",
+    imoPorqueQ: "Why did you get into real estate? What drives you?",
+    imoPorquePH: "Tell it your own way, take your time.",
+    imoOrgulhoQ: "A deal or moment you're proud of",
+    imoOrgulhoPH: "A concrete story beats a thousand nice words.",
+    imoDistingueQ: "What sets you apart from other agents in your area?",
+    imoDistinguePH: "The thing only you do this way.",
+    imoFraseQ: "Something your clients often say about you",
+    imoFrasePH: "What you hear a lot.",
   },
 };
 
@@ -853,6 +884,41 @@ export function FormularioIntake({
       ),
     },
   ];
+
+  // Bloco à medida para consultor(a) imobiliário(a) — só quando o setor encaixa.
+  // Inserido antes da revisão (último passo) para manter válidos os índices dos
+  // botões «editar» do resumo (setPasso(1/2/5/9)).
+  if (ehConsultorImobiliario(setor)) {
+    passos.splice(passos.length - 1, 0, {
+      titulo: t.imoT,
+      sub: t.imoS,
+      corpo: (
+        <>
+          <Campo label={t.imoZonasQ}>
+            <input value={brief.imo_zonas ?? ""} onChange={(e) => setB("imo_zonas", e.target.value)} placeholder={t.imoZonasPH} className={CAMPO} />
+          </Campo>
+          <Pergunta titulo={t.imoTiposQ} nota={t.maisQueUm}>
+            <Chips opcoes={IMO_TIPOS} L={L} multi ativo={(k) => (brief.imo_tipos ?? []).includes(k)} onSel={(k) => varios("imo_tipos", k)} />
+          </Pergunta>
+          <Pergunta titulo={t.imoFocoQ}>
+            <Chips opcoes={IMO_FOCO} L={L} ativo={(k) => brief.imo_foco === k} onSel={(k) => um("imo_foco", k)} />
+          </Pergunta>
+          <Campo label={t.imoPorqueQ}>
+            <textarea value={brief.imo_porque ?? ""} onChange={(e) => setB("imo_porque", e.target.value)} rows={3} placeholder={t.imoPorquePH} className={CAMPO} />
+          </Campo>
+          <Campo label={t.imoOrgulhoQ}>
+            <textarea value={brief.imo_orgulho ?? ""} onChange={(e) => setB("imo_orgulho", e.target.value)} rows={3} placeholder={t.imoOrgulhoPH} className={CAMPO} />
+          </Campo>
+          <Campo label={t.imoDistingueQ}>
+            <textarea value={brief.imo_distingue ?? ""} onChange={(e) => setB("imo_distingue", e.target.value)} rows={2} placeholder={t.imoDistinguePH} className={CAMPO} />
+          </Campo>
+          <Campo label={t.imoFraseQ}>
+            <input value={brief.imo_frase ?? ""} onChange={(e) => setB("imo_frase", e.target.value)} placeholder={t.imoFrasePH} className={CAMPO} />
+          </Campo>
+        </>
+      ),
+    });
+  }
 
   const total = passos.length;
   const atual = passos[passo];
