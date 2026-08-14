@@ -194,6 +194,12 @@ export default async function FaturacaoPage({
           <p className="text-sm text-grey">{mesLegivel(mes)}</p>
         </div>
         <div className="flex items-center gap-2">
+          <a
+            href="/api/exportar/faturacao"
+            className="rounded-full border border-line px-4 py-1.5 text-xs font-bold text-grey transition hover:text-ink"
+          >
+            ⬇ CSV
+          </a>
           {ixBase ? (
             <>
               <Link

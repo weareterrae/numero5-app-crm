@@ -20,6 +20,12 @@ export default async function ClientesPage({
           <h1 className="font-display text-3xl font-extrabold tracking-tight">Clientes</h1>
         </div>
         <div className="flex gap-2">
+          <a
+            href="/api/exportar/clientes"
+            className="rounded-full border-2 border-line px-4 py-2 text-sm font-bold text-grey transition hover:text-ink"
+          >
+            ⬇ CSV
+          </a>
           <Link
             href="/clientes/funil"
             className="rounded-full border-2 border-gold-dark px-4 py-2 text-sm font-bold text-gold-dark"

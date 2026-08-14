@@ -278,6 +278,12 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
         >
           📋 Produção
         </Link>
+        <Link
+          href={`/clientes/${cliente.id}/historico`}
+          className="whitespace-nowrap rounded-full border border-line px-3.5 py-1.5 text-xs font-bold text-grey hover:text-ink"
+        >
+          🕘 Histórico
+        </Link>
         {orgLigada ? (
           <a
             href={`/sede/ver/${orgLigada.slug}`}
