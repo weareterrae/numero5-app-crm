@@ -3,8 +3,9 @@ import { criarClienteServico } from "@/lib/supabase/server";
 import { enviarEmailResend } from "@/lib/email/resend";
 
 /**
- * Recebe o feedback de uma proposta pública (ex.: numerocinco.pt/linhasgerais),
+ * Recebe o feedback de qualquer proposta pública (ex.: numerocinco.pt/proposta-globescala),
  * cria/atualiza o lead no CRM e avisa por email. Público e com CORS.
+ * A página envia `marca` e `origem` (identificação da proposta); nada aqui é preso a uma marca.
  * Fire-and-forget: a página não depende da resposta.
  */
 
@@ -45,7 +46,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true }, { headers });
 
   const s = (v: unknown) => (typeof v === "string" ? v.trim() : "");
-  const marca = s(d.marca) || "Linhas Gerais";
+  const marca = s(d.marca) || "Proposta";
+  const origem = s(d.origem); // identifica a proposta, ex.: "numerocinco.pt/proposta-globescala"
+  const website = s(d.website);
 
   const campos: Array<[string, string]> = [
     ["Feedback", s(d.feedback)],
@@ -82,8 +85,8 @@ export async function POST(req: NextRequest) {
       .insert({
         nome_marca: marca,
         estado: "lead",
-        website: "https://linhasgerais.pt",
-        notas_gerais: "Lead da proposta pública em numerocinco.pt/linhasgerais.",
+        website: website || null,
+        notas_gerais: `Lead da proposta pública${origem ? ` (${origem})` : ""}.`,
       })
       .select("id")
       .single();
@@ -95,7 +98,7 @@ export async function POST(req: NextRequest) {
     await supabase.from("atividades").insert({
       cliente_id: clienteId,
       tipo: "nota",
-      descricao: `📝 Respondeu à proposta (numerocinco.pt/linhasgerais).\n\n${cabecalho}${linhas}`,
+      descricao: `📝 Respondeu à proposta${origem ? ` (${origem})` : ""}.\n\n${cabecalho}${linhas}`,
       followup_em: amanha,
       followup_nota: `${marca} respondeu à proposta — responder em 24 h.`,
     });
@@ -106,7 +109,7 @@ export async function POST(req: NextRequest) {
     await enviarEmailResend({
       para: AVISO_PARA,
       assunto: `📝 ${marca} respondeu à proposta${quem ? ` — ${quem}` : ""}`,
-      texto: `${marca} acabou de responder à proposta em numerocinco.pt/linhasgerais.\n\n${cabecalho}${linhas}`,
+      texto: `${marca} acabou de responder à proposta${origem ? ` em ${origem}` : ""}.\n\n${cabecalho}${linhas}`,
       link: "https://app.numerocinco.pt/clientes",
     });
   } catch {
