@@ -1,10 +1,12 @@
 /**
- * Camada de IA agnóstica ao fornecedor.
- * Trocar de LLM é mudar duas variáveis de ambiente — nada de código.
+ * Camada de IA agnóstica ao fornecedor, resiliente a soluços transitórios
+ * (503 "overloaded", 429, 5xx, timeouts) da API: repete com recuo, cai para um
+ * modelo alternativo e corta ligações penduradas. Nunca atira exceções para fora.
  *
- *   IA_PROVIDER = gemini | openai | anthropic
- *   IA_MODELO   = ex.: gemini-flash-latest
- *   IA_API_KEY  = a chave do fornecedor
+ *   IA_PROVIDER        = gemini | openai | anthropic
+ *   IA_MODELO          = ex.: gemini-flash-latest      (modelo primário)
+ *   IA_MODELO_FALLBACK = ex.: gemini-2.0-flash         (rede de segurança; opcional)
+ *   IA_API_KEY         = a chave do fornecedor
  */
 
 export type PedidoIA = {
@@ -14,6 +16,8 @@ export type PedidoIA = {
   json?: boolean;
   maxTokens?: number;
   temperatura?: number;
+  /** Corta ligações penduradas (ms). Defeito 15000. */
+  timeoutMs?: number;
 };
 
 export type RespostaIA = { ok: true; texto: string } | { ok: false; erro: string };
@@ -23,63 +27,153 @@ export interface FornecedorIA {
   gerar(p: PedidoIA): Promise<RespostaIA>;
 }
 
+// -------------------------------------------------------- resiliência
+type Estado = "ok" | "transitorio" | "permanente";
+type Tentativa = { estado: Estado; status: number; texto: string; erro?: string };
+
+const TRANSITORIO = new Set([408, 425, 429, 500, 502, 503, 504]); // vale a pena repetir
+const MAX_TENTATIVAS = 3; // por modelo
+const TIMEOUT_MS = 15000;
+const dormir = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Um motor sabe fazer uma chamada e listar os seus modelos (primário → fallback). */
+interface Motor extends FornecedorIA {
+  modelos(): string[];
+  umaChamada(modelo: string, p: PedidoIA, timeoutMs: number): Promise<Tentativa>;
+}
+
+/** Repete na MESMA (modelo) só em erros transitórios, com recuo 400ms×tentativa. */
+async function tentarModelo(m: Motor, modelo: string, p: PedidoIA, timeoutMs: number): Promise<Tentativa> {
+  let ultima: Tentativa = { estado: "transitorio", status: 0, texto: "", erro: "sem resposta" };
+  for (let t = 1; t <= MAX_TENTATIVAS; t++) {
+    ultima = await m.umaChamada(modelo, p, timeoutMs);
+    if (ultima.estado === "ok" || ultima.estado === "permanente") return ultima;
+    if (t < MAX_TENTATIVAS) await dormir(400 * t);
+  }
+  return ultima; // esgotou as tentativas (transitório)
+}
+
+/** Percorre modelos × tentativas; devolve o 1º texto não-vazio ou o último erro. */
+async function executarResiliente(m: Motor, p: PedidoIA): Promise<RespostaIA> {
+  const timeoutMs = p.timeoutMs ?? TIMEOUT_MS;
+  let algumOk = false;
+  let ultimoErro = `${m.nome}: falha desconhecida.`;
+  for (const modelo of m.modelos()) {
+    const res = await tentarModelo(m, modelo, p, timeoutMs);
+    if (res.estado === "ok") {
+      algumOk = true;
+      if (res.texto) return { ok: true, texto: res.texto };
+      ultimoErro = "Resposta vazia."; // 200 mas vazio → tenta o próximo modelo
+      continue;
+    }
+    ultimoErro = res.erro || `${m.nome} respondeu ${res.status}`;
+    // transitório/permanente → próximo modelo (o fallback pode aceitar o pedido)
+  }
+  return { ok: false, erro: algumOk ? "Resposta vazia." : ultimoErro };
+}
+
+/** Faz o fetch com timeout e classifica o resultado. Não atira. */
+async function fetchClassificado(
+  nome: string,
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+  extrair: (d: unknown) => string,
+): Promise<Tentativa> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  let r: Response;
+  try {
+    r = await fetch(url, { ...init, signal: ctrl.signal });
+  } catch (e) {
+    // AbortError (timeout) ou falha de rede → transitório, vale a pena repetir
+    return { estado: "transitorio", status: 0, texto: "", erro: `${nome}: ${String(e)}` };
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!r.ok) {
+    const corpo = await r.text().catch(() => "");
+    const estado: Estado = TRANSITORIO.has(r.status) ? "transitorio" : "permanente";
+    return { estado, status: r.status, texto: "", erro: `${nome} ${r.status}: ${corpo.slice(0, 200)}` };
+  }
+  const d = await r.json().catch(() => null);
+  return { estado: "ok", status: 200, texto: extrair(d) };
+}
+
+function listaModelos(primario: string, fallback: string | undefined): string[] {
+  return [...new Set([primario, fallback].filter((x): x is string => !!x))];
+}
+
 // ---------------------------------------------------------------- Gemini
-class Gemini implements FornecedorIA {
+class Gemini implements Motor {
   nome = "gemini";
   constructor(
     private chave: string,
     private modelo: string,
+    private fallback: string | undefined,
   ) {}
 
-  async gerar(p: PedidoIA): Promise<RespostaIA> {
-    try {
-      const r = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${this.modelo}:generateContent`,
-        {
-          method: "POST",
-          headers: { "x-goog-api-key": this.chave, "content-type": "application/json" },
-          body: JSON.stringify({
-            system_instruction: { parts: [{ text: p.sistema }] },
-            contents: [{ role: "user", parts: [{ text: p.utilizador }] }],
-            generationConfig: {
-              // Generoso de propósito: com pouco espaço, o modelo "pensa"
-              // e corta a resposta a meio — já nos aconteceu.
-              maxOutputTokens: Math.max(p.maxTokens ?? 4096, 2048),
-              temperature: p.temperatura ?? 0.8,
-              ...(p.json ? { responseMimeType: "application/json" } : {}),
-            },
-          }),
-        },
-      );
-      if (!r.ok) return { ok: false, erro: `Gemini respondeu ${r.status}` };
-      const d = await r.json();
-      const texto = (d?.candidates?.[0]?.content?.parts ?? [])
-        .filter((x: { thought?: boolean; text?: string }) => x && !x.thought && typeof x.text === "string")
-        .map((x: { text: string }) => x.text)
-        .join("")
-        .trim();
-      return texto ? { ok: true, texto } : { ok: false, erro: "Resposta vazia." };
-    } catch (e) {
-      return { ok: false, erro: String(e) };
-    }
+  modelos() {
+    return listaModelos(this.modelo, this.fallback);
+  }
+
+  umaChamada(modelo: string, p: PedidoIA, timeoutMs: number): Promise<Tentativa> {
+    return fetchClassificado(
+      "Gemini",
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`,
+      {
+        method: "POST",
+        headers: { "x-goog-api-key": this.chave, "content-type": "application/json" },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: p.sistema }] },
+          contents: [{ role: "user", parts: [{ text: p.utilizador }] }],
+          generationConfig: {
+            // Generoso de propósito: com pouco espaço, o modelo "pensa" e corta a meio.
+            maxOutputTokens: Math.max(p.maxTokens ?? 4096, 2048),
+            temperature: p.temperatura ?? 0.8,
+            ...(p.json ? { responseMimeType: "application/json" } : {}),
+          },
+        }),
+      },
+      timeoutMs,
+      (d) => {
+        const parts = (d as { candidates?: { content?: { parts?: unknown[] } }[] })?.candidates?.[0]?.content?.parts ?? [];
+        return (parts as { thought?: boolean; text?: string }[])
+          .filter((x) => x && !x.thought && typeof x.text === "string")
+          .map((x) => x.text as string)
+          .join("")
+          .trim();
+      },
+    );
+  }
+
+  gerar(p: PedidoIA) {
+    return executarResiliente(this, p);
   }
 }
 
 // ---------------------------------------------------------------- OpenAI
-class OpenAI implements FornecedorIA {
+class OpenAI implements Motor {
   nome = "openai";
   constructor(
     private chave: string,
     private modelo: string,
+    private fallback: string | undefined,
   ) {}
 
-  async gerar(p: PedidoIA): Promise<RespostaIA> {
-    try {
-      const r = await fetch("https://api.openai.com/v1/chat/completions", {
+  modelos() {
+    return listaModelos(this.modelo, this.fallback);
+  }
+
+  umaChamada(modelo: string, p: PedidoIA, timeoutMs: number): Promise<Tentativa> {
+    return fetchClassificado(
+      "OpenAI",
+      "https://api.openai.com/v1/chat/completions",
+      {
         method: "POST",
         headers: { authorization: `Bearer ${this.chave}`, "content-type": "application/json" },
         body: JSON.stringify({
-          model: this.modelo,
+          model: modelo,
           messages: [
             { role: "system", content: p.sistema },
             { role: "user", content: p.utilizador },
@@ -88,28 +182,35 @@ class OpenAI implements FornecedorIA {
           temperature: p.temperatura ?? 0.8,
           ...(p.json ? { response_format: { type: "json_object" } } : {}),
         }),
-      });
-      if (!r.ok) return { ok: false, erro: `OpenAI respondeu ${r.status}` };
-      const d = await r.json();
-      const texto = (d?.choices?.[0]?.message?.content ?? "").trim();
-      return texto ? { ok: true, texto } : { ok: false, erro: "Resposta vazia." };
-    } catch (e) {
-      return { ok: false, erro: String(e) };
-    }
+      },
+      timeoutMs,
+      (d) => ((d as { choices?: { message?: { content?: string } }[] })?.choices?.[0]?.message?.content ?? "").trim(),
+    );
+  }
+
+  gerar(p: PedidoIA) {
+    return executarResiliente(this, p);
   }
 }
 
 // ------------------------------------------------------------- Anthropic
-class Anthropic implements FornecedorIA {
+class Anthropic implements Motor {
   nome = "anthropic";
   constructor(
     private chave: string,
     private modelo: string,
+    private fallback: string | undefined,
   ) {}
 
-  async gerar(p: PedidoIA): Promise<RespostaIA> {
-    try {
-      const r = await fetch("https://api.anthropic.com/v1/messages", {
+  modelos() {
+    return listaModelos(this.modelo, this.fallback);
+  }
+
+  umaChamada(modelo: string, p: PedidoIA, timeoutMs: number): Promise<Tentativa> {
+    return fetchClassificado(
+      "Anthropic",
+      "https://api.anthropic.com/v1/messages",
+      {
         method: "POST",
         headers: {
           "x-api-key": this.chave,
@@ -117,24 +218,35 @@ class Anthropic implements FornecedorIA {
           "content-type": "application/json",
         },
         body: JSON.stringify({
-          model: this.modelo,
+          model: modelo,
           system: p.sistema,
           messages: [{ role: "user", content: p.utilizador }],
           max_tokens: p.maxTokens ?? 4096,
           temperature: p.temperatura ?? 0.8,
         }),
-      });
-      if (!r.ok) return { ok: false, erro: `Anthropic respondeu ${r.status}` };
-      const d = await r.json();
-      const texto = (d?.content ?? [])
-        .filter((c: { type: string }) => c.type === "text")
-        .map((c: { text: string }) => c.text)
-        .join("")
-        .trim();
-      return texto ? { ok: true, texto } : { ok: false, erro: "Resposta vazia." };
-    } catch (e) {
-      return { ok: false, erro: String(e) };
-    }
+      },
+      timeoutMs,
+      (d) =>
+        ((d as { content?: { type: string; text?: string }[] })?.content ?? [])
+          .filter((c) => c.type === "text")
+          .map((c) => c.text as string)
+          .join("")
+          .trim(),
+    );
+  }
+
+  gerar(p: PedidoIA) {
+    return executarResiliente(this, p);
+  }
+}
+
+/** Modelo de fallback por defeito, por fornecedor (usado se IA_MODELO_FALLBACK não estiver definido). */
+function fallbackPorDefeito(provider: string): string | undefined {
+  switch (provider) {
+    case "gemini":
+      return "gemini-2.0-flash";
+    default:
+      return undefined; // OpenAI/Anthropic: sem fallback implícito (evita cobrar um modelo inesperado)
   }
 }
 
@@ -143,13 +255,15 @@ export function obterIA(): FornecedorIA | null {
   const chave = process.env.IA_API_KEY;
   if (!chave) return null;
   const modelo = process.env.IA_MODELO || "gemini-flash-latest";
-  switch ((process.env.IA_PROVIDER || "gemini").toLowerCase()) {
+  const provider = (process.env.IA_PROVIDER || "gemini").toLowerCase();
+  const fallback = process.env.IA_MODELO_FALLBACK || fallbackPorDefeito(provider);
+  switch (provider) {
     case "openai":
-      return new OpenAI(chave, modelo);
+      return new OpenAI(chave, modelo, fallback);
     case "anthropic":
-      return new Anthropic(chave, modelo);
+      return new Anthropic(chave, modelo, fallback);
     default:
-      return new Gemini(chave, modelo);
+      return new Gemini(chave, modelo, fallback);
   }
 }
 
