@@ -56,82 +56,38 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
   if (!cliente) notFound();
 
   const supabase = await criarClienteServidor();
-  // Orgs da Sede ligadas a este cliente (pode haver mais de uma, ex.: marca +
-  // recrutamento). maybeSingle() falhava com 2 linhas e escondia a ligação.
-  const { data: orgsLigadasRaw } = await supabase
-    .from("orgs")
-    .select("id, slug, nome, meta_ads_id")
-    .eq("cliente_id", id)
-    .order("slug")
-    .then(
-      (r) => r,
-      async () =>
-        // 0061 pode ainda não ter corrido — cair para a forma antiga.
-        await supabase.from("orgs").select("id, slug, nome").eq("cliente_id", id).order("slug"),
-    );
-  const orgsLigadas = (orgsLigadasRaw ?? []) as {
-    id: string;
-    slug: string;
-    nome: string;
-    meta_ads_id?: string | null;
-  }[];
-
-  // Acessos ativos à Sede: membros externos das orgs ligadas a esta ficha.
-  type Acesso = { org_id: string; profile_id: string; email: string; nome: string | null };
-  let acessos: Acesso[] = [];
-  if (orgsLigadas.length) {
-    const { data: membrosRaw } = await supabase
-      .from("org_membros")
-      .select("org_id, profile_id, profiles(email, nome, externo)")
-      .in("org_id", orgsLigadas.map((o) => o.id));
-    acessos = ((membrosRaw ?? []) as { org_id: string; profile_id: string; profiles: unknown }[])
-      .map((m) => {
-        const p = (Array.isArray(m.profiles) ? m.profiles[0] : m.profiles) as {
-          email?: string | null;
-          nome?: string | null;
-          externo?: boolean | null;
-        } | null;
-        return {
-          org_id: m.org_id,
-          profile_id: m.profile_id,
-          email: p?.email ?? "?",
-          nome: p?.nome ?? null,
-          externo: p?.externo,
-        };
-      })
-      .filter((a) => a.externo !== false) // esconder adesões da equipa
-      .map(({ externo: _e, ...resto }) => resto);
-    // Uma pessoa = uma entrada (o acesso cobre todas as marcas da ficha).
-    const vistos = new Set<string>();
-    acessos = acessos.filter((a) =>
-      vistos.has(a.profile_id) ? false : (vistos.add(a.profile_id), true),
-    );
-  }
-  const orgLigada = orgsLigadas[0] ?? null;
-  // Orgs livres (sem cliente) — para associar a Sede a esta ficha.
-  const { data: orgsLivresRaw } = await supabase
-    .from("orgs")
-    .select("id, slug, nome")
-    .is("cliente_id", null)
-    .order("nome");
-  const orgsLivres = (orgsLivresRaw ?? []) as { id: string; slug: string; nome: string }[];
-  // Outras fichas — para copiar dados fiscais/responsáveis (grupos multi-marca).
-  const { data: outrasRaw } = await supabase
-    .from("clientes")
-    .select("id, nome_marca")
-    .neq("id", id)
-    .neq("estado", "perdido")
-    .order("nome_marca");
-  const outrasFichas = (outrasRaw ?? []) as { id: string; nome_marca: string }[];
-  // Pedidos de serviço abertos na Sede (viram proposta). Tolerante a 0056.
-  const { data: pedidosServico } = await supabase
-    .from("pedidos")
-    .select("id, estado")
-    .eq("cliente_id", id)
-    .eq("tipo", "servico")
-    .neq("estado", "feito");
-  const [atividades, contactos, intake, diagRes, propRes, planosRes, relatoriosRes, metricoolRes] =
-    await Promise.all([
+  // Tudo o que é independente vai num só lote — antes eram vários round-trips em
+  // série (era a página mais lenta). Só o `acessos` fica de fora (depende das orgs).
+  const [
+    orgsLigadasRes,
+    orgsLivresRes,
+    outrasRes,
+    pedidosRes,
+    atividades,
+    contactos,
+    intake,
+    diagRes,
+    propRes,
+    planosRes,
+    relatoriosRes,
+    metricoolRes,
+  ] = await Promise.all([
+    // Orgs da Sede ligadas a este cliente. 0061 pode não ter corrido → forma antiga.
+    supabase
+      .from("orgs")
+      .select("id, slug, nome, meta_ads_id")
+      .eq("cliente_id", id)
+      .order("slug")
+      .then(
+        (r) => r,
+        async () => await supabase.from("orgs").select("id, slug, nome").eq("cliente_id", id).order("slug"),
+      ),
+    // Orgs livres (sem cliente) — para associar a Sede a esta ficha.
+    supabase.from("orgs").select("id, slug, nome").is("cliente_id", null).order("nome"),
+    // Outras fichas — para copiar dados fiscais/responsáveis (grupos multi-marca).
+    supabase.from("clientes").select("id, nome_marca").neq("id", id).neq("estado", "perdido").order("nome_marca"),
+    // Pedidos de serviço abertos na Sede (viram proposta). Tolerante a 0056.
+    supabase.from("pedidos").select("id, estado").eq("cliente_id", id).eq("tipo", "servico").neq("estado", "feito"),
     listarAtividades(id),
     listarContactos(id),
     obterIntake(id),
@@ -164,6 +120,50 @@ export default async function FichaCliente({ params }: { params: Promise<{ id: s
       .eq("id", id)
       .maybeSingle(),
   ]);
+
+  const orgsLigadas = (orgsLigadasRes.data ?? []) as {
+    id: string;
+    slug: string;
+    nome: string;
+    meta_ads_id?: string | null;
+  }[];
+  const orgLigada = orgsLigadas[0] ?? null;
+  const orgsLivres = (orgsLivresRes.data ?? []) as { id: string; slug: string; nome: string }[];
+  const outrasFichas = (outrasRes.data ?? []) as { id: string; nome_marca: string }[];
+  const pedidosServico = pedidosRes.data;
+
+  // Acessos ativos à Sede: membros externos das orgs ligadas (depende de orgsLigadas).
+  type Acesso = { org_id: string; profile_id: string; email: string; nome: string | null };
+  let acessos: Acesso[] = [];
+  if (orgsLigadas.length) {
+    const { data: membrosRaw } = await supabase
+      .from("org_membros")
+      .select("org_id, profile_id, profiles(email, nome, externo)")
+      .in("org_id", orgsLigadas.map((o) => o.id));
+    acessos = ((membrosRaw ?? []) as { org_id: string; profile_id: string; profiles: unknown }[])
+      .map((m) => {
+        const p = (Array.isArray(m.profiles) ? m.profiles[0] : m.profiles) as {
+          email?: string | null;
+          nome?: string | null;
+          externo?: boolean | null;
+        } | null;
+        return {
+          org_id: m.org_id,
+          profile_id: m.profile_id,
+          email: p?.email ?? "?",
+          nome: p?.nome ?? null,
+          externo: p?.externo,
+        };
+      })
+      .filter((a) => a.externo !== false) // esconder adesões da equipa
+      .map(({ externo: _e, ...resto }) => resto);
+    // Uma pessoa = uma entrada (o acesso cobre todas as marcas da ficha).
+    const vistos = new Set<string>();
+    acessos = acessos.filter((a) =>
+      vistos.has(a.profile_id) ? false : (vistos.add(a.profile_id), true),
+    );
+  }
+
   const propostas = (propRes.data ?? []) as {
     id: string;
     versao: number;

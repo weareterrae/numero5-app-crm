@@ -25,9 +25,9 @@ A aplicação de negócio do Sandro (marca **Nº 5**, agência de marketing digi
 ⛔ Segredos põe-os o Sandro nos painéis — **nunca receber chaves no chat**.
 
 ## Modelo de dados (migrações `supabase/migrations/`)
-`clientes` (funil, redes jsonb, intake_token, campos fiscais 0018, kit_* + onboarding jsonb 0020, metricool_blog_id 0016), `contactos` (departamento 0013), `atividades` (histórico + follow-ups), `diagnosticos` (site_score, objetivos, pedido jsonb, **brief jsonb** 0017 = intake profundo), `propostas` (escopo/escopo_pedido jsonb, setup_valor/avenca_valor, conteudo jsonb da IA, mostrar_comparacao, partilha_token), `pacotes`, `precos_unitarios` (catálogo parametrizável, categoria 0014), `casos` (portefólio, links 0010), `verificacoes_catalogo`, `estado_historico` (transições do funil), `avencas` (MRR; trigger cria/termina conforme estado 0012), `producao_itens` (folha de produção 0007), `planos` (0015, plano mensal HTML, aprovação do cliente), `relatorios` (0016, relatório mensal HTML), `cobrancas` (0019, faturação), `profiles`. Migrações 0001–0020.
+`clientes` (funil, redes jsonb, intake_token, campos fiscais 0018, kit_* + onboarding jsonb 0020, metricool_blog_id 0016), `contactos` (departamento 0013), `atividades` (histórico + follow-ups), `diagnosticos` (site_score, objetivos, pedido jsonb, **brief jsonb** 0017 = intake profundo), `propostas` (escopo/escopo_pedido jsonb, setup_valor/avenca_valor, conteudo jsonb da IA, mostrar_comparacao, partilha_token), `pacotes`, `precos_unitarios` (catálogo parametrizável, categoria 0014), `casos` (portefólio, links 0010), `verificacoes_catalogo`, `estado_historico` (transições do funil), `avencas` (MRR; trigger cria/termina conforme estado 0012), `producao_itens` (folha de produção 0007), `planos` (0015, plano mensal HTML, aprovação do cliente), `relatorios` (0016, relatório mensal HTML), `cobrancas` (0019, faturação), `profiles`. **Migrações 0001–0067** (o índice antigo «0001–0020» estava desatualizado — há 66 ficheiros no disco).
 
-RLS: política `authenticated → all` (só o operador entra). Páginas públicas usam **service role**.
+RLS: as tabelas da agência estão trancadas a **`n5_is_staff()`** (migração 0067) — clientes externos da Sede (com sessão real) não leem dados internos pelo PostgREST. `auditoria`/`estado_historico` são **imutáveis** (só insert+select). As `crm_*`/`orgs` são org-scoped (0046). Páginas públicas e a Sede leem por **service role**.
 
 ## Mapa de rotas
 - **Operador** `app/(app)/`: `/` cockpit (MRR, pipeline, conversão, follow-ups), `/clientes` (+ `/funil`, `/[id]` ficha, `/[id]/producao`, `/[id]/conteudo` = brief para o Claude Code, `/[id]/planos/[planoId]`, `/[id]/relatorios/[relatorioId]`), `/diagnosticos/[id]`, `/propostas/[id]` (Configurador + EditorTexto IA), `/avencas`, `/faturacao` (cobrança mensal), `/definicoes/precos`.
@@ -72,9 +72,10 @@ Camada de gestão operacional sobre o sistema comercial. 73 testes (`npm test`).
 Cockpit e digest ganharam os alertas acionáveis de cada bloco.
 
 ## Pendências do Sandro (fora do código)
-- **Correr no Supabase** as migrações que faltam: 0016–0020, **0023, 0024, 0025**
-  (0022 já corrido) e as da Fase 2 **0026–0033**. Sem elas, as funcionalidades
-  ficam inertes (o código é tolerante — não parte).
+- **Rastreio de migrações (a montar):** há 66 ficheiros (0001–0067) mas nenhum
+  tracking (sem Supabase CLI nem tabela `schema_migrations`) → não se sabe ao certo
+  o que já correu. Prioridade: pôr sob Supabase CLI e reconciliar. O código é
+  tolerante (features de migrações não-corridas ficam inertes, não partem).
 - **Preencher os parâmetros [A DEFINIR]** em `configuracoes`: preço/custo/tempo da
   `direcao`; reuniões incluídas/duração/preço extra; revisões incluídas;
   horas_mes_total e pct_nao_faturavel (capacidade).
