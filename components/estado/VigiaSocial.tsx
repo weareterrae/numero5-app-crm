@@ -10,7 +10,12 @@ type Bot = {
   detalhe: string;
   tipo: string;
 };
-type Dados = { bots: Bot[]; contagem: { verde: number; amarelo: number; vermelho: number }; verificado: string };
+type Dados = {
+  bots: Bot[];
+  contagem: { verde: number; amarelo: number; vermelho: number };
+  profundidade: boolean;
+  verificado: string;
+};
 
 const COR: Record<string, { dot: string; label: string; txt: string }> = {
   verde: { dot: "#2FA36B", label: "text-good", txt: "NO AR" },
@@ -94,8 +99,9 @@ export function VigiaSocial() {
             })}
           </ul>
           <p className="text-[11px] text-soft">
-            Sinais: a função responde + o prompt (cérebro) está acessível. A profundidade — pendentes por idade e
-            logs de erro — precisa das chaves por projeto e fica para a v2.
+            {d.profundidade
+              ? "Profundidade ligada: a função responde, o cérebro (prompt) está acessível, e incluímos as pendentes presas (+2h) e os erros da pending_replies."
+              : "Só liveness + cérebro. Para ligar a profundidade (pendentes/erros por marca), define SUPABASE_MGMT_TOKEN no Netlify."}
           </p>
         </>
       )}
