@@ -57,11 +57,14 @@ export default async function AnunciosOperador() {
   }
 
   const dados = await Promise.all(
-    orgs.map(async (o) => ({
-      org: o,
-      camp: await campanhasMeta(o.meta_ads_id),
-      ads: await anunciosRicosMeta(o.meta_ads_id),
-    })),
+    orgs.map(async (o) => {
+      // Campanhas e anúncios em paralelo — em série duplicava a espera por marca.
+      const [camp, ads] = await Promise.all([
+        campanhasMeta(o.meta_ads_id),
+        anunciosRicosMeta(o.meta_ads_id),
+      ]);
+      return { org: o, camp, ads };
+    }),
   );
 
   // Totais gerais (só contas que responderam)

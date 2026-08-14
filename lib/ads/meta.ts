@@ -10,6 +10,16 @@
 
 const V = "v21.0";
 
+/**
+ * Todas as chamadas ao Graph passam por aqui:
+ *  · tempo limitado (8s) — um pedido lento do Meta deixava a página /anuncios
+ *    pendurada até o SSR da Netlify a matar (nunca chegava a renderizar);
+ *  · cache de 5 min do Next — o operador e a Sede não martelam a API a cada
+ *    vista; números de anúncios não precisam de ser ao segundo.
+ */
+const fetchG = (url: string) =>
+  globalThis.fetch(url, { signal: AbortSignal.timeout(8000), next: { revalidate: 300 } });
+
 export function metaAdsConfigurado(): boolean {
   return !!process.env.META_ADS_TOKEN?.trim();
 }
@@ -75,15 +85,15 @@ export async function campanhasMeta(
   try {
     const base = `https://graph.facebook.com/${V}/act_${acc}`;
     const [rConta, rCamp, rIns, rGlobal] = await Promise.all([
-      fetch(`${base}?fields=currency&access_token=${encodeURIComponent(token)}`),
-      fetch(
+      fetchG(`${base}?fields=currency&access_token=${encodeURIComponent(token)}`),
+      fetchG(
         // effective_status explícito: sem ele a API omite campanhas (visto na Massa Prima).
         `${base}/campaigns?fields=id,name,effective_status,objective&effective_status=${encodeURIComponent('["ACTIVE","PAUSED","ARCHIVED"]')}&limit=50&access_token=${encodeURIComponent(token)}`,
       ),
-      fetch(
+      fetchG(
         `${base}/insights?level=campaign&date_preset=last_30d&fields=campaign_id,reach,impressions,clicks,spend,actions&limit=50&access_token=${encodeURIComponent(token)}`,
       ),
-      fetch(
+      fetchG(
         `${base}/insights?level=account&date_preset=last_30d&fields=reach&access_token=${encodeURIComponent(token)}`,
       ),
     ]);
@@ -164,10 +174,10 @@ export async function anunciosAtivosMeta(
       JSON.stringify([{ field: "effective_status", operator: "IN", value: ["ACTIVE"] }]),
     );
     const [rAds, rIns] = await Promise.all([
-      fetch(
+      fetchG(
         `${base}/ads?fields=id,name,effective_status,campaign{name}&filtering=${filtro}&limit=100&access_token=${encodeURIComponent(token)}`,
       ),
-      fetch(
+      fetchG(
         `${base}/insights?level=ad&date_preset=last_30d&fields=ad_id,impressions,clicks,spend,actions&limit=200&access_token=${encodeURIComponent(token)}`,
       ),
     ]);
@@ -362,9 +372,9 @@ export async function anunciosRicosMeta(
 
     // 1) Quem entregou no período. Uma chamada — os insights só existem para quem entregou,
     //    o que dispensa filtrar estados e apanha também os arquivados.
-    const rConta = fetch(`${base}?fields=currency&access_token=${encodeURIComponent(token)}`);
+    const rConta = fetchG(`${base}?fields=currency&access_token=${encodeURIComponent(token)}`);
     const camposIns = "ad_id,ad_name,impressions,reach,frequency,clicks,ctr,spend,actions";
-    const rIns = await fetch(
+    const rIns = await fetchG(
       `${base}/insights?level=ad&date_preset=last_30d&fields=${camposIns}&limit=500&access_token=${encodeURIComponent(token)}`,
     );
     if (!rIns.ok) return { ok: false, erro: `Meta respondeu ${rIns.status}: ${(await rIns.text()).slice(0, 120)}` };
@@ -378,7 +388,7 @@ export async function anunciosRicosMeta(
       const proxima = pagina.paging?.next;
       if (!proxima) break;
       if (i >= 3) { truncado = true; break; } // 2000 anúncios — rede de segurança, não limite esperado
-      const r = await fetch(proxima);
+      const r = await fetchG(proxima);
       if (!r.ok) break;
       pagina = (await r.json()) as { data?: LinhaIns[]; paging?: { next?: string } };
     }
@@ -395,7 +405,7 @@ export async function anunciosRicosMeta(
     for (let i = 0; i < ids.length; i += 50) lotes.push(ids.slice(i, i + 50));
     const respostas = await Promise.all(
       lotes.map((lote) =>
-        fetch(
+        fetchG(
           `https://graph.facebook.com/${V}/?ids=${lote.join(",")}&fields=${encodeURIComponent(camposDet)}&access_token=${encodeURIComponent(token)}`,
         )
           .then((r) => (r.ok ? r.json() : {}))
@@ -487,8 +497,8 @@ export async function resumoAnunciosMes(
     const base = `https://graph.facebook.com/${V}/act_${acc}`;
     const tr = encodeURIComponent(JSON.stringify({ since, until }));
     const [rConta, rIns] = await Promise.all([
-      fetch(`${base}?fields=currency&access_token=${encodeURIComponent(token)}`),
-      fetch(
+      fetchG(`${base}?fields=currency&access_token=${encodeURIComponent(token)}`),
+      fetchG(
         `${base}/insights?level=campaign&time_range=${tr}&fields=campaign_name,reach,impressions,clicks,spend,actions&limit=100&access_token=${encodeURIComponent(token)}`,
       ),
     ]);
