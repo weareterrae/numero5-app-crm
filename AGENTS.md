@@ -72,10 +72,11 @@ Camada de gestão operacional sobre o sistema comercial. 73 testes (`npm test`).
 Cockpit e digest ganharam os alertas acionáveis de cada bloco.
 
 ## Pendências do Sandro (fora do código)
-- **Rastreio de migrações (a montar):** há 66 ficheiros (0001–0067) mas nenhum
-  tracking (sem Supabase CLI nem tabela `schema_migrations`) → não se sabe ao certo
-  o que já correu. Prioridade: pôr sob Supabase CLI e reconciliar. O código é
-  tolerante (features de migrações não-corridas ficam inertes, não partem).
+- **Rastreio de migrações:** montado — o `0068_schema_migrations.sql` cria a tabela
+  `schema_migrations` e reconcilia 0001–0068 (assumidas aplicadas, pois a app corre com
+  tudo). Correr o 0068 uma vez no Supabase. **Convenção nova:** cada migração futura
+  TERMINA com `insert into schema_migrations(version) values ('00XX') on conflict do nothing;`
+  para a tabela refletir sempre o estado real. O código continua tolerante a migrações não-corridas.
 - **Preencher os parâmetros [A DEFINIR]** em `configuracoes`: preço/custo/tempo da
   `direcao`; reuniões incluídas/duração/preço extra; revisões incluídas;
   horas_mes_total e pct_nao_faturavel (capacidade).

@@ -72,6 +72,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, duplicada: true }, { headers });
   }
 
+  // Tecto de volume por org: um token comprometido não pode inundar o CRM
+  // (o dedup por email não trava leads sem email ou com emails diferentes).
+  const minutoAtras = new Date(Date.now() - 60_000).toISOString();
+  const { count: recentes } = await supabase
+    .from("crm_leads")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", orgId)
+    .gte("created_at", minutoAtras);
+  if ((recentes ?? 0) >= 20)
+    return NextResponse.json({ ok: false, erro: "ritmo" }, { status: 429, headers });
+
   // Etapa inicial = a primeira etapa "aberto" da org.
   const { data: etapa } = await supabase
     .from("crm_etapas")
@@ -82,10 +93,16 @@ export async function POST(req: NextRequest) {
     .limit(1)
     .maybeSingle();
 
-  const campos =
+  let campos =
     d.campos && typeof d.campos === "object" && !Array.isArray(d.campos)
       ? (d.campos as Record<string, unknown>)
       : {};
+  // Limitar o jsonb vindo do exterior: no máx. 40 chaves e ~4 KB, para não
+  // encher a base com lixo (não é injeção — é jsonb parametrizado — mas é bloat).
+  if (Object.keys(campos).length > 40 || JSON.stringify(campos).length > 4000) {
+    campos = Object.fromEntries(Object.entries(campos).slice(0, 40));
+    if (JSON.stringify(campos).length > 4000) campos = { _truncado: true };
+  }
 
   const { data: lead, error } = await supabase
     .from("crm_leads")
