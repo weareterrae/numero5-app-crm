@@ -26,6 +26,15 @@ export async function enviarEmailResend(opts: {
   /** Link a destacar como botão (opcional). */
   link?: string;
   replyTo?: string | null;
+  /**
+   * HTML já montado. Se vier, é usado tal e qual (não embrulha o `texto`).
+   * Serve para os relatórios, que trazem o seu próprio corpo formatado.
+   */
+  html?: string;
+  /** Cópia(s) em CC — ex.: o operador quando o relatório sai ao cliente. */
+  cc?: string | string[];
+  /** Remetente alternativo (ex.: "Nº 5 <giveme5@numerocinco.pt>"). */
+  remetente?: string;
 }): Promise<EnvioEmail> {
   const chave = process.env.RESEND_API_KEY;
   if (!chave)
@@ -34,20 +43,28 @@ export async function enviarEmailResend(opts: {
       erro: "Falta a RESEND_API_KEY nas variáveis do Netlify. Adiciona-a e volta a tentar.",
     };
 
-  // HTML simples: o texto com quebras de linha + o link como botão dourado.
-  const corpoHtml = escaparHtml(opts.texto).replace(/\n/g, "<br>");
-  const botao = opts.link
-    ? `<p style="margin:24px 0"><a href="${opts.link}" style="background:#E8A13C;color:#15181D;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;display:inline-block">Abrir</a></p><p style="font-size:12px;color:#888">Ou copia: ${escaparHtml(opts.link)}</p>`
-    : "";
-  const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#15181D">${corpoHtml}${botao}</div>`;
+  let html: string;
+  if (opts.html) {
+    // Corpo já pronto (relatórios): usa-se tal e qual.
+    html = opts.html;
+  } else {
+    // HTML simples: o texto com quebras de linha + o link como botão dourado.
+    const corpoHtml = escaparHtml(opts.texto).replace(/\n/g, "<br>");
+    const botao = opts.link
+      ? `<p style="margin:24px 0"><a href="${opts.link}" style="background:#E8A13C;color:#15181D;font-weight:700;text-decoration:none;padding:12px 22px;border-radius:999px;display:inline-block">Abrir</a></p><p style="font-size:12px;color:#888">Ou copia: ${escaparHtml(opts.link)}</p>`
+      : "";
+    html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.6;color:#15181D">${corpoHtml}${botao}</div>`;
+  }
+  const ccArr = opts.cc ? (Array.isArray(opts.cc) ? opts.cc : [opts.cc]).filter(Boolean) : [];
 
   try {
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { authorization: `Bearer ${chave}`, "content-type": "application/json" },
       body: JSON.stringify({
-        from: REMETENTE,
+        from: opts.remetente || REMETENTE,
         to: [opts.para],
+        ...(ccArr.length ? { cc: ccArr } : {}),
         subject: opts.assunto,
         text: opts.link ? `${opts.texto}\n\n${opts.link}` : opts.texto,
         html,

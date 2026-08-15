@@ -7,6 +7,7 @@ import { idiomaDe } from "@/lib/dominio/intake";
 import { AnunciosDoMes } from "@/components/ads/AnunciosDoMes";
 import { lerResultados } from "@/lib/metricas/ler";
 import { ResultadosMes } from "@/components/metricas/ResultadosMes";
+import { ReacoesPosts } from "./ReacoesPosts";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -68,6 +69,18 @@ export default async function RelatorioMensalPublico({
 
   const resultados = await lerResultados(supabase, relatorio.cliente_id);
 
+  // Fase 2 · reações do cliente às publicações do mês (o que quer ver mais/menos).
+  const posts = Array.isArray(relatorio.posts) ? relatorio.posts : [];
+  const reacoesIniciais: Record<string, "mais" | "menos" | "favorito"> = {};
+  if (posts.length) {
+    const { data: reacs } = await supabase
+      .from("relatorio_post_reacoes")
+      .select("post_url, reacao")
+      .eq("relatorio_id", relatorio.id)
+      .eq("autor", "cliente");
+    for (const r of reacs ?? []) reacoesIniciais[r.post_url as string] = r.reacao as "mais" | "menos" | "favorito";
+  }
+
   return (
     <main className="mx-auto max-w-3xl px-5 py-10">
       <header className="rounded-2xl bg-ink px-8 py-9 text-cream">
@@ -96,6 +109,8 @@ export default async function RelatorioMensalPublico({
           <ResultadosMes d={resultados} />
         </div>
       ) : null}
+
+      <ReacoesPosts posts={posts} inicial={reacoesIniciais} token={token} idioma={idioma} />
 
       <AnunciosDoMes contaId={contaAds} mesISO={relatorio.mes} />
 

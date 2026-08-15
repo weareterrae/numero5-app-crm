@@ -53,6 +53,25 @@ export default async function RelatorioPage({
   const { data: idiomaRow } = await supabase.from("clientes").select("idioma").eq("id", id).maybeSingle();
   const idiomaCliente = idiomaRow?.idioma === "en" ? "en" : "pt";
 
+  // O que o cliente marcou nas publicações (Fase 2).
+  const { data: reacoes } = await supabase
+    .from("relatorio_post_reacoes")
+    .select("post_url, reacao, nota")
+    .eq("relatorio_id", relatorioId)
+    .eq("autor", "cliente");
+  const postsRel = (Array.isArray(relatorio.posts) ? relatorio.posts : []) as Array<{
+    url?: string;
+    titulo?: string;
+    formato?: string;
+  }>;
+  const tituloDe = (url: string) => postsRel.find((p) => p.url === url)?.titulo ?? url;
+  const grupos = { favorito: [] as string[], mais: [] as string[], menos: [] as string[] };
+  for (const r of reacoes ?? []) {
+    const g = grupos[r.reacao as "favorito" | "mais" | "menos"];
+    if (g) g.push(tituloDe(r.post_url));
+  }
+  const temReacoes = (reacoes?.length ?? 0) > 0;
+
   // Brief que uso no Claude Code para produzir o relatório.
   const p = prop?.escopo ? normalizarEscopo(prop.escopo).producao : null;
   const contratado = p
@@ -163,6 +182,42 @@ export default async function RelatorioPage({
             className="prose-plano overflow-x-auto rounded-lg border border-line p-4"
             dangerouslySetInnerHTML={{ __html: relatorio.conteudo_html }}
           />
+        </section>
+      )}
+
+      {/* O que o cliente marcou nas publicações */}
+      {temReacoes && (
+        <section className="rounded-xl border border-line bg-white p-5">
+          <h2 className="mb-1 font-display text-lg font-extrabold">O que o cliente marcou</h2>
+          <p className="mb-3 text-xs text-soft">
+            Usa isto para o plano do próximo mês — o que ele quer ver mais, menos, ou adorou.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {(
+              [
+                ["favorito", "⭐ Favoritos", "text-gold-dark"],
+                ["mais", "👍 Quer mais", "text-cobalt"],
+                ["menos", "👎 Quer menos", "text-bad"],
+              ] as const
+            ).map(([chave, rotulo, cor]) => (
+              <div key={chave} className="rounded-lg border border-line p-3">
+                <p className={`text-xs font-bold ${cor}`}>
+                  {rotulo} ({grupos[chave].length})
+                </p>
+                {grupos[chave].length ? (
+                  <ul className="mt-2 space-y-1">
+                    {grupos[chave].map((titulo, i) => (
+                      <li key={i} className="text-sm text-ink">
+                        {titulo}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-xs text-soft">—</p>
+                )}
+              </div>
+            ))}
+          </div>
         </section>
       )}
 
