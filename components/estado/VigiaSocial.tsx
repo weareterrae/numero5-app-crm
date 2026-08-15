@@ -100,8 +100,8 @@ export function VigiaSocial() {
           </ul>
           <p className="text-[11px] text-soft">
             {d.profundidade
-              ? "Profundidade ligada: a função responde, o cérebro (prompt) está acessível, e incluímos as pendentes presas (+2h) e os erros da pending_replies."
-              : "Só liveness + cérebro. Para ligar a profundidade (pendentes/erros por marca), define SUPABASE_MGMT_TOKEN no Netlify."}
+              ? "Profundidade ligada: liveness + cérebro (prompt) + as respostas recentes por enviar (últimas 24h) e os erros recentes (24h) da pending_replies. Amarelo a partir de 5 por enviar; vermelho só com erros recentes ou bot em baixo."
+              : "Só liveness + cérebro. Para ligar a profundidade (por enviar/erros por marca), define SUPABASE_MGMT_TOKEN no Netlify."}
           </p>
         </>
       )}

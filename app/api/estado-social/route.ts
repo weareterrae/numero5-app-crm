@@ -3,10 +3,11 @@ import { criarClienteServidor } from "@/lib/supabase/server";
 
 // Vigia dos bots sociais (FB/IG). Dois níveis de sinal:
 //  v1 (sem credenciais): liveness (GET ao endpoint) + cérebro (GET ao PROMPT_URL).
-//  v2 (com SUPABASE_MGMT_TOKEN no ambiente): pendentes PRESAS por idade e ERROS na
-//     tabela public.pending_replies de cada projeto, via Management API do Supabase
-//     (um só token cobre todos os projetos da conta). Apanha o bot que responde ao
-//     health check mas parou de responder de facto (o ponto cego dos emails falhados).
+//  v2 (com SUPABASE_MGMT_TOKEN no ambiente): respostas RECENTES por enviar (chegaram
+//     nas últimas 24h e ficaram +2h) e ERROS das últimas 24h, na public.pending_replies
+//     de cada projeto, via Management API do Supabase (um só token cobre a conta toda).
+//     Janela recente de propósito: somar o histórico dava falsos alarmes (erros antigos,
+//     pendentes de semanas). Apanha o bot que responde ao health check mas parou de facto.
 // Gated pela sessão do operador.
 export const dynamic = "force-dynamic";
 
@@ -48,9 +49,13 @@ async function profundidade(ref: string, token: string, timeoutMs = 9000): Promi
       method: "POST",
       headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
       body: JSON.stringify({
+        // Janela RECENTE (não o histórico todo): respostas que chegaram nas últimas
+        // 24h e ficaram +2h por enviar, e erros das últimas 24h. A última enviada
+        // prova que o caminho de envio funciona. (Somar o histórico dava falsos alarmes.)
         query:
-          "select count(*) filter (where status='pending' and created_at < now() - interval '2 hours') as presas, " +
-          "count(*) filter (where status='error') as erros, max(created_at) as ultima from public.pending_replies",
+          "select count(*) filter (where status='pending' and created_at between now() - interval '24 hours' and now() - interval '2 hours') as presas, " +
+          "count(*) filter (where status='error' and created_at > now() - interval '24 hours') as erros, " +
+          "max(created_at) filter (where status='sent') as ultima from public.pending_replies",
       }),
       signal: ctrl.signal,
     });
@@ -97,23 +102,25 @@ export async function GET() {
 
       const estado: "verde" | "amarelo" | "vermelho" = !vivo
         ? "vermelho"
-        : presas > 0 || erros > 0
+        : erros > 0
           ? "vermelho"
-          : cerebro === false
+          : presas >= 5
             ? "amarelo"
-            : "verde";
+            : cerebro === false
+              ? "amarelo"
+              : "verde";
 
       const detalhe = !vivo
         ? live
           ? `a função respondeu ${live.status}`
           : "sem resposta / timeout"
-        : presas > 0 || erros > 0
-          ? [presas > 0 ? `${presas} pendente(s) há +2h` : "", erros > 0 ? `${erros} com erro` : ""]
-              .filter(Boolean)
-              .join(" · ")
-          : cerebro === false
-            ? "cérebro (prompt) inacessível"
-            : "a responder";
+        : erros > 0
+          ? `${erros} erro(s) nas últimas 24h`
+          : presas >= 5
+            ? `${presas} por enviar (últimas 24h)`
+            : cerebro === false
+              ? "cérebro (prompt) inacessível"
+              : "a responder";
 
       return { marca: b.marca, estado, vivo, cerebro, detalhe, tipo: b.tipo, profundo: !!deep };
     }),
