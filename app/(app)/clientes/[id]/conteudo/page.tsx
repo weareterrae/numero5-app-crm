@@ -4,6 +4,7 @@ import { criarClienteServidor } from "@/lib/supabase/server";
 import { deslocarMes, mesISO, mesLegivel } from "@/lib/dominio/producao";
 import { CANAIS, canaisAtivos, normalizarEscopo } from "@/lib/dominio/orcamento";
 import { OBJETIVOS } from "@/lib/dominio/diagnostico/recomendacoes";
+import { destilarInsights, linhasBriefInsights, type InsightsMes } from "@/lib/dominio/insights";
 import { CopiarPeca } from "@/components/conteudo/CopiarPeca";
 import { criarPlano } from "@/app/(app)/clientes/[id]/planos/acoes";
 
@@ -23,6 +24,7 @@ function montarBrief(d: {
   canais: string[];
   moderacao: boolean;
   verbaAnuncios: number;
+  insightsLinhas: string[];
 }): string {
   const L: string[] = [];
   L.push(`BRIEF DE PRODUÇÃO — ${d.marca}`);
@@ -52,6 +54,10 @@ function montarBrief(d: {
     if (d.verbaAnuncios > 0) L.push(`- Verba de anúncios do cliente: ${d.verbaAnuncios}€/mês`);
   } else {
     L.push("- [sem proposta aceite — volume a combinar com o Sandro]");
+  }
+  if (d.insightsLinhas.length) {
+    L.push("");
+    d.insightsLinhas.forEach((l) => L.push(l));
   }
   L.push("");
   L.push("O QUE FAZER (Claude Code)");
@@ -125,6 +131,28 @@ export default async function BriefPage({
       })
     : [];
 
+  // Fecha o ciclo: puxa o relatório do mês anterior e destila o que resultou
+  // (temas que renderam + reações do cliente) para orientar este plano.
+  const mesPassado = deslocarMes(mes, -1);
+  const { data: relPassado } = await supabase
+    .from("relatorios")
+    .select("id, posts")
+    .eq("cliente_id", id)
+    .eq("mes", mesPassado)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  let insights: InsightsMes | null = null;
+  if (relPassado?.posts) {
+    const { data: reacoes } = await supabase
+      .from("relatorio_post_reacoes")
+      .select("post_url, reacao")
+      .eq("relatorio_id", relPassado.id)
+      .eq("autor", "cliente");
+    insights = destilarInsights(mesPassado, relPassado.posts, reacoes ?? []);
+  }
+  const insightsLinhas = linhasBriefInsights(insights, mesLegivel(mesPassado));
+
   const brief = montarBrief({
     marca: cliente.nome_marca,
     setor: cliente.setor,
@@ -136,6 +164,7 @@ export default async function BriefPage({
     canais,
     moderacao: !!escopo?.extras?.moderacao,
     verbaAnuncios: escopo?.verba_anuncios ?? 0,
+    insightsLinhas,
   });
 
   return (
@@ -182,6 +211,96 @@ export default async function BriefPage({
           pronto — depois volta à app como plano para o cliente aprovar.
         </p>
       </section>
+
+      {/* O que resultou no mês passado — fecha o ciclo relatório → plano */}
+      {insights && (
+        <section className="rounded-xl border border-line bg-white p-5">
+          <p className="rotulo !text-gold-dark">do relatório de {mesLegivel(mesPassado)}</p>
+          <h2 className="font-display text-lg font-extrabold">O que resultou no mês passado</h2>
+          <p className="mt-1 text-sm text-grey">
+            {insights.nPosts} publicações · {insights.alcanceTotal.toLocaleString("pt-PT")} de alcance
+            total. Já vai dentro do brief — dobra o que rendeu.
+          </p>
+
+          {insights.temas.length > 0 && (
+            <div className="mt-4">
+              <p className="mb-2 text-xs font-bold text-grey">
+                Temas que mais renderam (interações por publicação)
+              </p>
+              <div className="space-y-2">
+                {insights.temas.slice(0, 4).map((t, i) => {
+                  const max = insights.temas[0].mediaInter || 1;
+                  const pct = Math.max(6, Math.round((t.mediaInter / max) * 100));
+                  return (
+                    <div key={t.tema}>
+                      <div className="flex items-baseline justify-between gap-3 text-sm">
+                        <span className="font-bold text-ink">
+                          {i === 0 && <span className="mr-1 text-gold-dark">★</span>}
+                          {t.tema}
+                          <span className="ml-1 text-xs font-normal text-soft">
+                            · {t.nPosts} {t.nPosts === 1 ? "post" : "posts"}
+                          </span>
+                        </span>
+                        <span className="font-bold text-cobalt">
+                          {t.mediaInter.toFixed(1).replace(".", ",")}
+                        </span>
+                      </div>
+                      <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-line/60">
+                        <div
+                          className={`h-full rounded-full ${i === 0 ? "bg-gold" : "bg-cobalt/40"}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {insights.melhorPost && (
+            <div className="mt-4 rounded-lg border border-gold/40 bg-gold/[0.06] p-3">
+              <p className="text-xs font-bold text-gold-dark">🏆 Publicação campeã</p>
+              <p className="mt-0.5 text-sm font-bold text-ink">{insights.melhorPost.titulo}</p>
+              <p className="text-xs text-grey">
+                {insights.melhorPost.tema} · {insights.melhorPost.reach.toLocaleString("pt-PT")} de
+                alcance
+              </p>
+            </div>
+          )}
+
+          {(insights.reacoes.favorito.length > 0 ||
+            insights.reacoes.mais.length > 0 ||
+            insights.reacoes.menos.length > 0) && (
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              {(
+                [
+                  ["favorito", "⭐ Adorou", insights.reacoes.favorito, "text-gold-dark"],
+                  ["mais", "👍 Quer mais", insights.reacoes.mais, "text-cobalt"],
+                  ["menos", "👎 Quer menos", insights.reacoes.menos, "text-bad"],
+                ] as const
+              ).map(([chave, rotulo, itens, cor]) => (
+                <div key={chave} className="rounded-lg border border-line p-3">
+                  <p className={`text-xs font-bold ${cor}`}>
+                    {rotulo} ({itens.length})
+                  </p>
+                  {itens.length ? (
+                    <ul className="mt-2 space-y-1">
+                      {itens.map((titulo, i) => (
+                        <li key={i} className="text-sm text-ink">
+                          {titulo}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-xs text-soft">—</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* O brief */}
       <section className="rounded-xl border border-line bg-white p-5">
