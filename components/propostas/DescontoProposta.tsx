@@ -43,14 +43,31 @@ export function DescontoProposta({
         <div className="mb-4 space-y-2">
           {descontos.map((d) => {
             const mes = d.alvo === "avenca" ? "/mês" : "";
+            // Blindagem: o valor_normal é fotografado quando o desconto é criado.
+            // Se o âmbito mudar depois, o desconto fica preso num valor velho — avisa.
+            const atual = d.alvo === "setup" ? setupValor : avencaValor;
+            const desatualizado =
+              atual != null && atual > 0 && Math.round(atual) !== Math.round(d.valor_normal);
             return (
-              <div key={d.id} className="rounded-lg border-2 border-gold/40 bg-gold/5 p-3 text-sm">
+              <div
+                key={d.id}
+                className={`rounded-lg border-2 bg-gold/5 p-3 text-sm ${
+                  desatualizado ? "border-bad/50" : "border-gold/40"
+                }`}
+              >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <b>{d.alvo === "setup" ? "Arranque" : "Avença"}</b>
                   <form action={apagarDesconto.bind(null, d.id)}>
                     <button className="text-xs text-bad">remover</button>
                   </form>
                 </div>
+                {desatualizado && (
+                  <p className="mt-1.5 rounded-md border border-bad/30 bg-bad/5 px-2 py-1.5 text-xs text-bad">
+                    ⚠ Desatualizado: foi criado com valor normal de <b>{euros(d.valor_normal)}{mes}</b>,
+                    mas {d.alvo === "setup" ? "o arranque" : "a avença"} agora é{" "}
+                    <b>{euros(atual ?? 0)}{mes}</b>. Remove e volta a criar para os valores baterem certo.
+                  </p>
+                )}
                 <div className="mt-1 grid gap-1 sm:grid-cols-2">
                   <p>
                     Valor normal: <b>{euros(d.valor_normal)}{mes}</b>

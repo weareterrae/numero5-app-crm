@@ -204,6 +204,11 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
   // O pedido do cliente (para o duplo investimento).
   const escopoPedido = normalizarEscopo(p.escopo_pedido ?? {});
   const orcPedido = calcular(escopoPedido, (precos ?? []) as Preco[]);
+  // O NOSSO orçamento, calculado AO VIVO a partir do escopo atual — não o valor
+  // guardado (`p.avenca_valor`/`p.setup_valor`), que pode estar a 0 até se gravar
+  // o configurador. É este que o cartão de desconto tem de usar, senão o desconto
+  // "fotografa" um valor errado (ex.: 0 €).
+  const orcNosso = calcular(normalizarEscopo(p.escopo ?? {}), (precos ?? []) as Preco[]);
   const pedidoTemConteudo =
     descreverEscopo(escopoPedido).length > 0 || orcPedido.totalMensal > 0 || orcPedido.totalSetup > 0;
   const faixaPedido = rotuloFaixa(
@@ -333,8 +338,8 @@ export default async function PropostaPage({ params }: { params: Promise<{ id: s
         <DescontoProposta
           clienteId={cliente.id}
           propostaId={p.id}
-          avencaValor={p.avenca_valor}
-          setupValor={p.setup_valor}
+          avencaValor={orcNosso.totalMensal}
+          setupValor={orcNosso.totalSetup}
           descontos={descontos}
         />
       )}
