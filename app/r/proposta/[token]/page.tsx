@@ -281,14 +281,25 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
   const idioma = idiomaDe(idiomaRow?.idioma);
   const t = TX[idioma];
 
-  // Desconto ativo na avença (tolerante: null se a migração 0023 não correu).
-  const { data: descAvenca } = await supabase
+  // Descontos ativos (avença e/ou arranque; tolerante: [] se a migração 0023 não correu).
+  const { data: descontosAtivos } = await supabase
     .from("descontos")
-    .select("valor_normal, tipo, valor_desconto, preco_durante, preco_apos, duracao_meses")
+    .select("alvo, valor_normal, tipo, valor_desconto, preco_durante, preco_apos, duracao_meses")
     .eq("cliente_id", p.cliente_id)
-    .eq("alvo", "avenca")
     .eq("estado", "ativo")
-    .maybeSingle();
+    .then((r) => r, () => ({ data: [] }));
+  // Um desconto só é de confiar se o valor normal ainda bater certo com o preço
+  // atual — senão o cliente via um número que já não é o que está a ser cobrado.
+  const descAvencaRaw = (descontosAtivos ?? []).find((d) => d.alvo === "avenca") ?? null;
+  const descSetupRaw = (descontosAtivos ?? []).find((d) => d.alvo === "setup") ?? null;
+  const descAvenca =
+    descAvencaRaw && Math.round(Number(descAvencaRaw.valor_normal)) === Math.round(Number(p.avenca_valor) || 0)
+      ? descAvencaRaw
+      : null;
+  const descSetup =
+    descSetupRaw && Math.round(Number(descSetupRaw.valor_normal)) === Math.round(Number(p.setup_valor) || 0)
+      ? descSetupRaw
+      : null;
 
   const um = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
   const cliente = um(p.clientes) as { nome_marca: string; setor: string | null } | null;
@@ -746,7 +757,16 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
                       <p className="text-[15px]">{t.arranque}</p>
                       <p className="text-xs text-soft">{p.setup_nota || t.arranqueNota}</p>
                     </div>
-                    <span className="font-display text-2xl font-extrabold text-gold">{euros(p.setup_valor)}</span>
+                    {descSetup ? (
+                      <span className="text-right">
+                        <span className="block text-xs text-soft line-through">{euros(descSetup.valor_normal)}</span>
+                        <span className="font-display text-2xl font-extrabold text-gold">
+                          {euros(descSetup.preco_durante ?? p.setup_valor)}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="font-display text-2xl font-extrabold text-gold">{euros(p.setup_valor)}</span>
+                    )}
                   </div>
                 ) : null}
                 {p.avenca_valor ? (
@@ -755,9 +775,44 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
                       <p className="text-[15px]">{t.acompanhamento}</p>
                       <p className="text-xs text-soft">{p.avenca_nota || t.motorNota}</p>
                     </div>
-                    <span className="font-display text-2xl font-extrabold text-gold">{euros(p.avenca_valor)}</span>
+                    {descAvenca ? (
+                      <span className="text-right">
+                        <span className="block text-xs text-soft line-through">
+                          {euros(descAvenca.valor_normal)}
+                          {t.mes}
+                        </span>
+                        <span className="font-display text-2xl font-extrabold text-gold">
+                          {euros(descAvenca.preco_durante ?? p.avenca_valor)}
+                          <span className="text-base font-normal">{t.mes}</span>
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="font-display text-2xl font-extrabold text-gold">
+                        {euros(p.avenca_valor)}
+                      </span>
+                    )}
                   </div>
                 ) : null}
+                {(descAvenca || descSetup) && (
+                  <div className="mt-3 rounded-lg bg-gold/15 px-3 py-2 text-xs">
+                    <p className="font-bold text-gold">
+                      {t.descCondicao}
+                      {(descAvenca?.duracao_meses ?? descSetup?.duracao_meses)
+                        ? ` · ${descAvenca?.duracao_meses ?? descSetup?.duracao_meses} ${t.meses}`
+                        : ""}
+                      {" — "}
+                      {(descAvenca ?? descSetup)!.tipo === "percentagem"
+                        ? `−${(descAvenca ?? descSetup)!.valor_desconto}%`
+                        : `−${euros((descAvenca ?? descSetup)!.valor_desconto)}`}
+                    </p>
+                    {descAvenca?.preco_apos != null && (
+                      <p className="mt-1 text-soft">
+                        {t.descDepois}: {euros(descAvenca.preco_apos)}
+                        {t.mes}
+                      </p>
+                    )}
+                  </div>
+                )}
                 <p className="mt-3 text-xs text-soft">{t.fechaContigo}</p>
               </div>
             )}
@@ -768,42 +823,6 @@ export default async function PropostaPublica({ params }: { params: Promise<{ to
                 <p className="mt-2 text-xs text-soft">💱 {nota}</p>
               ) : null;
             })()}
-            {descAvenca && descAvenca.preco_durante != null && (
-              <div className="mt-3 rounded-xl border border-gold/40 bg-gold/5 p-4 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-grey">{t.descNormal}</span>
-                  <span>
-                    {euros(descAvenca.valor_normal)}
-                    {t.mes}
-                  </span>
-                </div>
-                <div className="flex justify-between text-gold-dark">
-                  <span>
-                    {t.descCondicao}
-                    {descAvenca.duracao_meses ? ` (${descAvenca.duracao_meses} ${t.meses})` : ""}
-                  </span>
-                  <span>
-                    {descAvenca.tipo === "percentagem"
-                      ? `−${descAvenca.valor_desconto}%`
-                      : `−${euros(descAvenca.valor_desconto)}`}
-                  </span>
-                </div>
-                <div className="mt-1.5 flex justify-between border-t border-gold/20 pt-1.5 font-bold">
-                  <span>{t.descInicial}</span>
-                  <b className="text-gold-dark">
-                    {euros(descAvenca.preco_durante)}
-                    {t.mes}
-                  </b>
-                </div>
-                <div className="flex justify-between text-soft">
-                  <span>{t.descDepois}</span>
-                  <span>
-                    {euros(descAvenca.preco_apos ?? descAvenca.valor_normal)}
-                    {t.mes}
-                  </span>
-                </div>
-              </div>
-            )}
             <p className="mt-2 text-xs font-bold text-grey">{t.iva}</p>
           </section>
         )}
