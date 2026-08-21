@@ -19,9 +19,14 @@ const TTL_MS = 60_000;
 
 type Cache<T> = { at: number; value: T } | null;
 
-/** Cliente Supabase mínimo de que o registry precisa (portável). */
+/**
+ * Porta de acesso a dados. Deliberadamente estreita: o core só depende
+ * destes dois métodos, não do tipo completo do supabase-js. É o que
+ * permite trocar de cliente (ou de base de dados) sem tocar na lógica.
+ */
 export type DbClient = {
   from: (table: string) => any;
+  rpc: (fn: string, args?: Record<string, unknown>) => any;
 };
 
 export class Registry {

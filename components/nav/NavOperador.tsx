@@ -39,6 +39,13 @@ const NAV: Entrada[] = [
       { href: "/definicoes/precos", label: "Preços" },
     ],
   },
+  {
+    label: "IA",
+    items: [
+      { href: "/ai-operations", label: "AI Operations" },
+      { href: "/estado", label: "Estado dos Sistemas" },
+    ],
+  },
 ];
 
 const ehGrupo = (e: Entrada): e is Grupo => "items" in e;
