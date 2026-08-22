@@ -86,8 +86,43 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ erro: "nao autorizado" }), { status: 401 });
   }
 
-  const { data: perguntas } = await db
+  // QUANTAS POR CORRIDA — o teto dos 150s manda, não a nossa vontade.
+  //
+  // Cada pergunta são duas chamadas a modelos: uma para responder, outra
+  // para julgar. Com 21 perguntas são 42 chamadas, e o Supabase corta a
+  // ligação aos 150s de inatividade. A corrida das 10:43 tinha 8
+  // perguntas e só deixou 6 avaliações — já vinha a ser cortada a meio, e
+  // nada o dizia: víamos as notas que chegaram e não as que faltavam.
+  //
+  // Em vez de tentar caber tudo, faz-se por lotes e começa-se pelas MAIS
+  // ANTIGAS. Assim uma corrida diária cobre a bateria toda em poucos
+  // dias, sozinha, e nenhuma pergunta fica eternamente por avaliar
+  // porque calhou estar no fim da lista.
+  const url = new URL(req.url);
+  const quantas = Math.max(1, Math.min(Number(url.searchParams.get("quantas")) || 6, 40));
+
+  // Quando cada pergunta foi avaliada pela última vez. Sem avaliação
+  // nenhuma vai à frente de todas — é o caso das que acabaram de nascer.
+  const { data: ultimas } = await db
+    .from("ai_avaliacoes").select("pergunta_id, correu_em")
+    .order("correu_em", { ascending: false });
+  const visto = new Map<string, string>();
+  for (const a of ultimas ?? []) {
+    if (!visto.has(a.pergunta_id)) visto.set(a.pergunta_id, a.correu_em);
+  }
+
+  const { data: todas } = await db
     .from("ai_perguntas_referencia").select("*").eq("ativo", true);
+
+  const perguntas = (todas ?? [])
+    .sort((a, b) => {
+      const va = visto.get(a.id) ?? "";   // nunca avaliada ordena primeiro
+      const vb = visto.get(b.id) ?? "";
+      // Em empate, o peso decide: uma regra dura vale mais do que uma
+      // afinação de tom.
+      return va.localeCompare(vb) || (b.peso ?? 0) - (a.peso ?? 0);
+    })
+    .slice(0, quantas);
 
   // As perguntas sao independentes: correm em PARALELO, em lotes.
   //
@@ -236,6 +271,12 @@ Deno.serve(async (req) => {
   const notas = saida.filter((x: any) => typeof x.nota === "number").map((x: any) => x.nota);
   return Response.json({
     avaliadas: saida.length,
+    // Quantas ficaram por avaliar nesta corrida. Sem este número, ver seis
+    // notas boas dava a sensação de estar tudo verificado — e foi
+    // exatamente o que aconteceu às 10:43, com duas perguntas cortadas a
+    // meio sem ninguém saber.
+    por_avaliar: Math.max(0, (todas ?? []).length - perguntas.length),
+    total_ativas: (todas ?? []).length,
     media: notas.length ? Number((notas.reduce((a, b) => a + b, 0) / notas.length).toFixed(2)) : null,
     abaixo_de_3: notas.filter((n) => n < 3).length,
     resultados: saida,
