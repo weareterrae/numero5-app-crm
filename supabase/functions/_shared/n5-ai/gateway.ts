@@ -437,12 +437,27 @@ export class Gateway {
         //
         // Custa uma chamada a mais. Um relatório inventado custa um cliente.
         if (a.jsonMode && a.cadeia.some((c) => c.grounding)) {
-          const pesquisa = await self.investigar({
-            ...a,
-            passos: a.passosInvestigacao,
-            sinal: (passo, total, fontes) =>
-              send({ type: "progress", data: { fase: "pesquisa", passo, total, fontes } }),
-          });
+          // Pulsar DURANTE, não só entre passagens: uma passagem sozinha pode
+          // levar mais de 150s (o modelo principal chega a gastar 78s só para
+          // devolver um 503) e é aos 150s que o Supabase corta a ligação.
+          let ultimo = { passo: 0, total: a.passosInvestigacao ?? 1, fontes: 0 };
+          const pulsar = setInterval(
+            () => send({ type: "progress", data: { fase: "pesquisa", ...ultimo } }),
+            25_000,
+          );
+          let pesquisa;
+          try {
+            pesquisa = await self.investigar({
+              ...a,
+              passos: a.passosInvestigacao,
+              sinal: (passo, total, fontes) => {
+                ultimo = { passo, total, fontes };
+                send({ type: "progress", data: { fase: "pesquisa", passo, total, fontes } });
+              },
+            });
+          } finally {
+            clearInterval(pulsar);
+          }
           if (pesquisa) {
             a.system = pesquisa.system;
             a.mensagens = pesquisa.mensagens;
@@ -512,7 +527,23 @@ export class Gateway {
               // Um relatório não é lido enquanto escorre; é lido no fim. Por
               // isso pede-se inteiro: se falhar, ninguém viu nada e o modelo
               // seguinte pode tentar de verdade.
-              final = await provider.generate(opcoes);
+              //
+              // Enquanto o modelo escreve não sai um byte, e o Supabase corta
+              // ligações inativas às 150 segundos. A escrita de um relatório
+              // passa disso à vontade — ainda mais quando o modelo principal
+              // gasta 78s a devolver um 503 antes de se cair no seguinte. Sem
+              // este sinal, o site recebia uma ligação morta e caía no
+              // caminho antigo, que também estava em 503: o visitante ficava
+              // sem relatório nenhum e nada explicava porquê.
+              const pulsar = setInterval(
+                () => send({ type: "progress", data: { fase: "escrita", passo: 1, total: 1, fontes: fontesUsadas } }),
+                25_000,
+              );
+              try {
+                final = await provider.generate(opcoes);
+              } finally {
+                clearInterval(pulsar);
+              }
               if (final.ok && final.text) {
                 ttft = ttft ?? Date.now() - a.t0;
                 deuAlgo = true;
