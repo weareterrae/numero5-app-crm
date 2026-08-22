@@ -242,7 +242,11 @@ Deno.serve(async (req) => {
         // espera pela tendência: se o assistente falhou o essencial, é agora.
         if ((registo.nota as number) <= 2 && p.peso >= 3) {
           await db.from("ai_incidents").insert({
-            tipo: "MODEL_UNHEALTHY", severidade: p.peso >= 4 ? "crit" : "warn",
+            // QUALITY_LOW, não MODEL_UNHEALTHY: um prompt a falhar um
+            // critério não é um modelo doente. Misturá-los foi o que
+            // tornou a fila ilegível — 29 notas de qualidade a enterrar
+            // 10 avarias a sério, e ninguém a ler nenhuma das duas.
+            tipo: "QUALITY_LOW", severidade: p.peso >= 4 ? "crit" : "warn",
             titulo: `Qualidade: ${p.assistant_key} teve ${registo.nota}/5 em "${p.nome}"`,
             detalhe: { justificacao: registo.justificacao, falhas: registo.falhas },
           });
