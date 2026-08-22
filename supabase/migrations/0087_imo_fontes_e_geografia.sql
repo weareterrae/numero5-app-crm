@@ -215,8 +215,10 @@ begin
        where b.geografia_id = v_geo
          and f.escalao = 1
          and b.eur_m2_mediano is not null
-         and (b.tipo_imovel is null or imo_chave(b.tipo_imovel) = imo_chave(p_tipo))
-         and (b.tipologia is null or imo_chave(b.tipologia) = imo_chave(p_tipologia))
+         -- Vazio = «todos». Um benchmark sem tipologia serve qualquer
+         -- tipologia; um com T3 só serve T3.
+         and (b.tipo_imovel = '' or imo_chave(b.tipo_imovel) = imo_chave(p_tipo))
+         and (b.tipologia = '' or imo_chave(b.tipologia) = imo_chave(p_tipologia))
          and coalesce(b.n_transacoes, 0) >= p_min_transacoes
        -- entre iguais: mais transações primeiro, depois mais recente
        order by b.n_transacoes desc nulls last, b.periodo_fim desc nulls last

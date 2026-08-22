@@ -50,9 +50,16 @@ create table if not exists imo_geografias (
   -- aprender. `manual` marca-o, para depois se saber o que rever.
   manual        boolean not null default false,
   ativo         boolean not null default true,
-  created_at    timestamptz not null default now(),
-  unique (pai_id, nivel, nome_chave)
+  created_at    timestamptz not null default now()
 );
+-- Unicidade por ÍNDICE, não por restrição, e com o pai normalizado.
+--
+-- Em Postgres, NULL nunca é igual a NULL: numa restrição `unique (pai_id,
+-- nivel, nome_chave)`, duas raízes com pai_id nulo seriam ambas aceites —
+-- a unicidade não se aplicaria exatamente onde é mais precisa. Trocar o
+-- nulo por um UUID fixo resolve, e só um índice de expressão o permite.
+create unique index if not exists imo_geografias_unica
+  on imo_geografias (coalesce(pai_id, '00000000-0000-0000-0000-000000000000'::uuid), nivel, nome_chave);
 create index if not exists imo_geografias_chave on imo_geografias (nivel, nome_chave);
 create index if not exists imo_geografias_pai on imo_geografias (pai_id);
 
@@ -145,8 +152,12 @@ create table if not exists imo_benchmarks (
   fonte_id       text not null references imo_fontes(id) on delete restrict,
   importacao_id  uuid references imo_importacoes(id) on delete set null,
   geografia_id   uuid not null references imo_geografias(id) on delete restrict,
-  tipo_imovel    text,                      -- 'apartamento' | 'moradia' | null = todos
-  tipologia      text,                      -- 'T3' | null = todas
+  -- Vazio significa «todos», e é vazio em vez de NULO de propósito: numa
+  -- restrição de unicidade, NULL nunca é igual a NULL, por isso duas
+  -- linhas «todas as tipologias» da mesma zona e período seriam ambas
+  -- aceites — e o benchmark daquela zona passava a ter duas verdades.
+  tipo_imovel    text not null default '',  -- 'apartamento' | 'moradia' | '' = todos
+  tipologia      text not null default '',  -- 'T3' | '' = todas
   periodo        text not null,             -- '2026-Q2'
   periodo_fim    date,                      -- para ordenar e medir frescura
 
@@ -163,7 +174,7 @@ create table if not exists imo_benchmarks (
   dispersao      numeric(6,4),
   extra          jsonb not null default '{}'::jsonb,
   created_at     timestamptz not null default now(),
-  unique (fonte_id, geografia_id, coalesce(tipo_imovel,''), coalesce(tipologia,''), periodo)
+  unique (fonte_id, geografia_id, tipo_imovel, tipologia, periodo)
 );
 create index if not exists imo_benchmarks_procura
   on imo_benchmarks (geografia_id, tipo_imovel, tipologia, periodo_fim desc);
@@ -388,8 +399,11 @@ begin
     'imo_amostras','imo_amostra_itens','imo_avaliacoes','imo_backtests',
     'imo_problemas_dados'
   ] loop
+    -- O nome da política tem de ser UM identificador. `%I_staff` produzia
+    -- `"imo_geografias"_staff` — as aspas fecham antes do sufixo e o
+    -- comando não é sequer válido. Compõe-se o nome primeiro.
     execute format('alter table %I enable row level security', t);
-    execute format('drop policy if exists %I_staff on %I', t, t);
-    execute format('create policy %I_staff on %I for select using (n5_is_staff())', t, t);
+    execute format('drop policy if exists %I on %I', t || '_staff', t);
+    execute format('create policy %I on %I for select using (n5_is_staff())', t || '_staff', t);
   end loop;
 end $$;

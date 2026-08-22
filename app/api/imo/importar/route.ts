@@ -183,8 +183,9 @@ export async function POST(req: NextRequest) {
       fonte_id: fonteId,
       importacao_id: imp.id,
       geografia_id: geoId,
-      tipo_imovel: n.tipo_imovel,
-      tipologia: n.tipologia,
+      // Vazio = todos. Nunca nulo: a unicidade do benchmark depende disso.
+      tipo_imovel: n.tipo_imovel ?? "",
+      tipologia: n.tipologia ?? "",
       periodo: n.periodo,
       periodo_fim: n.periodo_fim,
       eur_m2_mediano: n.eur_m2_mediano,

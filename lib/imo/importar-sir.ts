@@ -233,8 +233,11 @@ export function validar(
       bruto,
       normalizado: {
         concelho, zona,
-        tipo_imovel: String(le(l, "tipo_imovel") ?? "").trim() || null,
-        tipologia: String(le(l, "tipologia") ?? "").trim() || null,
+        // Vazio, nunca nulo: e o que permite haver uma so linha por
+        // zona+tipologia+periodo. Com nulos, "todas as tipologias"
+        // duplicava-se em silencio.
+        tipo_imovel: String(le(l, "tipo_imovel") ?? "").trim(),
+        tipologia: String(le(l, "tipologia") ?? "").trim(),
         periodo: per.periodo, periodo_fim: per.fim,
         eur_m2_mediano: numeroPT(le(l, "eur_m2_mediano")),
         eur_m2_medio: numeroPT(le(l, "eur_m2_medio")),
