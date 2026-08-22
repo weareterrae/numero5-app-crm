@@ -113,6 +113,19 @@ export type GenerateOptions = {
   messages: N5Message[];
   maxOutputTokens?: number;
   temperature?: number;
+  /**
+   * Pesquisa web do lado do fornecedor (Gemini: google_search).
+   * Os diagnósticos da Terrae dependem disto: o prompt deles proíbe citar
+   * números de mercado que não venham da pesquisa desta chamada.
+   */
+  grounding?: boolean;
+  /**
+   * Folga somada ao teto de saída. Existe porque `thinkingBudget: 0` não
+   * é honrado por todos os modelos — alguns pensam à mesma, SEM dar erro,
+   * e o raciocínio come o orçamento até truncar a resposta a meio.
+   * maxOutputTokens é um TETO, não um gasto: dar folga é seguro.
+   */
+  tokenHeadroom?: number;
   /** Corta ligações penduradas. Sempre definido pelo chamador. */
   timeoutMs: number;
   signal?: AbortSignal;
@@ -136,6 +149,13 @@ export type ProviderResult = {
   kind: "ok" | "transient" | "permanent";
   errorCode?: string;
   errorMessage?: string;
+  /**
+   * O modelo PESQUISOU mesmo? Ter a ferramenta disponível não garante que
+   * a use — ele decide. Uma resposta de diagnóstico dada de memória parece
+   * boa e não tem fontes; sem isto, não havia como distinguir.
+   */
+  groundingUsed?: boolean;
+  groundingSources?: number;
 };
 
 /** Um pedaço do stream, já normalizado. */

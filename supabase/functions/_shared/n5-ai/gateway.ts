@@ -26,6 +26,11 @@ import { estimateCost } from "./providers/shared.ts";
  *  isso que provocou os 504 de 21/08/2026. */
 const TIMEOUT_TENTATIVA_MS = 12_000;
 
+/** Pedidos com pesquisa web (diagnósticos) demoram muito mais: a Google
+ *  vai à net, lê fontes e só depois escreve. As Edge Functions dão 400s
+ *  de wall-clock em plano pago, por isso há folga de sobra. */
+const TIMEOUT_GROUNDING_MS = 90_000;
+
 export type GatewayDeps = {
   db: DbClient;
   getEnv: (name: string) => string | undefined;
@@ -80,6 +85,26 @@ export class Gateway {
         gateway_ms: Date.now() - t0,
       });
       return this.erroSSE(requestId, "origin_denied", "Origem não autorizada.");
+    }
+
+    // ---- 2b. rollout: é o GATEWAY que decide, não o site.
+    // O site chama sempre; se este pedido não pertence à fatia migrada,
+    // respondemos 'rollout_excluded' e o site serve pelo caminho antigo.
+    // Assim a percentagem vive num só sítio (o registo), muda sem deploy,
+    // e nenhum site precisa de ler a base de dados.
+    if (!assistant.gateway_enabled || assistant.traffic_percentage <= 0) {
+      return this.erroSSE(requestId, "rollout_excluded", "Fora da fatia migrada.");
+    }
+    if (assistant.traffic_percentage < 100) {
+      // Balde estável por sessão/IP: um visitante não salta de caminho a
+      // meio da conversa, e a comparação legacy vs gateway não fica suja.
+      const semente = req.session_id ?? ctx.ip ?? crypto.randomUUID();
+      const salt2 = this.deps.getEnv("N5_AI_IP_SALT") ?? "n5";
+      const h = await hashIp(semente, salt2);
+      const balde = parseInt(h.slice(0, 4), 16) % 100;
+      if (balde >= assistant.traffic_percentage) {
+        return this.erroSSE(requestId, "rollout_excluded", "Fora da fatia migrada.");
+      }
     }
 
     // ---- 3. limites de tráfego (duráveis, partilhados entre instâncias)
@@ -164,9 +189,13 @@ export class Gateway {
         let usage: { input?: number; output?: number; cached?: number } | undefined;
         let motivo = "";
         let fallback = false;
+        let groundingPedido = false;
+        let groundingReal = false;
+        let fontesUsadas = 0;
 
         for (let i = 0; i < a.cadeia.length; i++) {
-          const { model, role, reason } = a.cadeia[i];
+          const { model, role, reason, maxOutputTokens, grounding, temperature, tokenHeadroom } =
+            a.cadeia[i];
           const tTent = Date.now();
           let provider;
           try {
@@ -180,13 +209,19 @@ export class Gateway {
           }
 
           try {
+            // A regra de routing manda sobre o assistente: uma classe de
+            // diagnóstico precisa de mais tokens e de pesquisa do que o
+            // teto genérico do assistente permite.
             const it = provider.stream({
               model: model.provider_model_id,
               system: a.system,
               messages: a.mensagens,
-              maxOutputTokens: a.assistant.max_output_tokens,
-              temperature: Number(a.assistant.temperature),
-              timeoutMs: TIMEOUT_TENTATIVA_MS,
+              maxOutputTokens: maxOutputTokens ?? a.assistant.max_output_tokens,
+              temperature: temperature ?? Number(a.assistant.temperature),
+              grounding,
+              tokenHeadroom,
+              // Pesquisa web e JSON grande demoram mais do que um chat.
+              timeoutMs: grounding ? TIMEOUT_GROUNDING_MS : TIMEOUT_TENTATIVA_MS,
             });
 
             let deuAlgo = false;
@@ -216,6 +251,9 @@ export class Gateway {
 
             if (final.ok && (deuAlgo || final.text)) {
               usado = model;
+              groundingPedido = !!grounding;
+              groundingReal = !!final.groundingUsed;
+              fontesUsadas = final.groundingSources ?? 0;
               motivo = reason;
               fallback = i > 0;
               if (!usage && final.usage) usage = final.usage;
@@ -271,6 +309,7 @@ export class Gateway {
           attempt_chain: tentativas,
           input_tokens: usage?.input, output_tokens: usage?.output, cached_tokens: usage?.cached,
           estimated_cost: custo, ttft_ms: ttft, total_latency_ms: total,
+          grounding_pedido: groundingPedido, grounding_usado: groundingReal, grounding_fontes: fontesUsadas,
           gateway_ms: a.gatewayMs, status: "ok", streamed: true,
         });
         if (custo) self.deps.background(self.budgets.commit(a.assistant.org_id, a.assistant.id, custo));

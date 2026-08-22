@@ -20,18 +20,38 @@ export class GoogleProvider implements AIProvider {
   ) {}
 
   private body(opts: GenerateOptions) {
+    const conteudo = opts.maxOutputTokens ?? 1024;
+    // FOLGA — lição do código da Terrae, com sintomas reais documentados
+    // (respostas cortadas a meio, "…2.98"). `thinkingBudget: 0` dá 400 no
+    // Pro e é IGNORADO em silêncio por alguns flash recentes: pensam à
+    // mesma e o raciocínio consome o orçamento de saída. Como
+    // maxOutputTokens é um TETO e não um gasto, dar folga é seguro e
+    // evita truncar.
+    const folga = opts.tokenHeadroom ?? 6000;
+
+    const generationConfig: Record<string, unknown> = {
+      maxOutputTokens: conteudo + folga,
+      temperature: opts.temperature ?? 0.7,
+    };
+    // Só desligamos o thinking nos flash — no Pro devolve 400. E mesmo
+    // nos flash tratamos isto como pedido, não como garantia.
+    if (/flash/i.test(opts.model)) {
+      generationConfig.thinkingConfig = { thinkingBudget: 0 };
+    }
+
     const body: Record<string, unknown> = {
       contents: opts.messages.map((m) => ({
         // A Gemini não tem role 'system' nos contents; vai em system_instruction.
         role: m.role === "assistant" ? "model" : "user",
         parts: [{ text: m.content }],
       })),
-      generationConfig: {
-        maxOutputTokens: opts.maxOutputTokens ?? 1024,
-        temperature: opts.temperature ?? 0.7,
-      },
+      generationConfig,
     };
     if (opts.system) body.system_instruction = { parts: [{ text: opts.system }] };
+    // Pesquisa web real. Sem isto, um prompt que proíbe citar números não
+    // vindos da pesquisa devolve campos vazios — que é como os
+    // diagnósticos da Terrae deixariam de funcionar.
+    if (opts.grounding) body.tools = [{ google_search: {} }];
     return body;
   }
 
@@ -101,6 +121,8 @@ export class GoogleProvider implements AIProvider {
     const { signal, done } = withTimeout(opts.timeoutMs, opts.signal);
     let usage: TokenUsage | undefined;
     let full = "";
+    let groundingUsado = false;
+    let fontes = 0;
     try {
       // alt=sse devolve Server-Sent Events, igual em forma ao da OpenAI
       const url = `${this.baseUrl}/models/${opts.model}:streamGenerateContent?alt=sse`;
@@ -138,6 +160,15 @@ export class GoogleProvider implements AIProvider {
           if (!payload) continue;
           try {
             const j = JSON.parse(payload);
+            // Ter a ferramenta disponível NÃO garante que o modelo a usou:
+            // ele decide. Um diagnóstico respondido de memória parece bom
+            // e não tem fontes — por isso registamos se houve mesmo
+            // pesquisa, para se poder medir.
+            const gm = j?.candidates?.[0]?.groundingMetadata;
+            if (gm && (gm.groundingChunks?.length || gm.webSearchQueries?.length)) {
+              groundingUsado = true;
+              fontes = gm.groundingChunks?.length ?? fontes;
+            }
             const text = this.extractText(j, false);   // NUNCA aparar um chunk
             if (text) {
               full += text;
@@ -153,7 +184,7 @@ export class GoogleProvider implements AIProvider {
 
       if (usage) yield { type: "usage", usage };
       yield { type: "done", finishReason };
-      return { ok: true, text: full, status: 200, kind: "ok", usage };
+      return { ok: true, text: full, status: 200, kind: "ok", usage, groundingUsed: groundingUsado, groundingSources: fontes };
     } catch (e) {
       return {
         ok: false, text: full, status: 0, kind: "transient",

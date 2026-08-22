@@ -23,6 +23,11 @@ export type RoutedModel = {
   model: ModelRow;
   role: string;
   reason: string;
+  /** Configuração da regra: o que ESTA classe precisa deste modelo. */
+  maxOutputTokens?: number;
+  grounding?: boolean;
+  temperature?: number;
+  tokenHeadroom?: number;
 };
 
 /**
@@ -64,15 +69,23 @@ export class Router {
     const modelos = await this.registry.models();
     const porId = new Map(modelos.map((m) => [m.id, m]));
 
-    let regras: { role: string; model_id: string }[] = [];
+    type Regra = {
+      role: string; model_id: string;
+      max_output_tokens: number | null; grounding: boolean;
+      temperature: number | null; token_headroom: number;
+    };
+    let regras: Regra[] = [];
     if (policyId) {
       const { data } = await this.db
         .from("ai_routing_rules")
-        .select("role, model_id")
+        .select("role, model_id, max_output_tokens, grounding, temperature, token_headroom")
         .eq("policy_id", policyId)
         .eq("request_class", cls);
-      regras = (data ?? []) as { role: string; model_id: string }[];
+      regras = (data ?? []) as Regra[];
     }
+    // Uma classe que exige pesquisa não pode cair num modelo que a ignora
+    // em silêncio — devolveria uma resposta plausível e sem fontes.
+    const exigeGrounding = regras.some((r) => r.grounding);
 
     const ordem = ["PRIMARY", "FALLBACK_1", "FALLBACK_2", "EMERGENCY"];
     const cadeia: RoutedModel[] = [];
@@ -84,7 +97,14 @@ export class Router {
       if (!m) continue;                                  // modelo desligado no registo
       if (!["ACTIVE", "DEGRADED"].includes(m.status)) continue;
       if (!circuitAllows(m)) continue;                   // disjuntor aberto
-      cadeia.push({ model: m, role, reason: `policy:${cls}:${role}` });
+      if (regra.grounding && !(m as any).supports_grounding) continue; // não sabe pesquisar
+      cadeia.push({
+        model: m, role, reason: `policy:${cls}:${role}`,
+        maxOutputTokens: regra.max_output_tokens ?? undefined,
+        grounding: regra.grounding,
+        temperature: regra.temperature == null ? undefined : Number(regra.temperature),
+        tokenHeadroom: regra.token_headroom,
+      });
     }
 
     // Rede de segurança: se a política não deu nada utilizável (ex.: todos
@@ -93,9 +113,16 @@ export class Router {
     if (cadeia.length === 0) {
       const sobreviventes = modelos
         .filter((m) => ["ACTIVE", "DEGRADED"].includes(m.status) && circuitAllows(m))
+        // Se a classe exige pesquisa, a varredura também a tem de respeitar:
+        // é preferível não responder a responder sem fontes.
+        .filter((m) => !exigeGrounding || (m as any).supports_grounding)
         .sort((a, b) => healthRank(a) - healthRank(b) || a.priority - b.priority);
       for (const m of sobreviventes.slice(0, 2)) {
-        cadeia.push({ model: m, role: "EMERGENCY", reason: "fallback:registry-scan" });
+        cadeia.push({
+          model: m, role: "EMERGENCY", reason: "fallback:registry-scan",
+          grounding: exigeGrounding,
+          maxOutputTokens: exigeGrounding ? 8000 : undefined,
+        });
       }
     }
 
