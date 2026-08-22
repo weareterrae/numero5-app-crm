@@ -59,6 +59,17 @@ export type ChatRequest = {
    */
   grounding?: boolean;
   /**
+   * Quantas passagens de pesquisa antes de formatar (1 a 4). Só conta em
+   * pedidos com `grounding` e saída em JSON.
+   *
+   * Uma passagem chega para "quanto custa o m² nesta zona". Não chega para
+   * avaliar uma casa: a primeira busca traz anúncios, e anúncios são o que
+   * se PEDE, não o que se fecha. As passagens seguintes procuram dados
+   * oficiais, depois o que contradiz o apurado. Custa tempo e dinheiro;
+   * um valor errado numa avaliação custa a confiança do proprietário.
+   */
+  passos_investigacao?: number;
+  /**
    * ENSAIO. Atravessa a fatia de rollout (mesmo a 0%) para provar um
    * assistente antes de lhe abrir tráfego. Só vale com a chave de serviço;
    * de um site é ignorado.
@@ -70,6 +81,18 @@ export type ChatRequest = {
 export type StreamEvent =
   | { type: "start"; request_id: string }
   | { type: "delta"; text: string }
+  /**
+   * Sinal de vida durante a investigação dos relatórios.
+   *
+   * Existe por necessidade, não por vaidade: enquanto se pesquisa não sai
+   * um único byte, e o Supabase corta ligações inativas às 150 segundos.
+   * Uma avaliação com quatro passagens passa disso e o cliente recebia
+   * resposta vazia, sem sequer um erro.
+   *
+   * Quem lê o fluxo ignora eventos que não conheça — só os `delta` contam
+   * para o texto. Mas dá jeito mostrar "a pesquisar (2 de 4)".
+   */
+  | { type: "progress"; data: { fase: string; passo: number; total: number; fontes: number } }
   | { type: "metadata"; data: ResponseMetadata }
   | { type: "done"; finish_reason?: string }
   | { type: "error"; code: string; message: string };

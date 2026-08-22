@@ -215,21 +215,58 @@ export class Gateway {
     return this.executar({
       requestId, traceId, assistant, cadeia, mensagens, system, cls, gatewayMs, t0,
       jsonMode: querJson, systemDinamico, tetoPedido: req.max_output_tokens,
+      passosInvestigacao: req.passos_investigacao,
     });
   }
 
   // -------------------------------------------------------------------
 
   /**
-   * Passo 1 dos relatórios: investigar em prosa, com pesquisa.
+   * Ângulos da investigação, por ordem.
    *
-   * Devolve o system e as mensagens já preparados para o passo 2 (formatar
-   * em JSON), ou null se não conseguiu pesquisar — nesse caso quem chama
+   * Uma só passagem de pesquisa não chega para avaliar uma casa. O modelo
+   * faz uma busca, encontra meia dúzia de anúncios e responde — e anúncios
+   * são PEDIDOS, não vendas: em Portugal fecham tipicamente abaixo do que
+   * pedem. Um relatório assente só neles sobrevaloriza de forma sistemática.
+   *
+   * Por isso cada passagem procura outra coisa, e a última procura o que
+   * DESMENTE as anteriores. Um número que sobrevive a ser contrariado vale
+   * muito mais do que um número que nunca foi posto à prova.
+   */
+  private static readonly ANGULOS = [
+    "Procura os valores PEDIDOS em anúncios atuais para este caso concreto. "
+    + "Diz quantos anúncios viste e a dispersão entre eles.",
+
+    "Agora procura dados OFICIAIS e de transações concluídas — INE, Confidencial "
+    + "Imobiliário, portais com histórico de vendas — e a evolução dos últimos 12 meses. "
+    + "Nota a diferença entre o que se pede e o que se fecha.",
+
+    "Agora procura o que CONTRADIZ o que já apuraste: valores destoantes, "
+    + "diferenças entre freguesias ou ruas, estado de conservação, andar, "
+    + "elevador, estacionamento, ruído, obras previstas. Se algo enfraquecer "
+    + "a conclusão anterior, di-lo claramente.",
+
+    "Última verificação: procura o que falta para esta avaliação ser defensável "
+    + "perante um proprietário exigente. Aponta o que ficou por confirmar.",
+  ];
+
+  /**
+   * Investigação dos relatórios: pesquisa em prosa, em várias passagens.
+   *
+   * Devolve o system e as mensagens já preparados para o passo de formatar
+   * em JSON, ou null se não conseguiu pesquisar — nesse caso quem chama
    * segue pelo caminho normal, sem fontes mas com relatório.
    */
   private async investigar(a: {
     cadeia: { model: ModelRow; grounding?: boolean; temperature?: number | null }[];
-    mensagens: N5Message[]; system: string; assistant: AssistantRow;
+    mensagens: N5Message[]; system: string; assistant: AssistantRow; passos?: number;
+    /**
+     * Dá sinal de vida a cada passagem. Não é enfeite: a ligação fica
+     * INATIVA enquanto se investiga, e o Supabase corta às 150 segundos.
+     * Com quatro passagens passa-se disso à vontade — e o cliente recebia
+     * uma resposta vazia, sem sequer um erro, ao fim de 151s.
+     */
+    sinal?: (passo: number, total: number, fontes: number) => void;
   }): Promise<
     { system: string; mensagens: N5Message[]; usou: boolean; fontes: number; usage?: TokenUsage }
     | null
@@ -252,42 +289,70 @@ export class Gateway {
       "Não uses JSON nem formatação estruturada.\n\nContexto do trabalho:\n" +
       a.system.slice(0, 4000);
 
-    let r;
-    try {
-      r = await provider.generate({
-        model: passo1.model.provider_model_id,
-        system: sysInvestigar,
-        messages: [{ role: "user", content: pergunta }],
-        maxOutputTokens: 4000,
-        temperature: 0.3,
-        grounding: true,
-        jsonMode: false,
-        tokenHeadroom: 6000,
-        timeoutMs: TIMEOUT_GROUNDING_MS,
-      });
-    } catch { return null; }
+    const passos = Math.max(1, Math.min(a.passos ?? 1, Gateway.ANGULOS.length));
+    const apurado: string[] = [];
+    const fontesTodas = new Set<string>();
+    let usou = false;
+    const soma: TokenUsage = { input: 0, output: 0, cached: 0 };
 
-    if (!r.ok || !r.text.trim()) return null;
+    for (let p = 0; p < passos; p++) {
+      // Cada passagem vê o que as anteriores apuraram — é isso que permite
+      // à última contrariar as outras em vez de repetir a mesma busca.
+      const anterior = apurado.length
+        ? "JÁ APURASTE:\n" + apurado.join("\n\n---\n\n") + "\n\n"
+        : "";
+      const instrucao = passos > 1 ? "\n\nNESTA PASSAGEM: " + Gateway.ANGULOS[p] : "";
 
-    const fontes = r.groundingUris ?? [];
-    // O passo 2 recebe os factos e SÓ as fontes reais. Sem esta lista
-    // explícita, o modelo enche o campo `fontes` com nomes plausíveis.
+      let r;
+      try {
+        r = await provider.generate({
+          model: passo1.model.provider_model_id,
+          system: sysInvestigar,
+          messages: [{ role: "user", content: anterior + "PEDIDO:\n" + pergunta + instrucao }],
+          maxOutputTokens: 4000,
+          temperature: 0.3,
+          grounding: true,
+          jsonMode: false,
+          tokenHeadroom: 6000,
+          timeoutMs: TIMEOUT_GROUNDING_MS,
+        });
+      } catch { break; }
+
+      if (!r.ok || !r.text.trim()) break;   // fica-se com o que já se apurou
+
+      apurado.push(r.text.trim());
+      for (const u of r.groundingUris ?? []) fontesTodas.add(u);
+      if (r.groundingUsed) usou = true;
+      a.sinal?.(p + 1, passos, fontesTodas.size);
+      soma.input = (soma.input ?? 0) + (r.usage?.input ?? 0);
+      soma.output = (soma.output ?? 0) + (r.usage?.output ?? 0);
+      soma.cached = (soma.cached ?? 0) + (r.usage?.cached ?? 0);
+    }
+
+    if (!apurado.length) return null;
+
+    const fontes = [...fontesTodas];
+    // O passo de formatar recebe os factos e SÓ as fontes reais. Sem esta
+    // lista explícita, o modelo enche o campo `fontes` com nomes plausíveis.
     const contexto =
-      "APURADO NA PESQUISA:\n" + r.text.trim() +
+      "APURADO NA PESQUISA" + (apurado.length > 1 ? ` (${apurado.length} passagens)` : "") + ":\n" +
+      apurado.join("\n\n---\n\n") +
       (fontes.length
         ? "\n\nFONTES REAIS (usa exclusivamente estas; não acrescentes nenhuma):\n" + fontes.join("\n")
         : "\n\n(A pesquisa não devolveu fontes. Deixa o campo de fontes vazio e baixa a confiança.)") +
-      "\n\nPEDIDO ORIGINAL:\n" + pergunta;
+      "\n\nREGRA: se as passagens divergirem, a confiança NÃO pode ser alta e o " +
+      "intervalo tem de cobrir a divergência. Vale mais um intervalo largo e " +
+      "honesto do que um número estreito e errado.\n\nPEDIDO ORIGINAL:\n" + pergunta;
 
     return {
       system: a.system,
       mensagens: [{ role: "user", content: contexto }],
-      usou: !!r.groundingUsed,
-      fontes: r.groundingSources ?? fontes.length,
-      // Os tokens do passo 1 contam. Sem isto o painel diria que um
-      // relatório custa metade do que custa — e um custo subestimado é a
-      // razão por que ninguém percebe a fatura ao fim do mês.
-      usage: r.usage,
+      usou,
+      fontes: fontes.length,
+      // Os tokens de TODAS as passagens contam. Sem isto o painel diria que
+      // um relatório custa uma fração do que custa — e um custo subestimado
+      // é a razão por que ninguém percebe a fatura ao fim do mês.
+      usage: soma,
     };
   }
 
@@ -297,6 +362,7 @@ export class Gateway {
     mensagens: N5Message[]; system: string; cls: RequestClass;
     gatewayMs: number; t0: number;
     jsonMode: boolean; systemDinamico: boolean; tetoPedido?: number;
+    passosInvestigacao?: number;
   }): Promise<Response> {
     const enc = new TextEncoder();
     const self = this;
@@ -340,7 +406,12 @@ export class Gateway {
         //
         // Custa uma chamada a mais. Um relatório inventado custa um cliente.
         if (a.jsonMode && a.cadeia.some((c) => c.grounding)) {
-          const pesquisa = await self.investigar(a);
+          const pesquisa = await self.investigar({
+            ...a,
+            passos: a.passosInvestigacao,
+            sinal: (passo, total, fontes) =>
+              send({ type: "progress", data: { fase: "pesquisa", passo, total, fontes } }),
+          });
           if (pesquisa) {
             a.system = pesquisa.system;
             a.mensagens = pesquisa.mensagens;

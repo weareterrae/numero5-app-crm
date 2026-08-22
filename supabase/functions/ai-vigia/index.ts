@@ -79,8 +79,12 @@ async function correr(v: any): Promise<Resultado> {
       body: v.metodo === "GET" ? undefined : JSON.stringify(v.corpo ?? {}),
       signal: AbortSignal.timeout(v.timeout_ms ?? 45000),
     });
-    const ms = Date.now() - t0;
+    // O corpo TEM de ser lido antes de medir. Num stream, o `fetch` resolve
+    // assim que chegam os cabeçalhos — medir aqui dava 1,2s para um
+    // relatório que demora 42, e o painel mostrava um tempo tranquilizador
+    // que era falso.
     const bruto = await r.text();
+    const ms = Date.now() - t0;
 
     if (!r.ok) {
       return { ok: false, motivo: `http_${r.status}`, status: r.status, ms, amostra: bruto.slice(0, 200) };
