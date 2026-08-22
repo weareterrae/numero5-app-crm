@@ -95,7 +95,20 @@ export type StreamEvent =
   | { type: "progress"; data: { fase: string; passo: number; total: number; fontes: number } }
   | { type: "metadata"; data: ResponseMetadata }
   | { type: "done"; finish_reason?: string }
-  | { type: "error"; code: string; message: string };
+  /**
+   * `terminal: true` significa: **não sirvas por outro caminho.**
+   *
+   * A recusa foi uma decisão nossa (rate limit, orçamento, origem,
+   * política) e não uma avaria. Um site que caia para o caminho antigo
+   * nestes casos está a contornar a própria proteção que acabou de o
+   * barrar — servia o mesmo pedido por uma porta sem rate limit, sem
+   * orçamento e sem allowlist.
+   *
+   * `terminal: false` é uma avaria nossa (sem modelo, fornecedores em
+   * baixo) ou simplesmente «este pedido não é meu» (rollout). Aí o site
+   * deve mesmo servir pelo caminho dele.
+   */
+  | { type: "error"; code: string; message: string; terminal?: boolean };
 
 /** O que revelamos ao cliente sobre a execução. Nunca o prompt de sistema. */
 export type ResponseMetadata = {
