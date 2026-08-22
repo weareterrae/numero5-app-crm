@@ -58,24 +58,25 @@ on conflict (id) do update set
 -- ---------------------------------------------------------------------
 -- GEOGRAFIA
 -- ---------------------------------------------------------------------
+-- Normalização sem depender de extensões.
+--
+-- A primeira versão usava `unaccent`, que não está instalada nesta base
+-- de dados — e a criação da função falha logo, porque o Postgres valida
+-- o corpo de uma função SQL no momento em que a cria. Tentar instalar a
+-- extensão dentro de um bloco de recuperação também não serve: o erro
+-- acontece antes.
+--
+-- `translate` é SQL puro, existe sempre, e cobre o português inteiro.
+-- Menos universal do que `unaccent`, e é exatamente o suficiente.
+--
+-- IMMUTABLE porque é: a mesma entrada dá sempre a mesma saída. Sem isso
+-- não podia ser usada em índices nem em funções STABLE.
 create or replace function imo_chave(txt text)
 returns text language sql immutable as $$
-  select trim(lower(unaccent(coalesce(txt, ''))));
+  select trim(lower(translate(coalesce(txt, ''),
+    'áàâãäéèêëíìîïóòôõöúùûüñçÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÑÇ',
+    'aaaaaeeeeiiiiooooouuuuncAAAAAEEEEIIIIOOOOOUUUUNC')));
 $$;
-
--- `unaccent` pode não estar instalada; se faltar, usa-se uma normalização
--- simples. Não vale bloquear a migração inteira por causa disto.
-do $$
-begin
-  create extension if not exists unaccent;
-exception when others then
-  create or replace function imo_chave(txt text)
-  returns text language sql immutable as $f$
-    select trim(lower(translate(coalesce(txt, ''),
-      'áàâãäéèêëíìîïóòôõöúùûüçÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ',
-      'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC')));
-  $f$;
-end $$;
 
 /* Cria uma geografia e devolve o id. Idempotente. */
 create or replace function imo_geo_upsert(
@@ -101,7 +102,7 @@ do $$
 declare
   pt uuid; lisboa uuid; setubal uuid;
   oeiras uuid; cascais uuid; lisboa_c uuid; sintra uuid; almada uuid; palmela uuid;
-  uf_algés uuid; carnaxide_uf uuid;
+  uf_alges uuid; carnaxide_uf uuid;
 begin
   pt := imo_geo_upsert(null, 'pais', 'Portugal');
 
@@ -116,7 +117,7 @@ begin
   palmela  := imo_geo_upsert(setubal, 'concelho', 'Palmela');
 
   -- Uniões de freguesias de Oeiras, onde a Terrae mais trabalha.
-  uf_algés := imo_geo_upsert(oeiras, 'freguesia',
+  uf_alges := imo_geo_upsert(oeiras, 'freguesia',
     'União das Freguesias de Algés, Linda-a-Velha e Cruz Quebrada-Dafundo');
   carnaxide_uf := imo_geo_upsert(oeiras, 'freguesia',
     'União das Freguesias de Carnaxide e Queijas');
@@ -131,11 +132,11 @@ begin
   -- A razão de existirem: a média da união de Algés/Linda-a-Velha está
   -- inflacionada por Miraflores e Alto de Santa Catarina. Avaliar um
   -- apartamento no centro de Linda-a-Velha por essa média sobrevaloriza-o.
-  perform imo_geo_upsert(uf_algés, 'microzona', 'Miraflores', 38.7050, -9.2280, true);
-  perform imo_geo_upsert(uf_algés, 'microzona', 'Alto de Santa Catarina', 38.7010, -9.2400, true);
-  perform imo_geo_upsert(uf_algés, 'microzona', 'Linda-a-Velha centro', 38.7100, -9.2400, true);
-  perform imo_geo_upsert(uf_algés, 'microzona', 'Algés', 38.7000, -9.2300, true);
-  perform imo_geo_upsert(uf_algés, 'microzona', 'Cruz Quebrada-Dafundo', 38.6960, -9.2470, true);
+  perform imo_geo_upsert(uf_alges, 'microzona', 'Miraflores', 38.7050, -9.2280, true);
+  perform imo_geo_upsert(uf_alges, 'microzona', 'Alto de Santa Catarina', 38.7010, -9.2400, true);
+  perform imo_geo_upsert(uf_alges, 'microzona', 'Linda-a-Velha centro', 38.7100, -9.2400, true);
+  perform imo_geo_upsert(uf_alges, 'microzona', 'Algés', 38.7000, -9.2300, true);
+  perform imo_geo_upsert(uf_alges, 'microzona', 'Cruz Quebrada-Dafundo', 38.6960, -9.2470, true);
 
   perform imo_geo_upsert(carnaxide_uf, 'microzona', 'Carnaxide centro', 38.7220, -9.2450, true);
   perform imo_geo_upsert(carnaxide_uf, 'microzona', 'Queijas', 38.7180, -9.2560, true);
