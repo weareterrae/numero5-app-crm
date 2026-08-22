@@ -92,6 +92,48 @@ Deno.serve(async (req) => {
   });
 
   // =====================================================================
+  // REGISTAR A AVALIAÇÃO — o que se decidiu, e com que dados
+  // =====================================================================
+  // «Porque demos este valor?» é a pergunta que um uso profissional
+  // obriga a saber responder meses depois. A tabela existia e ninguém
+  // escrevia nela: cada avaliação saía, era entregue ao proprietário, e
+  // desaparecia. Sem isto não há auditoria nem backtesting — e sem
+  // backtesting a confiança que o relatório mostra nunca pode ser
+  // calibrada contra o que aconteceu de facto.
+  //
+  // Guarda-se o que PERMITE REPRODUZIR: a amostra usada (que é imutável),
+  // o benchmark, a geografia, os valores e a memória de cálculo passo a
+  // passo. A narrativa do modelo não entra — essa pode variar, e não é
+  // ela que se audita.
+  if (new URL(req.url).searchParams.get("avaliacao") === "1") {
+    const a = corpo?.avaliacao ?? {};
+    if (!(a.valor_base > 0)) {
+      return Response.json({ erro: "sem_valor" }, { status: 400, headers: cors(origem) });
+    }
+    const { data: novo, error } = await db.from("imo_avaliacoes").insert({
+      referencia: a.referencia ?? null,
+      motor_versao: String(a.motor_versao ?? "desconhecida"),
+      geografia_id: geoId,
+      imovel: imovel,
+      amostra_id: a.amostra_id ?? null,
+      benchmark_id: a.benchmark_id ?? null,
+      benchmark_nivel: a.benchmark_nivel ?? null,
+      valor_base: a.valor_base,
+      valor_min: a.valor_min ?? null,
+      valor_max: a.valor_max ?? null,
+      eur_m2: a.eur_m2 ?? null,
+      confianca_pct: a.confianca_pct ?? null,
+      confianca_banda: a.confianca_banda ?? null,
+      gap_mercado: a.gap_mercado ?? null,
+      memoria: Array.isArray(a.memoria) ? a.memoria : [],
+      aviso_llm: a.aviso_llm ?? null,
+    }).select("id").single();
+
+    if (error) return Response.json({ erro: error.message }, { status: 500, headers: cors(origem) });
+    return Response.json({ registada: true, id: novo?.id }, { headers: cors(origem) });
+  }
+
+  // =====================================================================
   // GUARDAR — a pesquisa correu, os comparáveis vêm de fora
   // =====================================================================
   if (guardar) {
@@ -242,6 +284,10 @@ Deno.serve(async (req) => {
     // e a sua casa está aqui».
     benchmark: b
       ? {
+        // O id vai junto para a avaliação poder apontar para o
+        // benchmark EXATO que usou — sem isso, «ancorou no SIR» é uma
+        // afirmação que ninguém consegue verificar seis meses depois.
+        id: b.benchmark_id,
         fonte: b.fonte_id, nivel: b.nivel, zona: b.nome,
         eur_m2: b.eur_m2, medida: b.medida,
         p25: b.p25, p75: b.p75, dispersao: b.dispersao,
