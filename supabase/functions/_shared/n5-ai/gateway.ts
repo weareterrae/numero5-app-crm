@@ -494,6 +494,29 @@ export class Gateway {
       a.system.slice(0, 4000);
 
     const passos = Math.max(1, Math.min(a.passos ?? 1, Gateway.ANGULOS.length));
+
+    // QUE ÂNGULOS, quando não se corre todos.
+    //
+    // Os ângulos não valem o mesmo. O contraditório — procurar o que
+    // ENFRAQUECE o já apurado — é o que impede uma pesquisa segura de si
+    // própria, e é o último a poder cair. Com poucas passagens tirava-se
+    // justamente esse, porque a escolha era posicional: `ANGULOS[p]`
+    // dava os primeiros da lista e o contraditório é o terceiro.
+    //
+    // Passa a ser sempre o último a correr, seja qual for o número de
+    // passagens. Numa passagem só, junta-se ao pedido em vez de
+    // desaparecer: uma só chamada, mas que ainda tem de dizer o que
+    // enfraquece a própria conclusão.
+    const CONTRADITORIO = 2;
+    // Percorre-se a lista até ter os ângulos que faltam, em vez de cortar
+    // pela posição: cortar pela posição e saltar o contraditório perdia um
+    // ângulo — pedir quatro passagens dava três, em silêncio.
+    const escolhidos: number[] = [];
+    for (let i = 0; i < Gateway.ANGULOS.length && escolhidos.length < passos - 1; i++) {
+      if (i !== CONTRADITORIO) escolhidos.push(i);
+    }
+    if (passos > 1) escolhidos.push(CONTRADITORIO);
+
     const apurado: string[] = [];
     const fontesTodas = new Set<string>();
     let usou = false;
@@ -505,7 +528,12 @@ export class Gateway {
       const anterior = apurado.length
         ? "JÁ APURASTE:\n" + apurado.join("\n\n---\n\n") + "\n\n"
         : "";
-      const instrucao = passos > 1 ? "\n\nNESTA PASSAGEM: " + Gateway.ANGULOS[p] : "";
+      const instrucao = passos > 1
+        ? "\n\nNESTA PASSAGEM: " + Gateway.ANGULOS[escolhidos[p]]
+        // Uma passagem só faz o trabalho todo: procurar E contrariar-se.
+        // Sem isto, a pesquisa mais rápida era também a mais crédula.
+        : "\n\n" + Gateway.ANGULOS[0] + "\n\nE ANTES DE CONCLUIR: "
+          + Gateway.ANGULOS[CONTRADITORIO];
 
       // Cada passagem tenta os modelos por ordem até um responder. Assim a
       // qualidade continua a vir do melhor modelo quando ele está bom, e uma
