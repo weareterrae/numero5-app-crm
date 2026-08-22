@@ -191,6 +191,24 @@ Deno.serve(async (req) => {
   const b = Array.isArray(bench) ? bench[0] : null;
   const am = Array.isArray(amostraValida) ? amostraValida[0] : null;
 
+  // Pode este benchmark aparecer no relatório do cliente, e com que
+  // atribuição? A resposta vem da tabela de fontes, não de uma regra
+  // escrita aqui.
+  //
+  // Estava escrito `publicavel: b.fonte_id !== "sir"` — uma suposição
+  // minha, tomada sem ler o contrato, e ERRADA: a cláusula 4.d) da ficha
+  // de subscrição autoriza mostrar os conteúdos a clientes, desde que
+  // acompanhados de «© IMOESTATÍSTICA – TODOS OS DIREITOS RESERVADOS».
+  //
+  // Uma regra de licença escrita à mão no meio do código envelhece com o
+  // contrato e ninguém a vai lá rever. Na tabela, muda-se num sítio só.
+  let licenca: { pode: boolean; atribuicao: string | null } = { pode: false, atribuicao: null };
+  if (b) {
+    const { data: lic } = await db.rpc("imo_pode_mostrar", { p_fonte: b.fonte_id });
+    const l = Array.isArray(lic) ? lic[0] : lic;
+    if (l) licenca = { pode: !!l.pode, atribuicao: l.atribuicao ?? null };
+  }
+
   // Vendas reais da Terrae na mesma geografia. É o dado de maior valor e
   // o único que mais ninguém tem.
   const { data: vendas } = geoId
@@ -215,15 +233,22 @@ Deno.serve(async (req) => {
   return Response.json({
     geografia_id: geoId,
     chave_amostra: chave,
-    // A licença do SIR permite CALCULAR com ele, não publicar as suas
-    // tabelas. Quem monta o relatório precisa de saber isto, e por isso
-    // vai declarado em vez de assumido.
+    // Quem monta o relatório precisa de saber se pode mostrar isto e o
+    // que tem de escrever ao lado. Vai declarado, não assumido — e vem
+    // da tabela de fontes, que é onde a licença está registada.
+    //
+    // Os quartis e a dispersão vão junto porque um número sozinho não é
+    // mercado: «5.841 €/m²» diz muito menos do que «entre 3.922 e 6.857,
+    // e a sua casa está aqui».
     benchmark: b
       ? {
         fonte: b.fonte_id, nivel: b.nivel, zona: b.nome,
-        eur_m2: b.eur_m2, n_transacoes: b.n_transacoes,
+        eur_m2: b.eur_m2, medida: b.medida,
+        p25: b.p25, p75: b.p75, dispersao: b.dispersao,
+        n_transacoes: b.n_transacoes,
         periodo: b.periodo, desconto: b.desconto,
-        publicavel: b.fonte_id !== "sir",
+        publicavel: licenca.pode,
+        atribuicao: licenca.atribuicao,
       }
       : null,
     amostra: am
@@ -238,6 +263,20 @@ Deno.serve(async (req) => {
     // Se não há amostra válida, quem chama tem de pesquisar e devolver
     // os comparáveis com `?guardar=1`. É a primeira avaliação da zona que
     // paga a pesquisa; as seguintes reutilizam.
-    precisa_pesquisar: !am,
+    // Não basta EXISTIR fotografia: tem de ser usável.
+    //
+    // Dizia `!am`, e isso criava uma armadilha permanente. Uma amostra
+    // com 2 itens é demasiado fina para o motor a usar (ele exige 3),
+    // mas era suficiente para este campo dizer «não precisas de
+    // pesquisar» — logo a pesquisa corria à mesma, o resultado NÃO era
+    // guardado, e a amostra fina ficava a bloquear a sua própria
+    // substituição até expirar. Carnaxide ficou assim: cinco minutos por
+    // avaliação, sem nunca melhorar.
+    //
+    // O 3 é o mesmo limiar que avaliacao-engine.js usa para entrar no
+    // caminho rápido. Estão em repositórios diferentes e têm de andar a
+    // par: se um mudar, o outro tem de mudar com ele — senão volta-se a
+    // ter um estado em que nem se usa nem se substitui.
+    precisa_pesquisar: !am || itens.length < 3,
   }, { headers: cors(origem) });
 });
