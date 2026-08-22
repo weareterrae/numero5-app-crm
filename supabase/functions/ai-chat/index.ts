@@ -14,7 +14,39 @@ import { createClient } from "jsr:@supabase/supabase-js@2";
 import { Gateway } from "../_shared/n5-ai/gateway.ts";
 import type { ChatRequest } from "../_shared/n5-ai/types.ts";
 
-const MAX_BODY = 64 * 1024; // 64 KB
+// Teto do corpo. Começou em 64 KB e a Massa Prima bateu nele: o system dela
+// é uma base de conhecimento inteira (~72 KB, 18 mil tokens) que o site vai
+// buscar a um ficheiro e envia a cada mensagem. Rejeitávamos com 413 e o site
+// caía calado para o caminho antigo — respondia bem, mas sem rede nem medição.
+//
+// 256 KB acomoda essas bases sem deixar de ser um teto: o JSON.parse de um
+// corpo destes gasta milissegundos do orçamento de 2s de CPU.
+//
+// Nota de custo: NÃO encarece nada. O site já pagava esses 18 mil tokens ao
+// Gemini em cada mensagem — pelo gateway paga o mesmo e ganha fallback entre
+// fornecedores. Quem baixa mesmo a conta é o prompt caching, a seguir.
+const MAX_BODY = 256 * 1024;
+
+/**
+ * Lê a claim `role` do JWT — sem verificar assinatura, de propósito.
+ *
+ * Não é autenticação: quem chega aqui já passou pelo `verify_jwt` da própria
+ * Edge Function, que valida a assinatura antes de o nosso código correr. Isto
+ * só distingue QUEM é, entre pedidos já válidos.
+ *
+ * Hoje só serve o ensaio (atravessar a fatia de rollout). Qualquer poder que
+ * venha a depender disto deve ser revisto à luz desta nota — se um dia esta
+ * função for chamada num sítio sem verificação a montante, a leitura passa a
+ * ser uma afirmação do chamador, não um facto.
+ */
+function ehServiceRole(auth: string | null): boolean {
+  const t = (auth ?? "").replace(/^Bearer\s+/i, "").trim().split(".");
+  if (t.length !== 3) return false;
+  try {
+    const b = t[1].replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(atob(b + "=".repeat((4 - b.length % 4) % 4)))?.role === "service_role";
+  } catch { return false; }
+}
 
 // O gateway fala com a BD como serviço: a autorização por tenant já foi
 // resolvida em código (origem + assistant_key), e o ledger tem de poder
@@ -91,6 +123,7 @@ Deno.serve(async (req) => {
     origin,
     referer: req.headers.get("referer"),
     ip: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+    isServiceRole: ehServiceRole(req.headers.get("authorization")),
   });
 
   // Junta o CORS ao stream que o core produziu.

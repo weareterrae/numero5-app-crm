@@ -50,6 +50,20 @@ export type ChatRequest = {
   system?: string;
   /** Teto de saída pedido pelo chamador; limitado pelo do assistente. */
   max_output_tokens?: number;
+  /**
+   * Pede pesquisa no Google (grounding). O router passa a exigir modelos com
+   * essa capacidade — hoje só os do Google a têm.
+   *
+   * Pedir não é usar: o modelo decide se pesquisa. `ai_grounding_falhado`
+   * mostra os casos em que se pediu e ele respondeu de memória.
+   */
+  grounding?: boolean;
+  /**
+   * ENSAIO. Atravessa a fatia de rollout (mesmo a 0%) para provar um
+   * assistente antes de lhe abrir tráfego. Só vale com a chave de serviço;
+   * de um site é ignorado.
+   */
+  ensaio?: boolean;
 };
 
 /** Eventos do stream. Contrato simples e estável. */
@@ -143,6 +157,12 @@ export type GenerateOptions = {
    */
   tokenHeadroom?: number;
   /**
+   * Não enviar `thinkingConfig` a este pedido. Uso interno do fornecedor
+   * Google: os modelos flash mais recentes rejeitam `thinkingBudget: 0`
+   * com 400, e o pedido é repetido uma vez sem ele.
+   */
+  semThinking?: boolean;
+  /**
    * Saída estruturada. Não é um caso especial: TODOS os assistentes a
    * sério têm um modo estruturado além da conversa — o Mestre resume
    * leads, a Academia pontua consultores, a Terrae devolve diagnósticos.
@@ -180,6 +200,8 @@ export type ProviderResult = {
    */
   groundingUsed?: boolean;
   groundingSources?: number;
+  /** Nomes/URLs das fontes devolvidas pela pesquisa. */
+  groundingUris?: string[];
 };
 
 /** Um pedaço do stream, já normalizado. */

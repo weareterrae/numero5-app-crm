@@ -34,6 +34,32 @@ function ehServiceRole(auth: string): boolean {
   } catch { return false; }
 }
 
+/**
+ * Junta o texto de uma resposta SSE do gateway.
+ *
+ * Sem isto, um vigia que fale ao gateway media o TAMANHO DO PROTOCOLO, não
+ * da resposta: o evento `start` mais meia dúzia de `delta` já passam dos 200
+ * caracteres mesmo que o assistente diga três palavras. Passava a verde por
+ * ruído — a mesma classe de falso-positivo que o `estado-motor` criava.
+ */
+function juntarSSE(bruto: string): string | null {
+  if (!bruto.includes("data:")) return null;
+  let texto = "";
+  let viuEvento = false;
+  for (const linha of bruto.split("\n")) {
+    const t = linha.trim();
+    if (!t.startsWith("data:")) continue;
+    try {
+      const ev = JSON.parse(t.slice(5).trim());
+      viuEvento = true;
+      if (ev.type === "delta" && typeof ev.text === "string") texto += ev.text;
+      // um `error` no meio do fluxo é falha, mesmo com HTTP 200
+      else if (ev.type === "error") return `__ERRO__:${ev.code ?? "desconhecido"}`;
+    } catch { /* fragmento incompleto */ }
+  }
+  return viuEvento ? texto : null;
+}
+
 /** Lê um caminho simples no JSON ('reply', 'data.texto'). */
 function ler(obj: unknown, caminho: string | null): string {
   if (!caminho) return typeof obj === "string" ? obj : JSON.stringify(obj);
@@ -60,9 +86,16 @@ async function correr(v: any): Promise<Resultado> {
       return { ok: false, motivo: `http_${r.status}`, status: r.status, ms, amostra: bruto.slice(0, 200) };
     }
 
+    // SSE primeiro: se veio do gateway, o que conta é o texto gerado, não o
+    // envelope do protocolo.
+    const sse = juntarSSE(bruto);
+    if (sse?.startsWith("__ERRO__:")) {
+      return { ok: false, motivo: `gateway:${sse.slice(9)}`, status: r.status, ms, amostra: bruto.slice(0, 200) };
+    }
+
     let corpo: unknown = bruto;
-    try { corpo = JSON.parse(bruto); } catch { /* alguns devolvem texto cru */ }
-    const texto = ler(corpo, v.campo_resposta);
+    if (sse === null) { try { corpo = JSON.parse(bruto); } catch { /* alguns devolvem texto cru */ } }
+    const texto = sse ?? ler(corpo, v.campo_resposta);
     const amostra = texto.slice(0, 300);
 
     // 2. resposta com substância

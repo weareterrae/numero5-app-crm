@@ -34,12 +34,26 @@ export class GoogleProvider implements AIProvider {
       temperature: opts.temperature ?? 0.7,
     };
     // Só desligamos o thinking nos flash — no Pro devolve 400. E mesmo
-    // nos flash tratamos isto como pedido, não como garantia.
-    if (/flash/i.test(opts.model)) {
+    // nos flash tratamos isto como pedido, não como garantia: as gerações
+    // mais recentes rejeitam o thinkingBudget:0 com 400 INVALID_ARGUMENT
+    // (medido no gemini-flash-lite-latest). Quem repete sem ele é o
+    // `generate`/`stream` — ver `semThinking`.
+    if (/flash/i.test(opts.model) && !opts.semThinking) {
       generationConfig.thinkingConfig = { thinkingBudget: 0 };
     }
-    // Saida estruturada: o modelo passa a devolver JSON valido, nao prosa.
-    if (opts.jsonMode) generationConfig.responseMimeType = "application/json";
+    // Saída estruturada: o modelo devolve JSON válido em vez de prosa.
+    //
+    // MAS NUNCA COM PESQUISA. Medido contra a API a 22/08/2026: com
+    // `google_search` + `responseMimeType: application/json` a Google
+    // devolve HTTP 200 e ZERO fontes — o modelo deixa de pesquisar e
+    // responde de memória, em JSON bem formado.
+    //
+    // É a pior avaria possível nos diagnósticos da Terrae: um relatório com
+    // preços inventados parece tão sólido como um verdadeiro. Com pesquisa,
+    // o JSON pede-se no prompt (é o que o site já fazia) e valida-se depois.
+    if (opts.jsonMode && !opts.grounding) {
+      generationConfig.responseMimeType = "application/json";
+    }
 
     const body: Record<string, unknown> = {
       contents: opts.messages.map((m) => ({
@@ -89,12 +103,22 @@ export class GoogleProvider implements AIProvider {
   async generate(opts: GenerateOptions): Promise<ProviderResult> {
     const { signal, done } = withTimeout(opts.timeoutMs, opts.signal);
     try {
-      const r = await fetch(`${this.baseUrl}/models/${opts.model}:generateContent`, {
-        method: "POST",
-        headers: { "x-goog-api-key": this.apiKey, "content-type": "application/json" },
-        body: JSON.stringify(this.body(opts)),
-        signal,
-      });
+      const pedir = (o: GenerateOptions) =>
+        fetch(`${this.baseUrl}/models/${o.model}:generateContent`, {
+          method: "POST",
+          headers: { "x-goog-api-key": this.apiKey, "content-type": "application/json" },
+          body: JSON.stringify(this.body(o)),
+          signal,
+        });
+
+      let r = await pedir(opts);
+      // 400 com thinkingConfig → é o thinking que o modelo recusa, não o
+      // pedido. Repete UMA vez sem ele em vez de gastar a tentativa e cair
+      // para o modelo seguinte. Sem isto, o gemini-flash-lite-latest dava
+      // 400 em todos os diagnósticos e esgotava a cadeia em 142ms.
+      if (r.status === 400 && /flash/i.test(opts.model) && !opts.semThinking) {
+        r = await pedir({ ...opts, semThinking: true });
+      }
       if (!r.ok) {
         const errText = await r.text().catch(() => "");
         return {
@@ -105,9 +129,19 @@ export class GoogleProvider implements AIProvider {
         };
       }
       const data = await r.json();
+      // Também aqui é preciso saber se pesquisou: o passo de investigação
+      // dos relatórios usa este caminho, não o de streaming.
+      const gm = (data as any)?.candidates?.[0]?.groundingMetadata;
+      const chunks = gm?.groundingChunks ?? [];
+      const uris = [...new Set(
+        chunks.map((c: any) => c?.web?.title ?? c?.web?.uri).filter(Boolean).map(String),
+      )] as string[];
       return {
         ok: true, text: this.extractText(data), status: 200, kind: "ok",
         usage: this.usageFrom(data),
+        groundingUsed: !!(chunks.length || gm?.webSearchQueries?.length),
+        groundingSources: chunks.length,
+        groundingUris: uris,
       };
     } catch (e) {
       return {
@@ -125,15 +159,26 @@ export class GoogleProvider implements AIProvider {
     let full = "";
     let groundingUsado = false;
     let fontes = 0;
+    // Nomes das fontes que a pesquisa devolveu. Não é enfeite: é o material
+    // que o passo de formatação recebe para não ter de inventar referências.
+    const uris = new Set<string>();
     try {
       // alt=sse devolve Server-Sent Events, igual em forma ao da OpenAI
       const url = `${this.baseUrl}/models/${opts.model}:streamGenerateContent?alt=sse`;
-      const r = await fetch(url, {
-        method: "POST",
-        headers: { "x-goog-api-key": this.apiKey, "content-type": "application/json" },
-        body: JSON.stringify(this.body(opts)),
-        signal,
-      });
+      const pedir = (o: GenerateOptions) =>
+        fetch(url, {
+          method: "POST",
+          headers: { "x-goog-api-key": this.apiKey, "content-type": "application/json" },
+          body: JSON.stringify(this.body(o)),
+          signal,
+        });
+
+      let r = await pedir(opts);
+      // mesma recuperação do `generate`: o 400 do thinkingBudget não deve
+      // gastar a tentativa (ver a nota no `body`).
+      if (r.status === 400 && /flash/i.test(opts.model) && !opts.semThinking) {
+        r = await pedir({ ...opts, semThinking: true });
+      }
       if (!r.ok || !r.body) {
         const errText = await r.text().catch(() => "");
         return {
@@ -170,6 +215,10 @@ export class GoogleProvider implements AIProvider {
             if (gm && (gm.groundingChunks?.length || gm.webSearchQueries?.length)) {
               groundingUsado = true;
               fontes = gm.groundingChunks?.length ?? fontes;
+              for (const c of gm.groundingChunks ?? []) {
+                const nome = c?.web?.title ?? c?.web?.uri;
+                if (nome) uris.add(String(nome));
+              }
             }
             const text = this.extractText(j, false);   // NUNCA aparar um chunk
             if (text) {
@@ -186,7 +235,11 @@ export class GoogleProvider implements AIProvider {
 
       if (usage) yield { type: "usage", usage };
       yield { type: "done", finishReason };
-      return { ok: true, text: full, status: 200, kind: "ok", usage, groundingUsed: groundingUsado, groundingSources: fontes };
+      return {
+        ok: true, text: full, status: 200, kind: "ok", usage,
+        groundingUsed: groundingUsado, groundingSources: fontes,
+        groundingUris: [...uris],
+      };
     } catch (e) {
       return {
         ok: false, text: full, status: 0, kind: "transient",

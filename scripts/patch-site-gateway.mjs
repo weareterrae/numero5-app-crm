@@ -17,7 +17,7 @@ export const BLOCO_N5 = `
 const N5_GATEWAY_URL = process.env.N5_GATEWAY_URL;
 const N5_ASSISTANT_KEY = process.env.N5_ASSISTANT_KEY;
 
-async function n5Gateway(messages, { lang, origin, sessionId } = {}) {
+async function n5Gateway(messages, { lang, origin, sessionId, system } = {}) {
   if (!N5_GATEWAY_URL || !N5_ASSISTANT_KEY) return null;
   try {
     const r = await fetch(N5_GATEWAY_URL, {
@@ -28,6 +28,7 @@ async function n5Gateway(messages, { lang, origin, sessionId } = {}) {
         session_id: sessionId,
         messages,
         lang,
+        ...(system ? { system } : {}),
       }),
       signal: AbortSignal.timeout(30000),
     });

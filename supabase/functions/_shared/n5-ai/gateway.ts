@@ -15,6 +15,7 @@
 
 import type {
   AssistantRow, ChatRequest, ModelRow, N5Message, RequestClass, StreamEvent, AttemptRecord,
+  TokenUsage,
 } from "./types.ts";
 import { Registry, originAllowed, type DbClient } from "./registry.ts";
 import { Router, ROUTING_VERSION } from "./router.ts";
@@ -42,6 +43,13 @@ export type RequestContext = {
   origin: string | null;
   referer: string | null;
   ip: string | null;
+  /**
+   * Verdadeiro só quando o pedido traz a chave de serviço. Nenhum site a tem
+   * — é a fronteira entre "veio da internet" e "veio de dentro". Hoje só
+   * autoriza o ensaio (atravessar a 0%); qualquer poder futuro deste lado
+   * deve continuar a depender dela, e nunca de um cabeçalho declarado.
+   */
+  isServiceRole?: boolean;
 };
 
 export class Gateway {
@@ -92,10 +100,22 @@ export class Gateway {
     // respondemos 'rollout_excluded' e o site serve pelo caminho antigo.
     // Assim a percentagem vive num só sítio (o registo), muda sem deploy,
     // e nenhum site precisa de ler a base de dados.
-    if (!assistant.gateway_enabled || assistant.traffic_percentage <= 0) {
+    //
+    // ENSAIO: quem tem a chave de serviço pode atravessar a 0% sem abrir a
+    // torneira a ninguém. Existe porque havia um impasse real — não se podia
+    // provar um assistente sem primeiro o pôr em produção, que é exatamente
+    // o que a migração progressiva quer evitar. Serve os casos delicados
+    // (diagnósticos da Terrae) onde ver a resposta antes vale mais do que
+    // uma fatia de 10%.
+    //
+    // A porta é a chave de serviço, nunca um cabeçalho qualquer: um site não
+    // a tem, logo nenhum visitante consegue forçar caminho.
+    const ensaio = ctx.isServiceRole === true && req.ensaio === true;
+
+    if (!ensaio && (!assistant.gateway_enabled || assistant.traffic_percentage <= 0)) {
       return this.erroSSE(requestId, "rollout_excluded", "Fora da fatia migrada.");
     }
-    if (assistant.traffic_percentage < 100) {
+    if (!ensaio && assistant.traffic_percentage < 100) {
       // Balde estável por sessão/IP: um visitante não salta de caminho a
       // meio da conversa, e a comparação legacy vs gateway não fica suja.
       const semente = req.session_id ?? ctx.ip ?? crypto.randomUUID();
@@ -148,6 +168,22 @@ export class Gateway {
       const barato = await this.registry.model(orc.forceModelId);
       if (barato) cadeia = [{ model: barato, role: "PRIMARY", reason: "budget:route_cheaper" }];
     }
+    // O chamador pode EXIGIR pesquisa. A política define o comportamento por
+    // omissão de cada classe; isto é para quem sabe que sem factos frescos a
+    // resposta não presta — os diagnósticos da Terrae citam preços e zonas.
+    //
+    // Consequência: a cadeia encolhe aos modelos que sabem pesquisar (só os
+    // do Google, hoje). Se nenhum estiver de pé, é melhor falhar aqui do que
+    // servir números inventados com ar de relatório.
+    if (req.grounding === true) {
+      const comPesquisa = cadeia.filter((c) => (c.model as any).supports_grounding);
+      if (comPesquisa.length === 0) {
+        this.incidenteAsync("MODEL_UNHEALTHY", "crit", "Pediu-se pesquisa e nenhum modelo a suporta", assistant);
+        return this.erroSSE(requestId, "no_model", "Sem modelo com pesquisa disponível.");
+      }
+      cadeia = comPesquisa.map((c) => ({ ...c, grounding: true }));
+    }
+
     if (cadeia.length === 0) {
       this.incidenteAsync("MODEL_UNHEALTHY", "crit", "Sem modelos disponíveis para routing", assistant);
       return this.erroSSE(requestId, "no_model", "Sem modelo disponível.");
@@ -184,9 +220,80 @@ export class Gateway {
 
   // -------------------------------------------------------------------
 
+  /**
+   * Passo 1 dos relatórios: investigar em prosa, com pesquisa.
+   *
+   * Devolve o system e as mensagens já preparados para o passo 2 (formatar
+   * em JSON), ou null se não conseguiu pesquisar — nesse caso quem chama
+   * segue pelo caminho normal, sem fontes mas com relatório.
+   */
+  private async investigar(a: {
+    cadeia: { model: ModelRow; grounding?: boolean; temperature?: number | null }[];
+    mensagens: N5Message[]; system: string; assistant: AssistantRow;
+  }): Promise<
+    { system: string; mensagens: N5Message[]; usou: boolean; fontes: number; usage?: TokenUsage }
+    | null
+  > {
+    const passo1 = a.cadeia.find((c) => (c.model as any).supports_grounding);
+    if (!passo1) return null;
+
+    const pergunta = [...a.mensagens].reverse().find((m) => m.role === "user")?.content;
+    if (!pergunta) return null;
+
+    let provider;
+    try { provider = await this.registry.providerFor(passo1.model.provider_id); } catch { return null; }
+
+    // O system da investigação é deliberadamente CURTO e sem uma palavra
+    // sobre formato: qualquer instrução de JSON aqui volta a desligar a
+    // pesquisa. O system do assistente entra só como enquadramento.
+    const sysInvestigar =
+      "És um analista rigoroso. Pesquisa no Google e responde em prosa, citando o que encontraste. " +
+      "Nunca indiques um valor que não tenhas visto na pesquisa; se não encontrares, di-lo. " +
+      "Não uses JSON nem formatação estruturada.\n\nContexto do trabalho:\n" +
+      a.system.slice(0, 4000);
+
+    let r;
+    try {
+      r = await provider.generate({
+        model: passo1.model.provider_model_id,
+        system: sysInvestigar,
+        messages: [{ role: "user", content: pergunta }],
+        maxOutputTokens: 4000,
+        temperature: 0.3,
+        grounding: true,
+        jsonMode: false,
+        tokenHeadroom: 6000,
+        timeoutMs: TIMEOUT_GROUNDING_MS,
+      });
+    } catch { return null; }
+
+    if (!r.ok || !r.text.trim()) return null;
+
+    const fontes = r.groundingUris ?? [];
+    // O passo 2 recebe os factos e SÓ as fontes reais. Sem esta lista
+    // explícita, o modelo enche o campo `fontes` com nomes plausíveis.
+    const contexto =
+      "APURADO NA PESQUISA:\n" + r.text.trim() +
+      (fontes.length
+        ? "\n\nFONTES REAIS (usa exclusivamente estas; não acrescentes nenhuma):\n" + fontes.join("\n")
+        : "\n\n(A pesquisa não devolveu fontes. Deixa o campo de fontes vazio e baixa a confiança.)") +
+      "\n\nPEDIDO ORIGINAL:\n" + pergunta;
+
+    return {
+      system: a.system,
+      mensagens: [{ role: "user", content: contexto }],
+      usou: !!r.groundingUsed,
+      fontes: r.groundingSources ?? fontes.length,
+      // Os tokens do passo 1 contam. Sem isto o painel diria que um
+      // relatório custa metade do que custa — e um custo subestimado é a
+      // razão por que ninguém percebe a fatura ao fim do mês.
+      usage: r.usage,
+    };
+  }
+
   private async executar(a: {
     requestId: string; traceId: string; assistant: AssistantRow;
-    cadeia: { model: ModelRow; role: string; reason: string }[];
+    cadeia: { model: ModelRow; role: string; reason: string; grounding?: boolean }[];
     mensagens: N5Message[]; system: string; cls: RequestClass;
     gatewayMs: number; t0: number;
     jsonMode: boolean; systemDinamico: boolean; tetoPedido?: number;
@@ -211,6 +318,43 @@ export class Gateway {
         let groundingPedido = false;
         let groundingReal = false;
         let fontesUsadas = 0;
+        let usagePesquisa: TokenUsage | undefined;
+
+        // ---- INVESTIGAR ANTES DE FORMATAR -------------------------------
+        //
+        // Pedir JSON e pedir pesquisa ao mesmo tempo não funciona. Medido
+        // contra a API a 22/08/2026, no gemini-pro-latest: com a instrução
+        // "responde só com JSON", o modelo NÃO chega a pesquisar — devolve
+        // JSON impecável, com valores de memória e nomes de fontes que
+        // inventou ("Prime Imobiliária", "Properstar"). Três formulações
+        // diferentes do prompt deram todas zero fontes reais. Não é um
+        // prompt mal escrito: é o comportamento do modelo.
+        //
+        // É a avaria mais perigosa que este sistema pode ter — um relatório
+        // com preços inventados lê-se exatamente como um verdadeiro. Já
+        // aconteceu em produção (ver a nota da Segunda Opinião no site).
+        //
+        // Por isso separam-se os dois trabalhos:
+        //   1. investigar — pergunta em prosa, com pesquisa, sem JSON;
+        //   2. formatar   — converter em JSON o que a pesquisa trouxe.
+        //
+        // Custa uma chamada a mais. Um relatório inventado custa um cliente.
+        if (a.jsonMode && a.cadeia.some((c) => c.grounding)) {
+          const pesquisa = await self.investigar(a);
+          if (pesquisa) {
+            a.system = pesquisa.system;
+            a.mensagens = pesquisa.mensagens;
+            groundingPedido = true;
+            groundingReal = pesquisa.usou;
+            fontesUsadas = pesquisa.fontes;
+            usagePesquisa = pesquisa.usage;
+            // O passo 2 não pesquisa: já tem os factos e a pesquisa só o
+            // faria voltar a ignorar o pedido de JSON.
+            a.cadeia = a.cadeia.map((c) => ({ ...c, grounding: false }));
+          }
+          // Se a investigação falhar, seguimos como antes: melhor um
+          // relatório sem fontes — e assinalado como tal — do que nenhum.
+        }
 
         for (let i = 0; i < a.cadeia.length; i++) {
           const { model, role, reason, maxOutputTokens, grounding, temperature, tokenHeadroom } =
@@ -274,9 +418,14 @@ export class Gateway {
 
             if (final.ok && (deuAlgo || final.text)) {
               usado = model;
-              groundingPedido = !!grounding;
-              groundingReal = !!final.groundingUsed;
-              fontesUsadas = final.groundingSources ?? 0;
+              // Num relatório em dois passos, quem pesquisou foi o passo 1 —
+              // este só formata. Sobrepor aqui apagaria o registo da
+              // pesquisa e o painel diria que nunca se pesquisou.
+              if (!groundingPedido) {
+                groundingPedido = !!grounding;
+                groundingReal = !!final.groundingUsed;
+                fontesUsadas = final.groundingSources ?? 0;
+              }
               motivo = reason;
               fallback = i > 0;
               if (!usage && final.usage) usage = final.usage;
@@ -317,7 +466,18 @@ export class Gateway {
         controller.close();
 
         // ---- fora do caminho crítico
-        const custo = estimateCost(usage, {
+        //
+        // Um relatório são DOIS pedidos ao modelo (investigar + formatar).
+        // O que fica registado tem de ser a soma: senão o painel mostra
+        // metade do custo real e a fatura no fim do mês não bate com nada.
+        const usageTotal: TokenUsage | undefined = usagePesquisa
+          ? {
+            input: (usage?.input ?? 0) + (usagePesquisa.input ?? 0),
+            output: (usage?.output ?? 0) + (usagePesquisa.output ?? 0),
+            cached: (usage?.cached ?? 0) + (usagePesquisa.cached ?? 0),
+          }
+          : usage;
+        const custo = estimateCost(usageTotal, {
           input_cost: usado.input_cost, output_cost: usado.output_cost,
           cached_input_cost: usado.cached_input_cost,
         });
@@ -330,7 +490,7 @@ export class Gateway {
           fallback_used: fallback,
           fallback_reason: fallback ? tentativas[0]?.error_code : undefined,
           attempt_chain: tentativas,
-          input_tokens: usage?.input, output_tokens: usage?.output, cached_tokens: usage?.cached,
+          input_tokens: usageTotal?.input, output_tokens: usageTotal?.output, cached_tokens: usageTotal?.cached,
           estimated_cost: custo, ttft_ms: ttft, total_latency_ms: total,
           grounding_pedido: groundingPedido, grounding_usado: groundingReal, grounding_fontes: fontesUsadas,
           json_mode: a.jsonMode, system_dinamico: a.systemDinamico,

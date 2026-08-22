@@ -71,8 +71,18 @@ describe("saída estruturada · OpenAI", () => {
   });
 });
 
-describe("os dois modos combinam com o resto sem se anularem", () => {
-  it("JSON + pesquisa + folga de tokens coexistem", async () => {
+describe("pesquisa e JSON não se pedem ao mesmo tempo", () => {
+  // Este teste já afirmou o CONTRÁRIO — que os dois modos coexistiam. Era
+  // uma suposição minha, nunca medida. Medida a 22/08/2026 contra a API:
+  // com `google_search` + `responseMimeType: application/json`, a Google
+  // devolve HTTP 200 e ZERO fontes. O modelo deixa de pesquisar e responde
+  // de memória, em JSON impecável, com nomes de fontes inventados.
+  //
+  // Num diagnóstico imobiliário isso é um relatório com preços falsos e ar
+  // de verdadeiro. O gateway passou a fazer dois passos (investigar em
+  // prosa, formatar depois) e o fornecedor deixou de juntar as duas coisas.
+
+  it("com pesquisa, NÃO força responseMimeType — senão o modelo deixa de pesquisar", async () => {
     const spy = espiarGoogle();
     await new GoogleProvider("google", "https://x", "k").generate({
       model: "gemini-pro-latest", messages: [{ role: "user", content: "diagnóstico" }],
@@ -80,8 +90,42 @@ describe("os dois modos combinam com o resto sem se anularem", () => {
       timeoutMs: 90000,
     });
     const b = corpo(spy);
-    expect(b.generationConfig.responseMimeType).toBe("application/json");
+    expect(b.generationConfig.responseMimeType).toBeUndefined();
     expect(b.tools).toEqual([{ google_search: {} }]);
     expect(b.generationConfig.maxOutputTokens).toBe(14000);
+  });
+
+  it("sem pesquisa, o modo JSON continua a valer (é o passo de formatar)", async () => {
+    const spy = espiarGoogle();
+    await new GoogleProvider("google", "https://x", "k").generate({
+      model: "gemini-pro-latest", messages: [{ role: "user", content: "formata isto" }],
+      jsonMode: true, maxOutputTokens: 8000, tokenHeadroom: 6000, timeoutMs: 90000,
+    });
+    const b = corpo(spy);
+    expect(b.generationConfig.responseMimeType).toBe("application/json");
+    expect(b.tools).toBeUndefined();
+  });
+});
+
+describe("o thinkingBudget:0 não pode gastar a tentativa", () => {
+  // O gemini-flash-lite-latest rejeita `thinkingBudget: 0` com 400
+  // INVALID_ARGUMENT. Sem recuperação, todos os diagnósticos falhavam em
+  // 142ms e esgotavam a cadeia sem chegar a um modelo bom.
+  it("repete sem thinkingConfig depois de um 400", async () => {
+    const chamadas: any[] = [];
+    const spy = vi.spyOn(globalThis, "fetch" as any).mockImplementation(async (_u: any, init: any) => {
+      chamadas.push(JSON.parse(init.body));
+      return chamadas.length === 1
+        ? new Response("{}", { status: 400 })
+        : new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: "ok" }] } }] }), { status: 200 });
+    });
+    const r = await new GoogleProvider("google", "https://x", "k").generate({
+      model: "gemini-flash-lite-latest", messages: [{ role: "user", content: "olá" }], timeoutMs: 5000,
+    });
+    spy.mockRestore();
+    expect(chamadas).toHaveLength(2);
+    expect(chamadas[0].generationConfig.thinkingConfig).toEqual({ thinkingBudget: 0 });
+    expect(chamadas[1].generationConfig.thinkingConfig).toBeUndefined();
+    expect(r.ok).toBe(true);
   });
 });
