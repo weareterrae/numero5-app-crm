@@ -114,7 +114,23 @@ Deno.serve(async (req) => {
   const { data: todas } = await db
     .from("ai_perguntas_referencia").select("*").eq("ativo", true);
 
+  // CADÊNCIA CONFORME O PESO — nem tudo precisa de ser visto todos os dias.
+  //
+  // Uma regra dura («não diz preços», «não faz alegações de saúde») tem de
+  // ser verificada todos os dias: se partir, parte hoje e custa hoje.
+  //
+  // Uma questão de tom não muda de um dia para o outro, e verificá-la
+  // diariamente é pagar 365 vezes por ano para confirmar o que já se
+  // sabia. Semanal chega, e a tendência continua a ver-se.
+  //
+  // Determinístico: depende do dia, não do acaso. Duas corridas no mesmo
+  // dia avaliam o mesmo conjunto, e é isso que permite comparar.
+  const dia = Math.floor(Date.now() / 86_400_000);
+  const devidoHoje = (peso: number) =>
+    peso >= 5 ? true : (peso === 4 ? dia % 2 === 0 : dia % 7 === 0);
+
   const perguntas = (todas ?? [])
+    .filter((p) => devidoHoje(p.peso ?? 3))
     .sort((a, b) => {
       const va = visto.get(a.id) ?? "";   // nunca avaliada ordena primeiro
       const vb = visto.get(b.id) ?? "";
@@ -197,7 +213,17 @@ Deno.serve(async (req) => {
           .from("ai_models")
           .select("provider_id, provider_model_id")
           .eq("status", "ACTIVE")
-          .order("input_cost", { ascending: false });   // o melhor: julgar é o trabalho difícil
+          // O JUIZ CUSTA CONFORME O QUE ESTÁ EM JOGO.
+          //
+          // Julgar é trabalho difícil e o modelo caro julga melhor — por
+          // isso as REGRAS DURAS (peso 5) continuam a ter o melhor juiz
+          // disponível. Um veredicto errado sobre «não faz alegações de
+          // saúde» custa mais do que os cêntimos que se poupavam.
+          //
+          // Nas outras — tom, utilidade, ensinar em vez de despachar —
+          // um engano do juiz custa uma afinação desnecessária, e não
+          // vale seis vezes o preço. O mais barato de outra casa chega.
+          .order("input_cost", { ascending: (p.peso ?? 3) < 5 });
 
         const juiz = (candidatos ?? []).find((m) => casaDe(m.provider_model_id) !== casaDaResposta);
         if (!juiz) {
