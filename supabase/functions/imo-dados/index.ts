@@ -251,12 +251,54 @@ Deno.serve(async (req) => {
     if (l) licenca = { pode: !!l.pode, atribuicao: l.atribuicao ?? null };
   }
 
+  // ---- HISTÓRICO: como o €/m² desta zona se moveu -------------------
+  //
+  // O gráfico de tendência do relatório vinha do modelo, e o prompt
+  // convidava-o a citar «relatórios Idealista/Confidencial Imobiliário».
+  // Ou seja: uma série atribuída a uma entidade com quem a Terrae tem
+  // contrato, produzida por um modelo em vez de vir dos dados que
+  // pagámos. Agora que os benchmarks ficam datados, sai daqui.
+  //
+  // Ao MESMO nível geográfico que o benchmark escolhido — subir de nível
+  // a meio da série faria o valor «mover-se» por mudança de zona e não
+  // por mudança de mercado, que é exatamente a mentira que este gráfico
+  // não pode contar.
+  //
+  // Hoje há um só período: devolve-se lista vazia, e vazio é a resposta
+  // certa. Uma linha entre dois pontos inventados seria pior do que não
+  // ter gráfico. O histórico acumula-se a cada importação.
+  let historico: Array<{ periodo: string; eur_m2: number; amostra: number | null }> = [];
+  if (b) {
+    const { data: serie } = await db.from("imo_benchmarks")
+      .select("periodo, eur_m2_medio, eur_m2_mediano, n_transacoes, extra")
+      .eq("geografia_id", b.geografia_id)
+      .eq("tipo_imovel", b.tipo_imovel ?? "")
+      .eq("tipologia", b.tipologia ?? "")
+      .eq("fonte_id", b.fonte_id)
+      .order("periodo", { ascending: true });
+
+    historico = (serie ?? [])
+      // Um derivado no meio de uma série de reais é uma mudança de
+      // método, não de mercado. Fora.
+      .filter((s) => !(s.extra as Record<string, unknown> | null)?.derivado)
+      .map((s) => ({
+        periodo: s.periodo,
+        eur_m2: Math.round(Number(s.eur_m2_mediano ?? s.eur_m2_medio)),
+        amostra: s.n_transacoes,
+      }))
+      .filter((s) => s.eur_m2 > 0);
+  }
+
   // Vendas reais da Terrae na mesma geografia. É o dado de maior valor e
   // o único que mais ninguém tem.
   const { data: vendas } = geoId
     ? await db.from("imo_transacoes")
         .select("referencia, tipo, tipologia, area, preco_transacao, data_transacao, caracteristicas")
         .eq("geografia_id", geoId)
+        // SÓ ESCRITURAS. Um preço de tabela de promotor a ancorar com
+        // 50% do peso é a confusão pedido/escritura a entrar pela porta
+        // dos dados, depois de a termos fechado no cálculo.
+        .eq("natureza", "escritura")
         .order("data_transacao", { ascending: false }).limit(10)
     : { data: [] };
 
@@ -306,6 +348,10 @@ Deno.serve(async (req) => {
       }
       : null,
     vendas_terrae: vendas ?? [],
+    // A série do €/m² desta zona, ao nível a que o benchmark foi
+    // encontrado. Com menos de 3 pontos não há tendência para mostrar —
+    // quem consome decide, mas a contagem vai declarada.
+    historico: historico,
     // Se não há amostra válida, quem chama tem de pesquisar e devolver
     // os comparáveis com `?guardar=1`. É a primeira avaliação da zona que
     // paga a pesquisa; as seguintes reutilizam.

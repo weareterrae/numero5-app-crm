@@ -62,9 +62,20 @@ export default async function VendasPage() {
       <FormularioVenda />
 
       <div className="rounded-xl border border-line bg-white">
-        <div className="flex items-center justify-between border-b border-line px-5 py-3">
-          <p className="text-sm font-bold">Registadas</p>
-          <p className="text-xs text-soft">{lista.length}</p>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3">
+          <div>
+            <p className="text-sm font-bold">Registadas</p>
+            <p className="text-xs text-soft">
+              {lista.length} · quando fechar uma venda, a cláusula 3 do contrato SIR
+              obriga a comunicá-la à IMOESTATÍSTICA nesse mês. Sai daqui.
+            </p>
+          </div>
+          <a
+            href="/api/imo/vendas/exportar"
+            className="rounded-full border-2 border-line px-4 py-2 text-sm font-bold text-grey transition hover:text-ink"
+          >
+            ⬇ CSV do mês passado
+          </a>
         </div>
 
         {lista.length === 0 ? (
