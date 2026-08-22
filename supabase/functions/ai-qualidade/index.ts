@@ -89,106 +89,148 @@ Deno.serve(async (req) => {
   const { data: perguntas } = await db
     .from("ai_perguntas_referencia").select("*").eq("ativo", true);
 
+  // As perguntas sao independentes: correm em PARALELO, em lotes.
+  //
+  // Em serie, oito perguntas levavam mais de 300s (cada uma sao duas
+  // chamadas a modelos) e nao cabiam no prazo do agendador - so tres
+  // chegavam ao fim. Em lotes de tres, cabem com folga e nao se martela
+  // nenhum fornecedor.
+  const LOTE = 3;
   const saida: unknown[] = [];
 
-  for (const p of perguntas ?? []) {
-    const { data: assistente } = await db
-      .from("ai_assistants").select("allowed_domains").eq("assistant_key", p.assistant_key).maybeSingle();
-    const origem = (assistente?.allowed_domains ?? [])[0] ?? "https://numerocinco.pt";
+  async function avaliar(p: any) {
+      const { data: assistente } = await db
+        .from("ai_assistants").select("allowed_domains").eq("assistant_key", p.assistant_key).maybeSingle();
+      const origem = (assistente?.allowed_domains ?? [])[0] ?? "https://numerocinco.pt";
 
-    let registo: Record<string, unknown> = { pergunta_id: p.id };
+      let registo: Record<string, unknown> = { pergunta_id: p.id };
 
-    try {
-      // ---- 1. a resposta REAL, pelo caminho real
-      const r = await pedirAoGateway({
-        assistant_key: p.assistant_key,
-        ...(p.system ? { system: p.system } : {}),
-        messages: [{ role: "user", content: p.pergunta }],
-      }, origem);
+      try {
+        // ---- 1. a resposta REAL, pelo caminho real
+        const r = await pedirAoGateway({
+          assistant_key: p.assistant_key,
+          ...(p.system ? { system: p.system } : {}),
+          messages: [{ role: "user", content: p.pergunta }],
+        }, origem);
 
-      if (r.erro || !r.texto.trim()) {
-        registo.erro = r.erro ?? "resposta vazia";
+        if (r.erro || !r.texto.trim()) {
+          registo.erro = r.erro ?? "resposta vazia";
+          await db.from("ai_avaliacoes").insert(registo);
+          saida.push({ pergunta: p.nome, erro: registo.erro });
+          return;
+        }
+
+        // Que modelo respondeu — é isso que decide quem pode julgar.
+        //
+        // O registo do pedido é escrito DEPOIS de o fluxo fechar, em segundo
+        // plano. Ler já a seguir apanha-o a meio e fica sem modelo: na
+        // primeira corrida, duas avaliações ficaram sem saber quem tinha
+        // respondido, e sem isso não se pode garantir que o juiz é de outra
+        // casa. Dá-se-lhe tempo, e tenta-se de novo.
+        let pedido: any = null;
+        for (let tenta = 0; tenta < 3 && r.requestId && !pedido; tenta++) {
+          if (tenta) await new Promise((s) => setTimeout(s, 1500));
+          const { data } = await db.from("ai_requests")
+            .select("provider_id, provider_model_id, estimated_cost")
+            .eq("request_id", r.requestId).maybeSingle();
+          pedido = data;
+        }
+
+        registo = {
+          ...registo,
+          modelo_resposta: pedido?.provider_model_id ?? null,
+          resposta: r.texto.slice(0, 8000),
+          latencia_ms: r.ms,
+          custo_usd: pedido?.estimated_cost ?? null,
+        };
+
+        // ---- 2. o juiz, obrigatoriamente de outra CASA
+        //
+        // Não basta olhar ao `provider_id`: esse é a ROTA, não a origem do
+        // modelo. O `global.openai.gpt-5.6-terra` chega pelo Bedrock mas é um
+        // modelo da OpenAI — pô-lo a julgar um `gpt-5.4-mini` é a mesma casa
+        // a dar-se nota, que é exatamente o que esta regra veio evitar.
+        // Aconteceu na primeira corrida.
+        const casaDe = (m: string) =>
+          /gemini/i.test(m) ? "google"
+          : /gpt|openai/i.test(m) ? "openai"
+          : /claude/i.test(m) ? "anthropic"
+          : "outra";
+
+        const casaDaResposta = casaDe(pedido?.provider_model_id ?? "");
+        const { data: candidatos } = await db
+          .from("ai_models")
+          .select("provider_id, provider_model_id")
+          .eq("status", "ACTIVE")
+          .order("input_cost", { ascending: false });   // o melhor: julgar é o trabalho difícil
+
+        const juiz = (candidatos ?? []).find((m) => casaDe(m.provider_model_id) !== casaDaResposta);
+        if (!juiz) {
+          registo.erro = "sem juiz de outro fornecedor disponível";
+          await db.from("ai_avaliacoes").insert(registo);
+          saida.push({ pergunta: p.nome, erro: registo.erro });
+          return;
+        }
+
+        const material =
+          `PERGUNTA:\n${p.pergunta}\n\nCRITÉRIOS:\n${p.criterios}\n\nRESPOSTA DADA:\n${r.texto}`;
+
+        const j = await pedirAoGateway({
+          assistant_key: "juiz-qualidade",
+          system: SYS_JUIZ,
+          response_format: "json",
+          max_output_tokens: 800,
+          messages: [{ role: "user", content: material }],
+        }, "https://app.numerocinco.pt");
+
+        let veredicto: any = null;
+        try { veredicto = JSON.parse(j.texto.replace(/^```json\s*|\s*```$/g, "").trim()); } catch { /* abaixo */ }
+
+        if (!veredicto || typeof veredicto.nota !== "number") {
+          registo.erro = "o juiz não devolveu veredicto utilizável";
+          await db.from("ai_avaliacoes").insert(registo);
+          saida.push({ pergunta: p.nome, erro: registo.erro });
+          return;
+        }
+
+        registo = {
+          ...registo,
+          modelo_juiz: juiz.provider_model_id,
+          nota: Math.max(0, Math.min(5, Math.round(veredicto.nota))),
+          justificacao: String(veredicto.justificacao ?? "").slice(0, 1000),
+          falhas: Array.isArray(veredicto.falhas) ? veredicto.falhas.map(String).slice(0, 10) : null,
+        };
+        await db.from("ai_avaliacoes").insert(registo);
+        saida.push({ pergunta: p.nome, assistente: p.assistant_key, nota: registo.nota });
+
+        // Uma nota baixa numa pergunta com peso alto é incidente. Não se
+        // espera pela tendência: se o assistente falhou o essencial, é agora.
+        if ((registo.nota as number) <= 2 && p.peso >= 3) {
+          await db.from("ai_incidents").insert({
+            tipo: "MODEL_UNHEALTHY", severidade: p.peso >= 4 ? "crit" : "warn",
+            titulo: `Qualidade: ${p.assistant_key} teve ${registo.nota}/5 em "${p.nome}"`,
+            detalhe: { justificacao: registo.justificacao, falhas: registo.falhas },
+          });
+        }
+      } catch (e) {
+        registo.erro = String(e).slice(0, 300);
         await db.from("ai_avaliacoes").insert(registo);
         saida.push({ pergunta: p.nome, erro: registo.erro });
-        continue;
       }
+  }
 
-      // que modelo respondeu — para escolher um juiz de outra casa
-      const { data: pedido } = r.requestId
-        ? await db.from("ai_requests").select("provider_id, provider_model_id, estimated_cost")
-            .eq("request_id", r.requestId).maybeSingle()
-        : { data: null };
-
-      registo = {
-        ...registo,
-        modelo_resposta: pedido?.provider_model_id ?? null,
-        resposta: r.texto.slice(0, 8000),
-        latencia_ms: r.ms,
-        custo_usd: pedido?.estimated_cost ?? null,
-      };
-
-      // ---- 2. o juiz, obrigatoriamente de OUTRO fornecedor
-      const { data: modelosJuiz } = await db
-        .from("ai_models")
-        .select("provider_id, provider_model_id")
-        .eq("status", "ACTIVE")
-        .neq("provider_id", pedido?.provider_id ?? "nenhum")
-        .order("input_cost", { ascending: false })   // o melhor disponível: julgar é o trabalho difícil
-        .limit(1);
-
-      const juiz = modelosJuiz?.[0];
-      if (!juiz) {
-        registo.erro = "sem juiz de outro fornecedor disponível";
-        await db.from("ai_avaliacoes").insert(registo);
-        saida.push({ pergunta: p.nome, erro: registo.erro });
-        continue;
-      }
-
-      const material =
-        `PERGUNTA:\n${p.pergunta}\n\nCRITÉRIOS:\n${p.criterios}\n\nRESPOSTA DADA:\n${r.texto}`;
-
-      const j = await pedirAoGateway({
-        assistant_key: "juiz-qualidade",
-        system: SYS_JUIZ,
-        response_format: "json",
-        max_output_tokens: 800,
-        messages: [{ role: "user", content: material }],
-      }, "https://app.numerocinco.pt");
-
-      let veredicto: any = null;
-      try { veredicto = JSON.parse(j.texto.replace(/^```json\s*|\s*```$/g, "").trim()); } catch { /* abaixo */ }
-
-      if (!veredicto || typeof veredicto.nota !== "number") {
-        registo.erro = "o juiz não devolveu veredicto utilizável";
-        await db.from("ai_avaliacoes").insert(registo);
-        saida.push({ pergunta: p.nome, erro: registo.erro });
-        continue;
-      }
-
-      registo = {
-        ...registo,
-        modelo_juiz: juiz.provider_model_id,
-        nota: Math.max(0, Math.min(5, Math.round(veredicto.nota))),
-        justificacao: String(veredicto.justificacao ?? "").slice(0, 1000),
-        falhas: Array.isArray(veredicto.falhas) ? veredicto.falhas.map(String).slice(0, 10) : null,
-      };
-      await db.from("ai_avaliacoes").insert(registo);
-      saida.push({ pergunta: p.nome, assistente: p.assistant_key, nota: registo.nota });
-
-      // Uma nota baixa numa pergunta com peso alto é incidente. Não se
-      // espera pela tendência: se o assistente falhou o essencial, é agora.
-      if ((registo.nota as number) <= 2 && p.peso >= 3) {
-        await db.from("ai_incidents").insert({
-          tipo: "MODEL_UNHEALTHY", severidade: p.peso >= 4 ? "crit" : "warn",
-          titulo: `Qualidade: ${p.assistant_key} teve ${registo.nota}/5 em "${p.nome}"`,
-          detalhe: { justificacao: registo.justificacao, falhas: registo.falhas },
-        });
-      }
-    } catch (e) {
-      registo.erro = String(e).slice(0, 300);
-      await db.from("ai_avaliacoes").insert(registo);
-      saida.push({ pergunta: p.nome, erro: registo.erro });
-    }
+  const lista = perguntas ?? [];
+  for (let i = 0; i < lista.length; i += LOTE) {
+    await Promise.all(lista.slice(i, i + LOTE).map((p) =>
+      // Um erro aqui não pode desaparecer: engolir a exceção fazia uma
+      // pergunta sumir da corrida sem deixar rasto, e ficava a parecer que
+      // nunca tinha sido feita. Grava-se o motivo como qualquer outra
+      // falha, para se poder ver o que aconteceu.
+      avaliar(p).catch(async (e) => {
+        const motivo = String(e?.message ?? e).slice(0, 300);
+        await db.from("ai_avaliacoes").insert({ pergunta_id: p.id, erro: motivo });
+        saida.push({ pergunta: p.nome, erro: motivo });
+      })));
   }
 
   const notas = saida.filter((x: any) => typeof x.nota === "number").map((x: any) => x.nota);
