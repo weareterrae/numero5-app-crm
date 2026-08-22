@@ -45,6 +45,10 @@ function investigar(gw: Gateway, args: any) {
 function montar(provider: any) {
   const gw = Object.create(Gateway.prototype) as Gateway;
   (gw as any).registry = { providerFor: async () => provider };
+  // A investigação regista a saúde de cada modelo que tenta — é assim que o
+  // disjuntor aprende que o modelo da frente está doente.
+  (gw as any).router = { record: async () => {} };
+  (gw as any).deps = { background: (p: Promise<unknown>) => { void p; } };
   return gw;
 }
 
@@ -149,5 +153,62 @@ describe("investigação em várias passagens", () => {
     const p = fornecedorEspiao(["a", "b", "c", "d", "e", "f"]);
     await investigar(montar(p), { ...base, passos: 99 });
     expect(p.pedidos.length).toBeLessThanOrEqual(4);
+  });
+});
+
+describe("a pesquisa também tem rede", () => {
+  // Era a única parte do sistema sem fallback. Bastava o modelo da frente
+  // devolver um 503 para a investigação morrer e o relatório sair sem uma
+  // única fonte — com ar de bom. A 22/08/2026 o gemini-pro em sobrecarga
+  // fez isso em 39 de 99 relatórios.
+  function doisModelos() {
+    const tentados: string[] = [];
+    const provider = {
+      generate: async (o: any) => {
+        tentados.push(o.model);
+        if (o.model === "mau") return { ok: false, text: "", status: 503, kind: "transient" as const };
+        return {
+          ok: true, text: "factos", status: 200, kind: "ok" as const,
+          groundingUsed: true, groundingSources: 2, groundingUris: ["a.pt", "b.pt"],
+          usage: { input: 10, output: 5 },
+        };
+      },
+      stream: vi.fn(),
+    };
+    const gw = montar(provider);
+    return { gw, tentados };
+  }
+
+  const cadeiaDupla = [
+    { model: { provider_id: "google", provider_model_id: "mau", supports_grounding: true } },
+    { model: { provider_id: "google", provider_model_id: "bom", supports_grounding: true } },
+  ];
+
+  it("se o melhor modelo falhar, tenta o seguinte na mesma passagem", async () => {
+    const { gw, tentados } = doisModelos();
+    const r = await investigar(gw, { ...base, cadeia: cadeiaDupla, passos: 1 });
+    expect(tentados).toEqual(["mau", "bom"]);
+    expect(r).not.toBeNull();
+    expect(r.fontes).toBe(2);
+  });
+
+  it("mantém a ordem: o melhor primeiro, sempre", async () => {
+    const { gw, tentados } = doisModelos();
+    await investigar(gw, { ...base, cadeia: cadeiaDupla, passos: 2 });
+    // duas passagens, e cada uma volta a começar pelo melhor
+    expect(tentados).toEqual(["mau", "bom", "mau", "bom"]);
+  });
+
+  it("ignora modelos que não sabem pesquisar", async () => {
+    const { gw, tentados } = doisModelos();
+    await investigar(gw, {
+      ...base,
+      cadeia: [
+        { model: { provider_id: "openai", provider_model_id: "sem-pesquisa", supports_grounding: false } },
+        ...cadeiaDupla,
+      ],
+      passos: 1,
+    });
+    expect(tentados).not.toContain("sem-pesquisa");
   });
 });

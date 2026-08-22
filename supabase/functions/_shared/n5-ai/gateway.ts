@@ -302,14 +302,17 @@ export class Gateway {
     { system: string; mensagens: N5Message[]; usou: boolean; fontes: number; usage?: TokenUsage }
     | null
   > {
-    const passo1 = a.cadeia.find((c) => (c.model as any).supports_grounding);
-    if (!passo1) return null;
+    // TODOS os modelos que sabem pesquisar, por ordem de qualidade — não só
+    // o primeiro. A investigação é a parte que decide se um relatório vale
+    // alguma coisa, e era a única do sistema sem rede: bastava o modelo da
+    // frente devolver um 503 para a pesquisa morrer ali e o relatório sair
+    // sem uma única fonte. Medido a 22/08/2026: o gemini-pro em sobrecarga
+    // fez isso em 39 de 99 relatórios.
+    const comPesquisa = a.cadeia.filter((c) => (c.model as any).supports_grounding);
+    if (!comPesquisa.length) return null;
 
     const pergunta = [...a.mensagens].reverse().find((m) => m.role === "user")?.content;
     if (!pergunta) return null;
-
-    let provider;
-    try { provider = await this.registry.providerFor(passo1.model.provider_id); } catch { return null; }
 
     // O system da investigação é deliberadamente CURTO e sem uma palavra
     // sobre formato: qualquer instrução de JSON aqui volta a desligar a
@@ -334,22 +337,37 @@ export class Gateway {
         : "";
       const instrucao = passos > 1 ? "\n\nNESTA PASSAGEM: " + Gateway.ANGULOS[p] : "";
 
+      // Cada passagem tenta os modelos por ordem até um responder. Assim a
+      // qualidade continua a vir do melhor modelo quando ele está bom, e uma
+      // sobrecarga dele deixa de custar a pesquisa toda.
       let r;
-      try {
-        r = await provider.generate({
-          model: passo1.model.provider_model_id,
-          system: sysInvestigar,
-          messages: [{ role: "user", content: anterior + "PEDIDO:\n" + pergunta + instrucao }],
-          maxOutputTokens: 4000,
-          temperature: 0.3,
-          grounding: true,
-          jsonMode: false,
-          tokenHeadroom: 6000,
-          timeoutMs: TIMEOUT_GROUNDING_MS,
-        });
-      } catch { break; }
+      for (const passo of comPesquisa) {
+        let provider;
+        try { provider = await this.registry.providerFor(passo.model.provider_id); } catch { continue; }
+        try {
+          r = await provider.generate({
+            model: passo.model.provider_model_id,
+            system: sysInvestigar,
+            messages: [{ role: "user", content: anterior + "PEDIDO:\n" + pergunta + instrucao }],
+            maxOutputTokens: 4000,
+            temperature: 0.3,
+            grounding: true,
+            jsonMode: false,
+            tokenHeadroom: 6000,
+            timeoutMs: TIMEOUT_GROUNDING_MS,
+          });
+        } catch { r = undefined; continue; }
+        // Uma resposta sem fontes não serve de pesquisa: se o modelo
+        // respondeu de memória, o seguinte ainda pode ir mesmo procurar.
+        if (r.ok && r.text.trim()) {
+          this.deps.background(this.router.record(passo.model, true, r.status));
+          break;
+        }
+        this.deps.background(this.router.record(passo.model, false, r.status ?? 0));
+        r = undefined;
+      }
 
-      if (!r.ok || !r.text.trim()) break;   // fica-se com o que já se apurou
+      if (!r) break;   // nenhum modelo respondeu: fica-se com o já apurado
 
       apurado.push(r.text.trim());
       for (const u of r.groundingUris ?? []) fontesTodas.add(u);
