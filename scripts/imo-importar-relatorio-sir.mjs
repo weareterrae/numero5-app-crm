@@ -157,16 +157,33 @@ for (const l of linhas) {
 }
 
 // ---------------------------------------------------------------------
-// Também ao nível da freguesia, com os indicadores dela. É o degrau de
-// recurso: quando a microzona não servir, é aqui que a hierarquia pousa.
+// E TAMBÉM ao nível da freguesia — todos, não só o geral.
+//
+// A microzona do SIR é um retângulo desenhado à mão. Ninguém escreve o
+// nome de um retângulo numa avaliação, e a hierarquia só sobe: os valores
+// por tipologia ficavam presos num nível que nada alcança. Um benchmark
+// inalcançável não serve para nada.
+//
+// Atribuí-los à freguesia é defensável porque foi a própria plataforma
+// que os enquadrou nela — o relatório declara «Freguesia: UF Cascais e
+// Estoril» na mesma página. Fica registado em `extra` que vieram de uma
+// área desenhada que a aproxima, para ninguém os tomar por uma medição
+// exata dos limites administrativos.
 // ---------------------------------------------------------------------
-await sb.from("imo_benchmarks").upsert({
-  ...base,
+const naFreguesia = linhas.map((l) => ({
+  ...l,
   geografia_id: fregId,
-  tipo_imovel: "", tipologia: "",
-  eur_m2_medio: R.eur_m2.media, eur_m2_p25: R.eur_m2.p25, eur_m2_p75: R.eur_m2.p75,
-  dispersao: Number((((R.eur_m2.p75 - R.eur_m2.p25) / 2) / R.eur_m2.media).toFixed(4)),
-}, { onConflict: "fonte_id,geografia_id,tipo_imovel,tipologia,periodo" });
+  extra: { ...l.extra, origem: "microzona desenhada que aproxima esta freguesia" },
+}));
+
+let okFreg = 0;
+for (const l of naFreguesia) {
+  const { error } = await sb.from("imo_benchmarks").upsert(l, {
+    onConflict: "fonte_id,geografia_id,tipo_imovel,tipologia,periodo",
+  });
+  if (!error) okFreg++;
+}
+console.log(`\n${okFreg} replicados ao nível da freguesia (é onde a hierarquia os alcança)`);
 
 console.log(`\n${ok + 1} benchmarks · amostra ${R.amostra} imóveis`);
 console.log(`price gap ${(R.freguesia_indicadores.price_gap * 100).toFixed(1)}% · ` +
