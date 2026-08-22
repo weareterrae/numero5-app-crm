@@ -31,6 +31,13 @@ const TIMEOUT_TENTATIVA_MS = 12_000;
  *  vai à net, lê fontes e só depois escreve. As Edge Functions dão 400s
  *  de wall-clock em plano pago, por isso há folga de sobra. */
 const TIMEOUT_GROUNDING_MS = 90_000;
+/**
+ * Escrever um relatório inteiro em JSON não se compara a responder num chat.
+ * O Mapa de Oportunidade da Terrae passa dos 5000 tokens de saída e leva
+ * minutos. Com o limite dos chats (12s) abortava sempre a meio — e o pedaço
+ * já escrito era servido como se estivesse completo.
+ */
+const TIMEOUT_RELATORIO_MS = 240_000;
 
 export type GatewayDeps = {
   db: DbClient;
@@ -175,6 +182,14 @@ export class Gateway {
     // Consequência: a cadeia encolhe aos modelos que sabem pesquisar (só os
     // do Google, hoje). Se nenhum estiver de pé, é melhor falhar aqui do que
     // servir números inventados com ar de relatório.
+    // ...e pode DISPENSÁ-LA. A política dos relatórios liga a pesquisa em
+    // todas as regras, mas o Mapa de Oportunidade tem um primeiro passo
+    // deliberadamente rápido, sem pesquisa, para o visitante ver algo em
+    // segundos. Sem esta recusa explícita, esse passo herdava a pesquisa da
+    // política e demorava um minuto — deixava de ser o passo rápido.
+    if (req.grounding === false) {
+      cadeia = cadeia.map((c) => ({ ...c, grounding: false }));
+    }
     if (req.grounding === true) {
       const comPesquisa = cadeia.filter((c) => (c.model as any).supports_grounding);
       if (comPesquisa.length === 0) {
@@ -201,7 +216,23 @@ export class Gateway {
       return this.erroSSE(requestId, "system_nao_permitido",
         "Este assistente nao aceita system do chamador.");
     }
-    const system = systemDinamico ? req.system!.trim() : await this.systemPrompt(assistant);
+    // Quando existem os dois, COMPÕEM-SE, com o do registo à frente. Não é
+    // arrumação: é o que faz o caching funcionar.
+    //
+    // Os fornecedores cacheiam PREFIXOS byte a byte. Um prefixo estável e
+    // longo custa quase nada a repetir; um que mude a cada pedido paga
+    // sempre preço inteiro. Medido no Joaquim da Terrae, 36 mil tokens de
+    // system: $0,0032 com cache contra $0,0277 sem — 8,7 vezes.
+    //
+    // Por isso a persona (estável, nossa, no registo) vai primeiro e a
+    // parte variável do site (currículo, aula, catálogo) vem depois. Ao
+    // contrário, a parte que muda envenenava o prefixo e ninguém
+    // aproveitaria o cache.
+    const doRegisto = await this.systemPrompt(assistant);
+    const doChamador = systemDinamico ? req.system!.trim() : "";
+    const system = doRegisto && doChamador
+      ? doRegisto + "\n\n" + doChamador
+      : (doChamador || doRegisto);
 
     // JSON: idem — so se o assistente estiver marcado para isso.
     const querJson = req.response_format === "json";
@@ -446,7 +477,7 @@ export class Gateway {
             // A regra de routing manda sobre o assistente: uma classe de
             // diagnóstico precisa de mais tokens e de pesquisa do que o
             // teto genérico do assistente permite.
-            const it = provider.stream({
+            const opcoes = {
               model: model.provider_model_id,
               system: a.system,
               messages: a.mensagens,
@@ -458,25 +489,53 @@ export class Gateway {
               temperature: temperature ?? Number(a.assistant.temperature),
               grounding,
               tokenHeadroom,
-              // Pesquisa web e JSON grande demoram mais do que um chat.
-              timeoutMs: grounding ? TIMEOUT_GROUNDING_MS : TIMEOUT_TENTATIVA_MS,
-            });
+              // 12s chega a um chat. Não chega a escrever um relatório: a
+              // formatação de um Mapa de Oportunidade leva minutos, abortava
+              // a meio, e o pedaço já escrito era servido como se estivesse
+              // completo.
+              timeoutMs: (grounding || a.jsonMode) ? TIMEOUT_RELATORIO_MS : TIMEOUT_TENTATIVA_MS,
+            };
 
             let deuAlgo = false;
-            let res = await it.next();
-            while (!res.done) {
-              const chunk = res.value;
-              if (chunk.type === "delta") {
-                if (ttft === undefined) ttft = Date.now() - a.t0;
+            let final;
+
+            if (a.jsonMode) {
+              // ---- RELATÓRIOS: de uma vez, nunca aos pedaços -------------
+              //
+              // Streaming e fallback não se dão. Se um modelo falha a meio,
+              // já enviámos metade da resposta dele — e o modelo seguinte
+              // começa do princípio, ficando as duas coladas. Foi exatamente
+              // isso que se mediu: um JSON com 77 chavetas abertas e 74
+              // fechadas, dois relatórios parciais um a seguir ao outro, que
+              // o motor da Terrae rejeitava.
+              //
+              // Um relatório não é lido enquanto escorre; é lido no fim. Por
+              // isso pede-se inteiro: se falhar, ninguém viu nada e o modelo
+              // seguinte pode tentar de verdade.
+              final = await provider.generate(opcoes);
+              if (final.ok && final.text) {
+                ttft = ttft ?? Date.now() - a.t0;
                 deuAlgo = true;
-                texto += chunk.text;
-                send({ type: "delta", text: chunk.text });
-              } else if (chunk.type === "usage") {
-                usage = chunk.usage;
+                texto += final.text;
+                send({ type: "delta", text: final.text });
               }
-              res = await it.next();
+            } else {
+              const it = provider.stream(opcoes);
+              let res = await it.next();
+              while (!res.done) {
+                const chunk = res.value;
+                if (chunk.type === "delta") {
+                  if (ttft === undefined) ttft = Date.now() - a.t0;
+                  deuAlgo = true;
+                  texto += chunk.text;
+                  send({ type: "delta", text: chunk.text });
+                } else if (chunk.type === "usage") {
+                  usage = chunk.usage;
+                }
+                res = await it.next();
+              }
+              final = res.value;
             }
-            const final = res.value;
 
             tentativas.push({
               provider_id: model.provider_id, provider_model_id: model.provider_model_id,
@@ -502,7 +561,18 @@ export class Gateway {
               if (!usage && final.usage) usage = final.usage;
               break;
             }
-            // falhou: continua para o modelo seguinte (fallback silencioso)
+            // Falhou DEPOIS de já ter enviado texto: não se pode trocar de
+            // modelo aqui. O visitante já leu meia resposta e o modelo
+            // seguinte começaria do princípio — ficariam as duas coladas,
+            // que foi como um relatório saiu com 77 chavetas abertas e 74
+            // fechadas. Mais vale parar e deixar o site servir pelo caminho
+            // dele do que entregar uma resposta remendada.
+            if (deuAlgo) {
+              send({ type: "error", code: "corte_a_meio", message: "Resposta interrompida." });
+              break;
+            }
+            // falhou sem ter enviado nada: o modelo seguinte pode tentar
+            // limpo, e ninguém deu por isso.
           } catch (e) {
             tentativas.push({
               provider_id: model.provider_id, provider_model_id: model.provider_model_id,

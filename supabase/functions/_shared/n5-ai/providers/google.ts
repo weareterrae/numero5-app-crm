@@ -40,6 +40,17 @@ export class GoogleProvider implements AIProvider {
     // `generate`/`stream` — ver `semThinking`.
     if (/flash/i.test(opts.model) && !opts.semThinking) {
       generationConfig.thinkingConfig = { thinkingBudget: 0 };
+    } else if (/pro/i.test(opts.model) && opts.jsonMode && !opts.grounding && !opts.semThinking) {
+      // O Pro pensa sempre — e o pensamento sai do MESMO orçamento que a
+      // resposta. A formatar um relatório isso corta o JSON no fim: medido
+      // a 22/08/2026, 70 chavetas abertas e 69 fechadas, faltava a última.
+      // O motor da Terrae rejeitava tudo e o Mapa de Oportunidade nunca
+      // chegava ao ecrã.
+      //
+      // Aqui não há nada para raciocinar: os factos já vêm apurados da
+      // pesquisa e este passo só os arruma em JSON. Um orçamento pequeno
+      // (não zero, que o Pro recusa com 400) devolve o espaço à resposta.
+      generationConfig.thinkingConfig = { thinkingBudget: 128 };
     }
     // Saída estruturada: o modelo devolve JSON válido em vez de prosa.
     //
