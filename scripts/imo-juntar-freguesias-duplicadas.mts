@@ -20,7 +20,7 @@
 // sistema resolve a geografia, e mudá-los de sítio é o que mais arrisca.
 import { readFileSync } from "node:fs";
 import { createClient } from "@supabase/supabase-js";
-import { casarFreguesia } from "../lib/imo/casar-freguesia.ts";
+import { casarFreguesia, lugares } from "../lib/imo/casar-freguesia.ts";
 
 const env = Object.fromEntries(
   readFileSync(new URL("../.env.local", import.meta.url), "utf8")
@@ -64,7 +64,43 @@ for (const c of concelhos) {
   }
 }
 
-if (!pares.length) { console.log("Nenhuma freguesia duplicada."); process.exit(0); }
+// ---------------------------------------------------------------------
+// PARECIDAS — o que a máquina não pode decidir sozinha
+//
+// «UF Sintra (S P Penaf., S Maria e S Miguel)» e «União das Freguesias de
+// Sintra (Santa Maria e São Miguel, São Martinho e São Pedro de
+// Penaferrim)» são a mesma freguesia, e nenhum código honesto o conclui:
+// expandir «S Maria» para Santa Maria é adivinhar.
+//
+// Então não se adivinha — assinala-se. Partilham um lugar e não casam:
+// uma pessoa que conheça o concelho decide em três segundos.
+// ---------------------------------------------------------------------
+const parecidas: Array<[string, string, string]> = [];
+for (const c of concelhos) {
+  const irmas = freguesias.filter((f) => f.pai_id === c.id);
+  const duplicada = new Set(pares.flatMap((p) => [p.fica.id, p.sai.id]));
+  for (let i = 0; i < irmas.length; i++) {
+    for (let j = i + 1; j < irmas.length; j++) {
+      const [a, b] = [irmas[i], irmas[j]];
+      if (duplicada.has(a.id) && duplicada.has(b.id)) continue;   // já é par
+      const la = lugares(a.nome), lb = lugares(b.nome);
+      if (la.some((x) => lb.includes(x))) parecidas.push([c.nome, a.nome, b.nome]);
+    }
+  }
+}
+
+function avisarParecidas() {
+  if (!parecidas.length) return;
+  console.log(`\n${parecidas.length} par(es) PARECIDOS — decida a olho, não são fundidos:`);
+  for (const [c, a, b] of parecidas) {
+    console.log(`  ${c}`);
+    console.log(`    · ${a}`);
+    console.log(`    · ${b}`);
+  }
+  console.log("  Se forem a mesma, apague a errada e volte a importar o relatório.");
+}
+
+if (!pares.length) { console.log("Nenhuma freguesia duplicada."); avisarParecidas(); process.exit(0); }
 
 console.log(`${pares.length} duplicação(ões)\n`);
 for (const p of pares) {
@@ -107,4 +143,5 @@ for (const p of pares) {
     (eD ? ` · órfã NÃO apagada: ${eD.message}` : " · órfã apagada"));
 }
 
+avisarParecidas();
 if (!juntar) console.log("\nNada foi alterado. Para juntar:  --juntar");

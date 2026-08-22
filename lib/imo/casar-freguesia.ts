@@ -56,13 +56,16 @@ export function chave(s: string): string {
  */
 export function lugares(nome: string): string[] {
   const semPrefixo = chave(nome)
+    // Os parênteses do SIR enumeram membros, não são um comentário:
+    // «UF Sintra (S P Penaf., S Maria e S Miguel)». Valem como vírgulas.
+    .replace(/[()]/g, ",")
     .replace(/^(uf|ufr)\s+/, "")
     .replace(/^uniao\s+(das|de)\s+freguesias\s+(de\s+)?/, "")
     .replace(/^freguesia\s+(de\s+)?/, "");
 
   return semPrefixo
     .split(/\s*,\s*|\s+e\s+/)
-    .map((p) => p.trim())
+    .map((p) => p.trim().replace(/\.$/, ""))
     .filter(Boolean);
 }
 

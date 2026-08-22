@@ -90,6 +90,27 @@ describe("como se partem os nomes", () => {
       .toEqual(["oeiras", "sao juliao da barra", "paco de arcos", "caxias"]);
   });
 
+  it("os parênteses do SIR enumeram membros, não comentam", () => {
+    expect(lugares("UF Sintra (S P Penaf., S Maria e S Miguel)"))
+      .toEqual(["sintra", "s p penaf", "s maria", "s miguel"]);
+  });
+
+  it("abreviaturas NÃO se expandem — e por isso não casam", () => {
+    // «S Maria» pode ser Santa Maria ou São Maria; «S P Penaf.» é São
+    // Pedro de Penaferrim para quem conhece Sintra e ilegível para quem
+    // não conhece. Expandir isto é adivinhar, e adivinhar geografia põe
+    // preços de um sítio numa casa de outro.
+    //
+    // Fica registado que não casa DE PROPÓSITO: o script de duplicados
+    // assinala o par como «parecidas» e uma pessoa decide.
+    const oficial = [{
+      id: "s",
+      nome: "União das Freguesias de Sintra (Santa Maria e São Miguel, São Martinho e São Pedro de Penaferrim)",
+    }];
+    expect(casarFreguesia("UF Sintra (S P Penaf., S Maria e S Miguel)", oficial).tipo)
+      .toBe("nenhuma");
+  });
+
   it("tira os prefixos todos", () => {
     for (const p of ["UF Palmela", "União das Freguesias de Palmela",
                      "União de Freguesias de Palmela", "Freguesia de Palmela", "Palmela"]) {
