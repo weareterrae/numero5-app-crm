@@ -34,6 +34,22 @@ export type ChatRequest = {
   hint_class?: RequestClass;
   metadata?: Record<string, unknown>;
   lang?: string;
+  /**
+   * Pede saída em JSON. Só honrado se o assistente tiver `permite_json`.
+   * Sem isto, modos de avaliação/diagnóstico devolvem prosa e o
+   * JSON.parse do chamador rebenta.
+   */
+  response_format?: "text" | "json";
+  /**
+   * System prompt vindo do chamador, para assistentes cujo prompt é
+   * gerado a partir de dados (ex.: cenários da Academia).
+   * ⚠️ Quem controla o system controla o assistente. Só é aceite se
+   * `permite_system_dinamico` estiver ligado NESSE assistente — e a
+   * chamada continua a passar pela allowlist de origem.
+   */
+  system?: string;
+  /** Teto de saída pedido pelo chamador; limitado pelo do assistente. */
+  max_output_tokens?: number;
 };
 
 /** Eventos do stream. Contrato simples e estável. */
@@ -126,6 +142,14 @@ export type GenerateOptions = {
    * maxOutputTokens é um TETO, não um gasto: dar folga é seguro.
    */
   tokenHeadroom?: number;
+  /**
+   * Saída estruturada. Não é um caso especial: TODOS os assistentes a
+   * sério têm um modo estruturado além da conversa — o Mestre resume
+   * leads, a Academia pontua consultores, a Terrae devolve diagnósticos.
+   * Sem isto, esses modos devolvem prosa em vez de JSON e falham em
+   * silêncio (o `JSON.parse` do chamador rebenta ou devolve lixo).
+   */
+  jsonMode?: boolean;
   /** Corta ligações penduradas. Sempre definido pelo chamador. */
   timeoutMs: number;
   signal?: AbortSignal;

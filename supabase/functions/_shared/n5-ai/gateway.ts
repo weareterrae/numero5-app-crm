@@ -155,12 +155,30 @@ export class Gateway {
 
     // ---- 6. montar o pedido (prompt do registo, nunca do browser)
     const mensagens = this.trim(req.messages, assistant);
-    const system = await this.systemPrompt(assistant);
+
+    // System: do registo por omissao. So aceita o do chamador se ESTE
+    // assistente o permitir — quem controla o system controla o
+    // assistente, por isso nao e um poder geral.
+    const querSystem = typeof req.system === "string" && req.system.trim().length > 0;
+    const systemDinamico = querSystem && !!(assistant as any).permite_system_dinamico;
+    if (querSystem && !systemDinamico) {
+      return this.erroSSE(requestId, "system_nao_permitido",
+        "Este assistente nao aceita system do chamador.");
+    }
+    const system = systemDinamico ? req.system!.trim() : await this.systemPrompt(assistant);
+
+    // JSON: idem — so se o assistente estiver marcado para isso.
+    const querJson = req.response_format === "json";
+    if (querJson && !(assistant as any).permite_json) {
+      return this.erroSSE(requestId, "json_nao_permitido",
+        "Este assistente nao aceita saida estruturada.");
+    }
 
     // ---- 7. executar com streaming e fallback silencioso
     const gatewayMs = Date.now() - t0;
     return this.executar({
       requestId, traceId, assistant, cadeia, mensagens, system, cls, gatewayMs, t0,
+      jsonMode: querJson, systemDinamico, tetoPedido: req.max_output_tokens,
     });
   }
 
@@ -171,6 +189,7 @@ export class Gateway {
     cadeia: { model: ModelRow; role: string; reason: string }[];
     mensagens: N5Message[]; system: string; cls: RequestClass;
     gatewayMs: number; t0: number;
+    jsonMode: boolean; systemDinamico: boolean; tetoPedido?: number;
   }): Promise<Response> {
     const enc = new TextEncoder();
     const self = this;
@@ -216,7 +235,11 @@ export class Gateway {
               model: model.provider_model_id,
               system: a.system,
               messages: a.mensagens,
-              maxOutputTokens: maxOutputTokens ?? a.assistant.max_output_tokens,
+              maxOutputTokens: Math.min(
+                a.tetoPedido ?? maxOutputTokens ?? a.assistant.max_output_tokens,
+                maxOutputTokens ?? a.assistant.max_output_tokens,
+              ),
+              jsonMode: a.jsonMode,
               temperature: temperature ?? Number(a.assistant.temperature),
               grounding,
               tokenHeadroom,
@@ -310,6 +333,7 @@ export class Gateway {
           input_tokens: usage?.input, output_tokens: usage?.output, cached_tokens: usage?.cached,
           estimated_cost: custo, ttft_ms: ttft, total_latency_ms: total,
           grounding_pedido: groundingPedido, grounding_usado: groundingReal, grounding_fontes: fontesUsadas,
+          json_mode: a.jsonMode, system_dinamico: a.systemDinamico,
           gateway_ms: a.gatewayMs, status: "ok", streamed: true,
         });
         if (custo) self.deps.background(self.budgets.commit(a.assistant.org_id, a.assistant.id, custo));

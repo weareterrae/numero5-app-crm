@@ -48,6 +48,9 @@ export class OpenAIProvider implements AIProvider {
     // diferente do valor por omissão com HTTP 400. Só a enviamos quando
     // é pedida explicitamente — apanhado nas probes a 22/08/2026.
     if (opts.temperature !== undefined) body.temperature = opts.temperature;
+    // Saida estruturada. O prompt TEM de pedir JSON explicitamente, senao a
+    // OpenAI recusa com 400 — por isso o gateway valida antes de enviar.
+    if (opts.jsonMode) body.response_format = { type: "json_object" };
     return body;
   }
 

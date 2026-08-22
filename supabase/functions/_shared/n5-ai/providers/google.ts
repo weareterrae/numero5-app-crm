@@ -38,6 +38,8 @@ export class GoogleProvider implements AIProvider {
     if (/flash/i.test(opts.model)) {
       generationConfig.thinkingConfig = { thinkingBudget: 0 };
     }
+    // Saida estruturada: o modelo passa a devolver JSON valido, nao prosa.
+    if (opts.jsonMode) generationConfig.responseMimeType = "application/json";
 
     const body: Record<string, unknown> = {
       contents: opts.messages.map((m) => ({
