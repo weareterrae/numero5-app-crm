@@ -31,7 +31,7 @@ function Selo({ estado }: { estado: string }) {
 export default async function AiOperationsPage() {
   const sb = await criarClienteServidor();
 
-  const [assistentes, modelos, fornecedores, incidentes, ultimos] = await Promise.all([
+  const [assistentes, modelos, fornecedores, incidentes, ultimos, vigias] = await Promise.all([
     sb.from("ai_resumo_assistente").select("*").order("pedidos_hoje", { ascending: false }),
     sb.from("ai_resumo_modelo").select("*").order("pedidos_24h", { ascending: false }),
     sb.from("ai_resumo_fornecedor").select("*").order("provider_id"),
@@ -39,6 +39,7 @@ export default async function AiOperationsPage() {
     sb.from("ai_requests")
       .select("request_id, status, provider_model_id, routing_reason, fallback_used, ttft_ms, estimated_cost, error_code, created_at")
       .order("created_at", { ascending: false }).limit(12),
+    sb.from("ai_vigias_estado").select("*").order("marca"),
   ]);
 
   const A = assistentes.data ?? [];
@@ -103,6 +104,51 @@ export default async function AiOperationsPage() {
           </ul>
         </section>
       )}
+
+      {/* ---- vigias: prova de que RESPONDEM ---- */}
+      {(vigias.data ?? []).length > 0 && (() => {
+        const V = vigias.data ?? [];
+        const maus = V.filter((v) => v.ultimo_ok === false);
+        return (
+          <section className={`rounded-xl border-2 p-5 ${maus.length ? "border-bad bg-bad/5" : "border-good/40 bg-good/5"}`}>
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="font-display text-lg font-extrabold">Assistentes · prova de resposta</h2>
+              <span className={`font-mono text-xs font-bold ${maus.length ? "text-bad" : "text-good"}`}>
+                {V.length - maus.length}/{V.length} a responder
+              </span>
+            </div>
+            <p className="mb-3 text-xs text-soft">
+              Cada vigia faz uma <b>pergunta real</b> ao endpoint real e verifica a resposta —
+              comprimento, termos esperados, e se não é a mensagem de manutenção. Um assistente
+              em modo de manutenção devolve 200 e parece bom: aqui conta como falha.
+            </p>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {V.map((v) => {
+                const ok = v.ultimo_ok === true;
+                const semDados = v.ultimo_ok == null;
+                return (
+                  <div key={v.id} className={`rounded-lg border p-3 ${
+                    semDados ? "border-line" : ok ? "border-good/40" : "border-bad"}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <b className="text-sm">{v.nome} <span className="font-normal text-soft">{v.marca}</span></b>
+                      <Selo estado={semDados ? "SEM DADOS" : ok ? "RESPONDE" : "FALHA"} />
+                    </div>
+                    <p className="mt-1 font-mono text-[11px] text-grey">
+                      {semDados ? "ainda não verificado" : (
+                        <>
+                          {ok ? ms(v.ultima_latencia) : <span className="text-bad">{v.ultimo_motivo}</span>}
+                          {" · "}{v.falhas_24h}/{v.total_24h} falhas em 24h
+                          {v.espera_pesquisa && <span className="text-accent"> · exige pesquisa</span>}
+                        </>
+                      )}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        );
+      })()}
 
       {/* ---- fornecedores ---- */}
       <section className="rounded-xl border border-line bg-white p-5">
