@@ -71,7 +71,7 @@ ${contexto ? `O que já disseram no guia:\n${contexto}\n` : ""}
 Campo a preencher: «${label}».
 Escreve a sugestão (1 a 3 frases), na voz da marca.`;
 
-  const r = await ia.gerar({ sistema, utilizador, maxTokens: 400, temperatura: 0.9 });
+  const r = await ia.gerar({ n5: "sede-guia-sugestao", sistema, utilizador, maxTokens: 400, temperatura: 0.9 });
   if (!r.ok) return NextResponse.json({ sugestao: "", aviso: "Não consegui sugerir agora — escreve à vontade." });
   return NextResponse.json({ sugestao: r.texto.trim().replace(/^["'«]|["'»]$/g, "").slice(0, 700) });
 }

@@ -221,6 +221,7 @@ ${L.join("\n")}`;
     .join("\n\n");
 
   const r = await ia.gerar({
+    n5: "sede-assistente",
     sistema: SISTEMA,
     utilizador: `${conversa}\n\nResponde à última mensagem do CLIENTE.`,
     maxTokens: 1200,

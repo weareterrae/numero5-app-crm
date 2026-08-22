@@ -18,6 +18,15 @@ export type PedidoIA = {
   temperatura?: number;
   /** Corta ligações penduradas (ms). Defeito 15000. */
   timeoutMs?: number;
+  /**
+   * Chave do assistente no registo do N5 AI Gateway. Explícita de propósito:
+   * cada uso desta app tem um teto de tokens e um comportamento próprios, e
+   * adivinhar pelo conteúdo dava um dia o assistente errado — com o teto
+   * errado e um JSON cortado a meio, que foi o que aconteceu na Terrae.
+   *
+   * Sem esta chave o pedido segue direto ao fornecedor, como sempre.
+   */
+  n5?: string;
 };
 
 export type RespostaIA = { ok: true; texto: string } | { ok: false; erro: string };
@@ -250,6 +259,72 @@ function fallbackPorDefeito(provider: string): string | undefined {
   }
 }
 
+// ---------------------------------------------------------------------
+// N5 AI Gateway
+// ---------------------------------------------------------------------
+// Esta app é onde o gateway VIVE, mas fala-lhe como qualquer outro site:
+// por HTTP, com origem declarada e chave de assistente. Não há atalho por
+// dentro de propósito — o que se ganha é o mesmo caminho, as mesmas regras
+// e o mesmo registo de custo que todas as marcas têm.
+//
+// O que traz e este ficheiro não sabe fazer: mudar de FORNECEDOR (aqui a
+// resiliência é entre modelos do mesmo), disjuntor por modelo, custo e
+// tokens por pedido, e a percentagem de tráfego a mudar sem deploy.
+const N5_URL = process.env.N5_GATEWAY_URL || "";
+
+class N5Gateway implements FornecedorIA {
+  nome = "n5-gateway";
+  constructor(private readonly seguinte: FornecedorIA) {}
+
+  async gerar(p: PedidoIA): Promise<RespostaIA> {
+    const viaN5 = p.n5 ? await this.tentar(p) : null;
+    return viaN5 ?? this.seguinte.gerar(p);
+  }
+
+  private async tentar(p: PedidoIA): Promise<RespostaIA | null> {
+    try {
+      const r = await fetch(N5_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "https://app.numerocinco.pt" },
+        body: JSON.stringify({
+          assistant_key: p.n5,
+          system: p.sistema,
+          messages: [{ role: "user", content: p.utilizador }],
+          ...(p.json ? { response_format: "json" } : {}),
+          ...(p.maxTokens ? { max_output_tokens: p.maxTokens } : {}),
+        }),
+        signal: AbortSignal.timeout(Math.max(p.timeoutMs ?? 15000, 30000)),
+      });
+      if (!r.ok || !r.body) return null;
+
+      const reader = r.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "", texto = "", erro: string | null = null;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const linhas = buf.split(String.fromCharCode(10));
+        buf = linhas.pop() ?? "";
+        for (const l of linhas) {
+          const t = l.trim();
+          if (!t.startsWith("data:")) continue;
+          try {
+            const ev = JSON.parse(t.slice(5).trim());
+            if (ev.type === "delta") texto += ev.text;
+            else if (ev.type === "error") erro = ev.code;
+          } catch { /* fragmento incompleto */ }
+        }
+      }
+      // 'rollout_excluded' é resposta normal: não pertence à fatia migrada.
+      if (erro || !texto.trim()) return null;
+      return { ok: true, texto };
+    } catch {
+      return null;
+    }
+  }
+}
+
 /** Devolve o fornecedor configurado, ou null se não houver chave. */
 export function obterIA(): FornecedorIA | null {
   const chave = process.env.IA_API_KEY;
@@ -257,14 +332,20 @@ export function obterIA(): FornecedorIA | null {
   const modelo = process.env.IA_MODELO || "gemini-flash-latest";
   const provider = (process.env.IA_PROVIDER || "gemini").toLowerCase();
   const fallback = process.env.IA_MODELO_FALLBACK || fallbackPorDefeito(provider);
+  let motor: FornecedorIA;
   switch (provider) {
     case "openai":
-      return new OpenAI(chave, modelo, fallback);
+      motor = new OpenAI(chave, modelo, fallback);
+      break;
     case "anthropic":
-      return new Anthropic(chave, modelo, fallback);
+      motor = new Anthropic(chave, modelo, fallback);
+      break;
     default:
-      return new Gemini(chave, modelo, fallback);
+      motor = new Gemini(chave, modelo, fallback);
   }
+  // O gateway primeiro, o motor direto como rede. Só para pedidos que digam
+  // qual é o assistente: sem `n5`, nada muda.
+  return N5_URL ? new N5Gateway(motor) : motor;
 }
 
 /** Extrai JSON de uma resposta, mesmo que venha com texto à volta. */

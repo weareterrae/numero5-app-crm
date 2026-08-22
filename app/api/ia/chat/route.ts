@@ -204,6 +204,7 @@ export async function POST(req: NextRequest) {
     .join("\n\n");
 
   const r = await ia.gerar({
+    n5: "app-chat-equipa",
     sistema: SISTEMA + contexto,
     utilizador: `${conversa}\n\nResponde à última mensagem da EQUIPA.`,
     maxTokens: 1500,

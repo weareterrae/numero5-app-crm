@@ -123,6 +123,7 @@ export async function POST(req: NextRequest) {
   });
 
   const r = await ia.gerar({
+    n5: "app-guia-cliente",
     sistema: SISTEMA_GUIA,
     utilizador: `Prepara-me para a próxima conversa com este cliente:\n\n${dossier}`,
     json: true,

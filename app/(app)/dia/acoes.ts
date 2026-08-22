@@ -43,6 +43,7 @@ ESTADO DO NEGÓCIO (${hoje}):
 ${contexto}`;
 
   const r = await ia.gerar({
+    n5: "app-briefing-dia",
     sistema: SISTEMA,
     utilizador: "Escreve o briefing do dia.",
     maxTokens: 900,

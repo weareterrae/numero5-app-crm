@@ -121,6 +121,7 @@ DADOS (${nomeMes()}):
 ${L.join("\n")}`;
 
   const r = await ia.gerar({
+    n5: "sede-resumo-mes",
     sistema: SISTEMA,
     utilizador: "Escreve o resumo do mês agora.",
     maxTokens: 900,
