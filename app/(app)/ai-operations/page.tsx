@@ -3,6 +3,7 @@ import Link from "next/link";
 import { criarClienteServidor } from "@/lib/supabase/server";
 import { euros } from "@/lib/dominio/metricas";
 import { ControloTrafego } from "@/components/ai-ops/ControloTrafego";
+import { Incidentes } from "@/components/ai-ops/Incidentes";
 
 export const metadata: Metadata = { title: "AI Operations · Nº 5" };
 export const dynamic = "force-dynamic";
@@ -35,7 +36,7 @@ export default async function AiOperationsPage() {
     sb.from("ai_resumo_assistente").select("*").order("pedidos_hoje", { ascending: false }),
     sb.from("ai_resumo_modelo").select("*").order("pedidos_24h", { ascending: false }),
     sb.from("ai_resumo_fornecedor").select("*").order("provider_id"),
-    sb.from("ai_incidents").select("*").eq("resolvido", false).order("created_at", { ascending: false }).limit(8),
+    sb.from("ai_incidents").select("*", { count: "exact" }).eq("resolvido", false).order("created_at", { ascending: false }).limit(40),
     sb.from("ai_requests")
       .select("request_id, status, provider_model_id, routing_reason, fallback_used, ttft_ms, estimated_cost, error_code, created_at")
       .order("created_at", { ascending: false }).limit(12),
@@ -87,23 +88,8 @@ export default async function AiOperationsPage() {
         ))}
       </section>
 
-      {/* ---- incidentes ---- */}
-      {I.length > 0 && (
-        <section className="rounded-xl border-2 border-warn bg-warn/5 p-5">
-          <h2 className="font-display text-lg font-extrabold">Incidentes por resolver</h2>
-          <ul className="mt-2 space-y-1.5">
-            {I.map((i) => (
-              <li key={i.id} className="flex flex-wrap items-baseline gap-2 text-sm">
-                <Selo estado={i.severidade === "crit" ? "CRIT" : "WARN"} />
-                <b>{i.titulo}</b>
-                <span className="font-mono text-[11px] text-soft">
-                  {i.tipo} · {new Date(i.created_at).toLocaleString("pt-PT")}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      {/* ---- incidentes: agora com o botao que faltava ---- */}
+      <Incidentes abertos={I as never[]} total={incidentes.count ?? I.length} />
 
       {/* ---- vigias: prova de que RESPONDEM ---- */}
       {(vigias.data ?? []).length > 0 && (() => {

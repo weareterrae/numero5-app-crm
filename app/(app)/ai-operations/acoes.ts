@@ -55,3 +55,33 @@ export async function resolverIncidente(id: string) {
   revalidatePath("/ai-operations");
   return { ok: true as const };
 }
+
+/**
+ * Fecha de uma vez todos os incidentes abertos de um tipo.
+ *
+ * PORQUE É PRECISO, e não é preguiça
+ *
+ * Estes incidentes vêm aos molhos: um modelo doente abre um
+ * MODEL_UNHEALTHY, um CIRCUIT_OPEN e um HIGH_ERROR_RATE no mesmo minuto,
+ * e recupera sozinho três minutos depois. Fechá-los um a um faz com que
+ * ninguém os feche — e uma fila que ninguém fecha deixa de ser um alarme
+ * e passa a ser decoração. Foi o que aconteceu: 36 abertos, zero lidos.
+ *
+ * O que interessa registar não é «alguém carregou 36 vezes». É que uma
+ * pessoa olhou para aquele tipo de falha e decidiu que estava tratado.
+ *
+ * Escreve com o cliente do UTILIZADOR: é a RLS que decide se pode, não
+ * este código.
+ */
+export async function resolverPorTipo(tipo: string) {
+  const sb = await criarClienteServidor();
+  const { data, error } = await sb
+    .from("ai_incidents")
+    .update({ resolvido: true, resolvido_em: new Date().toISOString() })
+    .eq("tipo", tipo)
+    .eq("resolvido", false)
+    .select("id");
+  if (error) return { ok: false as const, erro: error.message };
+  revalidatePath("/ai-operations");
+  return { ok: true as const, fechados: (data ?? []).length };
+}
