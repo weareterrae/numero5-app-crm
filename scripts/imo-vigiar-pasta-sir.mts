@@ -23,6 +23,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import { lerMicroSIR, lerIndicadores } from "../lib/imo/ler-relatorio-sir.ts";
+import { casarFreguesia } from "../lib/imo/casar-freguesia.ts";
 
 const PASTA = process.env.IMO_PASTA_SIR
   ?? "C:/Users/sandr/OneDrive/Número Cinco/_Documentos-e-Assets/SIR";
@@ -191,11 +192,39 @@ for (const nome of pdfs) {
   }
   let alvoId = concelhoId;
   if (v.freguesia && v.freguesia.toLowerCase() !== "total") {
-    const { data: fid } = await sb.rpc("imo_geo_upsert", {
-      p_pai: concelhoId, p_nivel: "freguesia", p_nome: v.freguesia,
-      p_lat: null, p_lng: null, p_manual: false,
-    });
-    alvoId = fid ?? concelhoId;
+    // NÃO criar às cegas. O SIR abrevia — «UF Algés e Linda-a-Velha» é a
+    // «União das Freguesias de Algés, Linda-a-Velha e Cruz
+    // Quebrada-Dafundo» —, e criar uma freguesia nova com o nome
+    // abreviado produz o pior tipo de erro: o import dá tudo verde, a
+    // cobertura sobe, e as microzonas continuam penduradas na oficial,
+    // sem alcançar o benchmark que acabou de entrar. Aconteceu.
+    const { data: irmas } = await sb
+      .from("imo_geografias").select("id, nome")
+      .eq("nivel", "freguesia").eq("pai_id", concelhoId);
+
+    const c = casarFreguesia(v.freguesia, irmas ?? []);
+    if (c.tipo === "ambigua") {
+      // Uma freguesia errada põe preços de um sítio numa casa de outro, e
+      // não dava erro nenhum. Parar é a resposta certa.
+      falhados++;
+      console.log(`                   ✗ "${v.freguesia}" casa com ${c.nomes.length} freguesias:`);
+      for (const n of c.nomes) console.log(`                       · ${n}`);
+      console.log(`                     resolver a duplicação na hierarquia e repetir`);
+      continue;
+    }
+    if (c.tipo === "nenhuma") {
+      const { data: fid } = await sb.rpc("imo_geo_upsert", {
+        p_pai: concelhoId, p_nivel: "freguesia", p_nome: v.freguesia,
+        p_lat: null, p_lng: null, p_manual: false,
+      });
+      alvoId = fid ?? concelhoId;
+      console.log(`                   + freguesia nova: ${v.freguesia}`);
+    } else {
+      alvoId = c.id;
+      if (c.tipo === "lugares") {
+        console.log(`                   ≡ "${v.freguesia}" → ${c.nome}`);
+      }
+    }
   }
   // A microzona é um retângulo desenhado: guarda-se com o centróide, que
   // é a única coisa que a identifica de forma reproduzível.
