@@ -3,6 +3,7 @@
 //   npx tsx scripts/imo-vigiar-pasta-sir.mts            # importa o que há de novo
 //   npx tsx scripts/imo-vigiar-pasta-sir.mts --ver      # só mostra, não grava
 //   npx tsx scripts/imo-vigiar-pasta-sir.mts --faltam   # que zonas gerar a seguir
+//   npx tsx scripts/imo-vigiar-pasta-sir.mts --derivar   # refaz os valores de concelho
 //
 // A DIVISÃO DE TRABALHO, e porque é assim
 //
@@ -24,6 +25,7 @@ import { join } from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import { lerMicroSIR, lerIndicadores } from "../lib/imo/ler-relatorio-sir.ts";
 import { casarFreguesia } from "../lib/imo/casar-freguesia.ts";
+import { derivarConcelho, type Zona } from "../lib/imo/derivar-concelho.ts";
 
 const PASTA = process.env.IMO_PASTA_SIR
   ?? "C:/Users/sandr/OneDrive/Número Cinco/_Documentos-e-Assets/SIR";
@@ -46,6 +48,9 @@ const sb = createClient(env.NEXT_PUBLIC_SUPABASE_URL!, env.SUPABASE_SERVICE_ROLE
 
 const soVer = process.argv.includes("--ver");
 const soFaltam = process.argv.includes("--faltam");
+// Força a derivação dos valores de concelho sem esperar por ficheiro novo.
+// Serve para a primeira vez, e para quando se apaga um benchmark à mão.
+const forcarDerivar = process.argv.includes("--derivar");
 
 // ---------------------------------------------------------------------
 // O QUE FALTA GERAR — a lista de trabalho de quem tem acesso ao SIR
@@ -324,6 +329,83 @@ const somados = novos + repetidos + falhados + ignorados;
 if (somados !== pdfs.length) {
   console.log(`\nATENÇÃO: ${pdfs.length} ficheiros na pasta mas só ${somados} contados. ` +
     `Há ${pdfs.length - somados} sem destino conhecido.`);
+}
+
+// ---------------------------------------------------------------------
+// VALORES DE CONCELHO, derivados das zonas que temos
+//
+// O SIR não produz relatórios de concelho — o Micro-SIR reporta sempre a
+// micro-zona desenhada. Quem escreve uma freguesia que não temos resolve
+// para o concelho, e o concelho vazio faz a avaliação perder a âncora e
+// cair no caminho lento. Foi o que aconteceu com Quinta do Anjo.
+//
+// Corre aqui, no fim de cada importação, e não à parte: uma derivação que
+// alguém tem de se lembrar de correr fica desatualizada na primeira vez
+// que se esquecerem, e um valor de concelho velho é pior do que nenhum.
+// ---------------------------------------------------------------------
+if (!soVer && (novos || forcarDerivar)) {
+  const { data: geo } = await sb.from("imo_geografias").select("id, nivel, nome, pai_id");
+  const porId = new Map((geo ?? []).map((g) => [g.id, g]));
+  const concelhoDe = (id: string) => {
+    let g = porId.get(id);
+    while (g && g.nivel !== "concelho") g = g.pai_id ? porId.get(g.pai_id) : undefined;
+    return g;
+  };
+
+  const { data: bs } = await sb.from("imo_benchmarks")
+    .select("geografia_id, tipo_imovel, tipologia, eur_m2_medio, n_transacoes, periodo, " +
+            "periodo_fim, desconto_medio, extra")
+    .eq("fonte_id", "sir");
+
+  // Só as reais entram na derivação. Derivar de derivados faria o valor
+  // de um concelho depender do de outro e afastava-se dos dados a cada
+  // importação, sem nunca dar erro.
+  const porConcelho = new Map<string, { zonas: Zona[]; fim: string | null }>();
+  for (const b of bs ?? []) {
+    if ((b.extra as Record<string, unknown> | null)?.derivado) continue;
+    const c = concelhoDe(b.geografia_id);
+    if (!c || c.id === b.geografia_id) continue;   // o próprio concelho não se deriva de si
+    if (!porConcelho.has(c.id)) porConcelho.set(c.id, { zonas: [], fim: null });
+    const alvo = porConcelho.get(c.id)!;
+    alvo.zonas.push({
+      geografia_id: b.geografia_id, nome: porId.get(b.geografia_id)?.nome ?? "?",
+      tipo_imovel: b.tipo_imovel ?? "", tipologia: b.tipologia ?? "",
+      eur_m2_medio: Number(b.eur_m2_medio), n_transacoes: b.n_transacoes,
+      periodo: b.periodo, desconto_medio: b.desconto_medio,
+    });
+    if (!alvo.fim || (b.periodo_fim && b.periodo_fim > alvo.fim)) alvo.fim = b.periodo_fim;
+  }
+
+  let derivados = 0;
+  const feitos: string[] = [];
+  for (const [concelhoId, { zonas, fim }] of porConcelho) {
+    const linhas = derivarConcelho(zonas);
+    if (!linhas.length) continue;
+    for (const l of linhas) {
+      const { error } = await sb.from("imo_benchmarks").upsert({
+        fonte_id: "sir", geografia_id: concelhoId,
+        tipo_imovel: l.tipo_imovel, tipologia: l.tipologia,
+        periodo: l.periodo, periodo_fim: fim,
+        eur_m2_medio: l.eur_m2_medio, n_transacoes: l.n_transacoes,
+        desconto_medio: l.desconto_medio,
+        extra: {
+          derivado: true,
+          // Quem ler este número seis meses depois tem de poder julgá-lo.
+          como: "mediana das zonas do concelho com dados do SIR",
+          de_zonas: l.de_zonas,
+          area: "bruta_privativa",
+        },
+      }, { onConflict: "fonte_id,geografia_id,tipo_imovel,tipologia,periodo" });
+      if (!error) derivados++;
+    }
+    feitos.push(`${porId.get(concelhoId)?.nome} (${linhas[0].de_zonas.length} zonas)`);
+  }
+
+  if (derivados) {
+    console.log(`\nVALORES DE CONCELHO derivados: ${derivados} em ${feitos.length} concelhos`);
+    for (const f of feitos.sort()) console.log(`  · ${f}`);
+    console.log("  Servem de rede para as freguesias que ainda não têm relatório.");
+  }
 }
 
 if (!soVer && novos) {
