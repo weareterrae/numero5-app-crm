@@ -47,12 +47,16 @@ while (tentativas < MAX) {
     const rep = j.report;
     const eur = (v) => (v ? Number(v).toLocaleString("pt-PT") + " €" : "—");
     console.log(`\nRELATÓRIO PRONTO em ${s}s (a página espera até 285s)\n`);
-    console.log(`   conservador ${eur(rep.valor_conservador)} · provável ${eur(rep.valor_provavel)} · otimista ${eur(rep.valor_otimista)}`);
-    console.log(`   €/m²: ${rep.eur_m2 ?? rep.valor_m2 ?? "—"} · confiança: ${rep.confianca ?? "—"}`);
+    // Nomes REAIS dos campos, lidos do site (min/max/eur_m, não
+    // valor_provavel/valor_otimista, que não existem). Um teste que lê
+    // campos errados diz "—" e parece uma avaria que não há.
+    console.log(`   intervalo ${eur(rep.min)} – ${eur(rep.max)} · conservador ${eur(rep.valor_conservador)}`);
+    console.log(`   orientação de venda ${eur(rep.orientacao_min)} – ${eur(rep.orientacao_max)} · €/m² ${rep.eur_m ?? "—"}`);
+    console.log(`   confiança: ${rep.confianca_label ?? rep.confianca ?? "—"} · liquidez: ${rep.liquidez ?? "—"}`);
     const comp = rep.comparaveis || [];
     console.log(`   comparáveis: ${comp.length}`);
     for (const c of comp.slice(0, 3)) {
-      console.log(`      · ${String(c.titulo || c.descricao || "").slice(0, 60)} — ${eur(c.preco)}`);
+      console.log(`      · ${String(c.titulo || c.descricao || "").slice(0, 55)} — ${eur(c.preco_eur ?? c.preco)}`);
     }
     const campos = Object.keys(rep).length;
     console.log(`   campos no relatório: ${campos}`);
@@ -65,4 +69,13 @@ while (tentativas < MAX) {
   await new Promise((s) => setTimeout(s, 3000));
 }
 console.log(`\nDESISTIU ao fim de ${Math.round((Date.now() - t0) / 1000)}s — é o que o visitante vê.`);
+// O rasto do worker: é aqui que ele diz PORQUE não produziu relatório.
+// Sem isto restava adivinhar, porque o console.log desta função não chega
+// aos registos do Netlify.
+const porque = await fetch(`${BASE}/avaliacao-result?id=${encodeURIComponent(evento + "-porque")}`, {
+  cache: "no-store",
+}).then((x) => x.json()).catch(() => ({}));
+console.log(porque?.ready
+  ? "motivo registado pelo worker: " + JSON.stringify(porque.report)
+  : "o worker não registou motivo — ou ainda está a trabalhar, ou morreu sem chegar lá.");
 process.exit(1);

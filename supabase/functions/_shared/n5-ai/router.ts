@@ -139,7 +139,11 @@ export class Router {
   ): Promise<void> {
     try {
       const agora = new Date();
-      const janela = model.circuit_cooldown_seconds; // reutiliza a janela do modelo
+      // A janela é a `circuit_window_seconds` — a coluna que existe para
+      // isto. Antes usava-se o `circuit_cooldown_seconds` (120s), o que
+      // encurtava a memória do disjuntor para metade e ajudava a que nunca
+      // juntasse amostras suficientes para decidir.
+      const janela = model.circuit_window_seconds;
       const inicio = new Date(Math.floor(agora.getTime() / (janela * 1000)) * janela * 1000);
 
       // Contador por janela — barato e suficiente para decidir o disjuntor.
@@ -178,7 +182,22 @@ export class Router {
         const req = data?.requests ?? 0;
         const err = data?.errors ?? 0;
         const taxa = req > 0 ? err / req : 0;
-        if (req >= model.circuit_min_samples && taxa >= model.circuit_error_threshold) {
+        // Duas maneiras de abrir, porque uma só não chega.
+        //
+        // A TAXA serve caminhos com tráfego. Não serve os relatórios: cada
+        // um faz UMA tentativa por janela, nunca junta as 5 amostras
+        // mínimas, e o disjuntor ficava fechado para sempre. Foi o que se
+        // viu a 22/08/2026 — o gemini-pro em 503 de sobrecarga, a gastar 78
+        // segundos por pedido a devolver o erro, e o gateway a insistir nele
+        // em todos os relatórios. Cada Mapa de Oportunidade pagava esse
+        // tempo antes de chegar ao modelo que funcionava.
+        //
+        // Por isso: três erros na janela abrem, haja o tráfego que houver.
+        // Num caminho movimentado três erros diluem-se e a taxa decide; num
+        // caminho lento três erros seguidos são o sinal todo que existe.
+        const porTaxa = req >= model.circuit_min_samples && taxa >= model.circuit_error_threshold;
+        const porRepeticao = err >= 3;
+        if (porTaxa || porRepeticao) {
           await this.db.from("ai_models").update({
             circuit_state: "OPEN",
             circuit_opened_at: agora.toISOString(),
@@ -189,7 +208,10 @@ export class Router {
             tipo: "CIRCUIT_OPEN", severidade: "crit", model_id: model.id,
             provider_id: model.provider_id,
             titulo: `Disjuntor aberto: ${model.display_name}`,
-            detalhe: { taxa_erro: taxa, amostras: req, ultimo_status: status },
+            detalhe: {
+              taxa_erro: taxa, amostras: req, erros: err, ultimo_status: status,
+              motivo: porRepeticao && !porTaxa ? "tres erros na janela" : "taxa de erro",
+            },
           });
         }
       }

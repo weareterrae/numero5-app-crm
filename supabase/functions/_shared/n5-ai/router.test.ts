@@ -156,3 +156,37 @@ describe("Router.chain — cadeia de fallback", () => {
     expect(await router.chain(null, "STANDARD")).toEqual([]);
   });
 });
+
+describe("o disjuntor abre por repetição, não só por taxa", () => {
+  // A regra da taxa serve caminhos com tráfego. Não serve os relatórios:
+  // cada um faz UMA tentativa por janela e nunca junta as amostras mínimas.
+  // A 22/08/2026 o gemini-pro esteve em 503 de sobrecarga durante uma hora,
+  // a gastar 78 segundos por pedido só para devolver o erro — e o disjuntor
+  // ficou fechado o tempo todo, porque nunca chegou às 5 amostras. Cada
+  // Mapa de Oportunidade pagava esses 78 segundos antes de chegar ao modelo
+  // que funcionava, e estourava a janela de espera da página.
+  function abre(req: number, err: number, minAmostras = 5, limiar = 0.5) {
+    const taxa = req > 0 ? err / req : 0;
+    const porTaxa = req >= minAmostras && taxa >= limiar;
+    const porRepeticao = err >= 3;
+    return porTaxa || porRepeticao;
+  }
+
+  it("três erros abrem, mesmo sem tráfego para calcular taxa", () => {
+    expect(abre(3, 3)).toBe(true);
+  });
+
+  it("dois erros ainda não abrem — pode ser azar", () => {
+    expect(abre(2, 2)).toBe(false);
+  });
+
+  it("num caminho movimentado, a taxa continua a mandar", () => {
+    expect(abre(10, 6)).toBe(true);    // 60% de erros
+    expect(abre(100, 4)).toBe(true);   // 4 erros: abre por repetição
+    expect(abre(100, 2)).toBe(false);  // 2% e só dois erros: saudável
+  });
+
+  it("sem erros nenhum, nunca abre", () => {
+    expect(abre(50, 0)).toBe(false);
+  });
+});
