@@ -123,20 +123,31 @@ try {
 
 console.log(`${PASTA}\n${pdfs.length} ficheiros\n`);
 
-let novos = 0, repetidos = 0, falhados = 0;
+let novos = 0, repetidos = 0, falhados = 0, ignorados = 0;
 
 for (const nome of pdfs) {
   const bytes = readFileSync(join(PASTA, nome));
   const hash = createHash("sha256").update(bytes).digest("hex");
 
-  // Já entrou? O hash é a identidade do ficheiro — o nome não é, porque
-  // dois exports diferentes podem sair com o mesmo nome.
-  const { data: ja } = await sb.from("imo_importacoes")
-    .select("id, created_at, periodo").eq("fonte_id", "sir").eq("ficheiro_hash", hash)
-    .neq("estado", "REJEITADO").maybeSingle();
+  // Já foi visto? O hash é a identidade do ficheiro — o nome não é,
+  // porque dois exports diferentes podem sair com o mesmo nome.
+  const { data: vistos } = await sb.from("imo_importacoes")
+    .select("id, estado, periodo").eq("fonte_id", "sir").eq("ficheiro_hash", hash);
+
+  const ja = (vistos ?? []).find((v) => v.estado !== "REJEITADO");
   if (ja) {
     repetidos++;
     console.log(`  já importado   ${nome}`);
+    continue;
+  }
+  // Já se soube que este ficheiro não é um relatório. Cala-se.
+  //
+  // Sem isto, um PDF que não seja relatório — um contrato, uma fatura,
+  // o que a pessoa lá puser — era reexaminado e denunciado A CADA HORA,
+  // para sempre. Um aviso que se repete sozinho deixa de ser lido, e
+  // arrasta consigo os avisos que interessam.
+  if ((vistos ?? []).length) {
+    ignorados++;
     continue;
   }
 
@@ -151,7 +162,20 @@ for (const nome of pdfs) {
   }
   if (pMicro < 0) {
     falhados++;
-    console.log(`  SEM MICRO-SIR  ${nome}  (só tem gráficos — de um gráfico não se lê um número)`);
+    console.log(`  NÃO É RELATÓRIO ${nome}`);
+    console.log(`                   sem página de Micro-SIR — é dela que vêm os valores exatos.`);
+    console.log(`                   Fica anotado; não volto a avisar sobre este ficheiro.`);
+    // Anotado como REJEITADO para não se repetir. Se um dia o leitor
+    // melhorar e este ficheiro passar a ser legível, apaga-se a linha e
+    // ele volta a ser tentado — como manda a nota da própria tabela,
+    // tem de ser um ato deliberado, não um acidente.
+    if (!soVer) {
+      await sb.from("imo_importacoes").insert({
+        fonte_id: "sir", ficheiro_nome: nome, ficheiro_hash: hash,
+        estado: "REJEITADO",
+        notas: "Sem página «ESTATÍSTICAS DA MICRO-ZONA». Não parece um relatório SIR.",
+      });
+    }
     continue;
   }
 
@@ -290,7 +314,17 @@ for (const nome of pdfs) {
   novos++;
 }
 
-console.log(`\n${novos} ${soVer ? "por importar" : "importados"} · ${repetidos} já lá estavam · ${falhados} não deram`);
+// Os quatro contadores têm de somar o número de ficheiros. Se não
+// somarem, um ficheiro passou por aqui sem ninguém saber o que lhe
+// aconteceu — e é exatamente esse que interessa.
+console.log(`\n${novos} ${soVer ? "por importar" : "importados"} · ${repetidos} já lá estavam · ` +
+  `${falhados} não deram` + (ignorados ? ` · ${ignorados} ignorados (não são relatórios)` : ""));
+
+const somados = novos + repetidos + falhados + ignorados;
+if (somados !== pdfs.length) {
+  console.log(`\nATENÇÃO: ${pdfs.length} ficheiros na pasta mas só ${somados} contados. ` +
+    `Há ${pdfs.length - somados} sem destino conhecido.`);
+}
 
 if (!soVer && novos) {
   const { data: cob } = await sb.from("imo_cobertura")
