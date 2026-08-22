@@ -64,11 +64,19 @@ export default async function AiOperationsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="font-display text-3xl font-extrabold tracking-tight">AI Operations</h1>
-        <p className="mt-1 text-sm text-soft">
-          N5 AI OS · {A.length} assistentes registados · {noGateway} a receber tráfego pelo gateway
-        </p>
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <div>
+          <h1 className="font-display text-3xl font-extrabold tracking-tight">AI Operations</h1>
+          <p className="mt-1 text-sm text-soft">
+            N5 AI OS · {A.length} assistentes registados · {noGateway} a receber tráfego pelo gateway
+          </p>
+        </div>
+        <Link
+          href="/ai-operations/custos"
+          className="rounded-full border-2 border-gold-dark px-4 py-2 text-sm font-bold text-gold-dark"
+        >
+          Custos por marca
+        </Link>
       </div>
 
       {/* ---- estado do sistema ---- */}
