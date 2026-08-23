@@ -81,6 +81,38 @@ function ajusteTipologia(
   };
 }
 
+/**
+ * QUAL número da área local é comparável com o benchmark.
+ *
+ * Existe para o motor não ter de adivinhar. Comparar o €/m² local de
+ * todas as tipologias com um benchmark de T3 é o erro que este ficheiro
+ * já cometeu uma vez, e a informação para o evitar está toda AQUI — não
+ * lá.
+ *
+ *   houve ajuste de tipologia   → o valor ajustado
+ *   o benchmark é geral         → o local geral, que é a mesma coisa
+ *   qualquer outro caso         → nada, e diz-se porquê
+ */
+function comparavel(
+  especifico: Record<string, unknown> | null,
+  geral: Record<string, unknown> | null,
+  localGeral: number,
+  ajuste: Record<string, unknown> | null,
+): Record<string, unknown> {
+  if (ajuste?.eur_m2_tipologia) {
+    return { eur_m2_comparavel: ajuste.eur_m2_tipologia, comparavel_porque: "ajustado à tipologia" };
+  }
+  // Sem linha de tipologia, o benchmark É o geral — e aí o local geral
+  // compara-se com ele diretamente, sem inferência nenhuma pelo meio.
+  if (especifico && geral && especifico.benchmark_id === geral.benchmark_id && localGeral > 0) {
+    return { eur_m2_comparavel: Math.round(localGeral), comparavel_porque: "ambos de todas as tipologias" };
+  }
+  return {
+    eur_m2_comparavel: null,
+    comparavel_porque: "o benchmark é de uma tipologia e o local é de todas — não se comparam",
+  };
+}
+
 const db = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -497,7 +529,11 @@ Deno.serve(async (req) => {
         // se o do T3 subiu para o concelho e o geral ficou na freguesia,
         // a proporção é entre dois sítios diferentes e não quer dizer
         // nada.
-        ...(ajusteTipologia(b, bGeral, num(areaCp.r_eur_m2_medio)) ?? {}),
+        ...(() => {
+          const local = num(areaCp!.r_eur_m2_medio);
+          const aj = ajusteTipologia(b, bGeral, local);
+          return { ...(aj ?? {}), ...comparavel(b, bGeral, local, aj) };
+        })(),
       }
       : null,
     amostra: am
