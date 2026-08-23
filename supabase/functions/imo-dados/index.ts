@@ -196,7 +196,14 @@ Deno.serve(async (req) => {
       distrito: r.r_distrito,
       localidade: r.r_localidade,
       designacao: r.r_designacao,
-      zona: r.r_zona,
+      // A freguesia quando a temos, a designação postal quando não.
+      //
+      // A função SQL também devolve isto em `r_zona`, mas passa-o por
+      // `initcap()`, que transforma «Vila do Bispo» em «Vila Do Bispo» e
+      // «Linda a Velha» em «Linda A Velha». As colunas em bruto já estão
+      // escritas como se escreve — capitalizá-las outra vez só as
+      // estraga. Decide-se aqui, com os valores originais.
+      zona: r.r_freguesia || r.r_designacao,
       // Verdadeiro quando a zona é uma freguesia a sério e não a
       // designação postal. Quem mostra isto a uma pessoa deve saber a
       // diferença: dentro de Lisboa a designação é só «Lisboa».
