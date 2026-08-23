@@ -91,6 +91,41 @@ Deno.serve(async (req) => {
     p_geografia: geoId, p_tipo: imovel.tipo ?? "", p_tipologia: imovel.tipologia ?? "", p_area: area,
   });
 
+  // ---- ÁREA DE MERCADO ADAPTATIVA ------------------------------------
+  //
+  // A freguesia é o chão; isto é o andar de cima. «Carnaxide e Queijas» é
+  // uma união com dois mercados lá dentro — medido a 300 m de um ponto em
+  // Carnaxide dá 4.147 €/m², contra 4.486 da união inteira. São 7,6% que
+  // uma casa naquele sítio não devia pagar nem receber.
+  //
+  // A CHAVE É O CÓDIGO POSTAL, e não uma aproximação nossa: o Micro-SIR
+  // georreferencia «a partir dos centroides dos códigos-postais a 7
+  // dígitos». Duas casas no mesmo CP7 partilham o centroide de qualquer
+  // maneira.
+  //
+  // ESTA CHAMADA NUNCA ATRASA A AVALIAÇÃO. Se o código postal ainda não
+  // tem área, fica na fila e devolve-se nada — o motor segue com o
+  // benchmark da freguesia, que existe sempre. Uma corrida diária esvazia
+  // a fila com um login só, e a avaliação seguinte naquele código postal
+  // já encontra a área fina.
+  let areaCp: Record<string, unknown> | null = null;
+  try {
+    const { data: cp } = await db.rpc("imo_cp_area", {
+      p_cp7: imovel.cp ?? imovel.codigo_postal ?? null,
+      p_lat: num(imovel.lat) || null,
+      p_lng: num(imovel.lng) || null,
+      p_geografia: geoId,
+    });
+    // As colunas vêm com prefixo `r_`: num `returns table` do Postgres os
+    // nomes de saída viram variáveis e colidiam com as colunas da tabela
+    // (migração 0110).
+    const a = Array.isArray(cp) ? cp[0] : cp;
+    if (a?.r_raio_m) areaCp = a;
+  } catch (_) {
+    // A área fina é uma melhoria, nunca uma dependência. Sem ela o motor
+    // faz exatamente o que fazia — que é a mesma regra da camada toda.
+  }
+
   // =====================================================================
   // REGISTAR A AVALIAÇÃO — o que se decidiu, e com que dados
   // =====================================================================
@@ -344,6 +379,33 @@ Deno.serve(async (req) => {
         // Sem este campo a função não tem como saber a diferença.
         natureza: b.natureza ?? null,
         area_base: b.area_base ?? null,
+        publicavel: licenca.pode,
+        atribuicao: licenca.atribuicao,
+      }
+      : null,
+    // A área de mercado à volta DESTA casa, quando já foi colhida.
+    //
+    // Vai à parte do benchmark de propósito: são coisas diferentes e quem
+    // consome tem de poder escolher. O benchmark descreve a freguesia e
+    // existe sempre; isto descreve os 300 a 2.000 m à volta do imóvel e
+    // pode ainda não existir.
+    //
+    // `raio_m` é a meia-largura do QUADRADO, não o raio de um círculo — o
+    // nome do campo di-lo para ninguém desenhar a coisa errada.
+    area_local: areaCp
+      ? {
+        cp7: areaCp.r_cp7,
+        raio_m: areaCp.r_raio_m,
+        amostra: areaCp.r_amostra,
+        eur_m2: areaCp.r_eur_m2_medio,
+        p25: areaCp.r_eur_m2_p25,
+        p75: areaCp.r_eur_m2_p75,
+        colhido_em: areaCp.r_colhido_em,
+        // A escada toda: «porquê 750 m e não 500?» é uma pergunta que um
+        // avaliador tem de saber responder.
+        escada: areaCp.r_escada,
+        natureza: "transacao",
+        area_base: "bruta privativa",
         publicavel: licenca.pode,
         atribuicao: licenca.atribuicao,
       }
