@@ -39,3 +39,27 @@ try {
   Escrever "ERRO  $($_.Exception.Message)"
   exit 1
 }
+
+# ---------------------------------------------------------------------
+# A FILA DOS CODIGOS POSTAIS
+# ---------------------------------------------------------------------
+# Vai no mesmo trabalho de proposito. E a mesma preocupacao — manter a
+# camada de dados alimentada — e uma tarefa e mais facil de acompanhar do
+# que duas. Se falhar, nao leva o carregamento atras: sao independentes.
+#
+# O script nao corre nada se a fila estiver vazia, por isso isto custa uma
+# pergunta a base de dados nos dias em que ninguem pediu avaliacoes.
+try {
+  $saidaFila = & node "scripts\imo-cp-fila.mjs" 40 2>&1 | Out-String
+  $codigoFila = $LASTEXITCODE
+  $resumoFila = ($saidaFila -split "`n" | Where-Object { $_ -match "com area:|Fila vazia|na fila" }) -join " | "
+  if (-not $resumoFila) { $resumoFila = ($saidaFila -split "`n" | Select-Object -Last 2) -join " " }
+
+  if ($codigoFila -eq 0) {
+    Escrever "fila  $resumoFila"
+  } else {
+    Escrever "fila AVISO (codigo $codigoFila)  $resumoFila"
+  }
+} catch {
+  Escrever "fila ERRO  $($_.Exception.Message)"
+}

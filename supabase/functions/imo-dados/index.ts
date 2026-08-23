@@ -26,6 +26,61 @@
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
+/**
+ * Traduz a área local (todas as tipologias) para a tipologia do imóvel.
+ *
+ * `local_tipologia = local_geral × (freguesia_tipologia ÷ freguesia_geral)`
+ *
+ * Devolve `null` — e não um número — sempre que a conta não se sustenta.
+ * Um ajuste que não se pode justificar é pior do que ajuste nenhum: o
+ * consumidor fica com a área local sem tradução, sabe disso, e usa-a
+ * como souber.
+ */
+function ajusteTipologia(
+  especifico: Record<string, unknown> | null,
+  geral: Record<string, unknown> | null,
+  localGeral: number,
+): Record<string, unknown> | null {
+  if (!especifico || !geral || !(localGeral > 0)) return null;
+
+  // Dois benchmarks de sítios diferentes não fazem uma proporção.
+  if (especifico.geografia_id !== geral.geografia_id) return null;
+
+  // NEM DE FONTES DIFERENTES. Este guarda nasceu de um erro real: em
+  // Carnaxide o T3 vinha do `sir-micro` (4.394, agosto, freguesia) e o
+  // geral do `sir` em PDF (4.957, junho, microzona desenhada à mão). A
+  // divisão dava 0,886 e o «ajuste» transformava um +3,7% de localização
+  // num −6,1% — um número inventado pela mistura, não medido.
+  //
+  // Uma proporção só quer dizer alguma coisa entre dois números da mesma
+  // fonte, do mesmo período e do mesmo sítio. Faltando qualquer um,
+  // não se ajusta.
+  if (especifico.fonte_id !== geral.fonte_id) return null;
+  if (especifico.periodo !== geral.periodo) return null;
+
+  // O mesmo benchmark dos dois lados quer dizer que não havia linha de
+  // tipologia — a proporção seria 1 e o «ajuste» seria decorativo.
+  if (especifico.benchmark_id === geral.benchmark_id) return null;
+
+  const esp = num(especifico.eur_m2);
+  const ger = num(geral.eur_m2);
+  if (!(esp > 0) || !(ger > 0)) return null;
+
+  const racio = esp / ger;
+  // Fora desta banda a proporção não é tipologia — é um erro nos dados.
+  // Uma tipologia que valesse metade ou o dobro da mistura da mesma zona
+  // seria uma descoberta, não um ajuste, e merecia ser vista antes de
+  // usada.
+  if (racio < 0.6 || racio > 1.6) return null;
+
+  return {
+    eur_m2_tipologia: Math.round(localGeral * racio),
+    tipologia_racio: Number(racio.toFixed(4)),
+    tipologia_inferida: true,
+    tipologia_racio_origem: "proporção entre a tipologia e todas, na mesma zona do benchmark",
+  };
+}
+
 const db = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -268,6 +323,24 @@ Deno.serve(async (req) => {
   const b = Array.isArray(bench) ? bench[0] : null;
   const am = Array.isArray(amostraValida) ? amostraValida[0] : null;
 
+  // ---- O BENCHMARK GERAL DA MESMA ZONA -------------------------------
+  //
+  // Serve uma coisa só: dar a proporção entre a tipologia do imóvel e a
+  // mistura de todas. É com ela que a área local — que é de TODAS as
+  // tipologias — se traduz para a tipologia certa.
+  //
+  // Sem isto, servir a área local ao lado do benchmark do T3 seria
+  // comparar um T3 com a mistura, e a diferença que aparecesse era em
+  // parte tipologia e não localização. Em Avenidas Novas isso dava +19,7%
+  // quando a diferença real de localização é +12,6%.
+  let bGeral: Record<string, unknown> | null = null;
+  if (b && geoId) {
+    const { data: g } = await db.rpc("imo_benchmark", {
+      p_geografia: geoId, p_tipo: "", p_tipologia: "",
+    });
+    bGeral = Array.isArray(g) ? g[0] ?? null : null;
+  }
+
   // Pode este benchmark aparecer no relatório do cliente, e com que
   // atribuição? A resposta vem da tabela de fontes, não de uma regra
   // escrita aqui.
@@ -408,6 +481,23 @@ Deno.serve(async (req) => {
         area_base: "bruta privativa",
         publicavel: licenca.pode,
         atribuicao: licenca.atribuicao,
+        // ---- AJUSTE DE TIPOLOGIA ------------------------------------
+        //
+        // A área local é de TODAS as tipologias; o benchmark da freguesia
+        // tem linha por tipologia. Aplica-se aqui a proporção de uma à
+        // outra: se na freguesia os T3 valem 0,92 da mistura, o mesmo se
+        // assume nos 300 m.
+        //
+        // É UMA INFERÊNCIA, e vai marcada como tal. Assume que a relação
+        // entre tipologias é parecida dentro da freguesia — o que é
+        // razoável e não é garantido. Quem usar o número tem de poder ver
+        // que ele foi inferido, e com que rácio.
+        //
+        // Só se calcula quando os dois benchmarks vêm da MESMA geografia:
+        // se o do T3 subiu para o concelho e o geral ficou na freguesia,
+        // a proporção é entre dois sítios diferentes e não quer dizer
+        // nada.
+        ...(ajusteTipologia(b, bGeral, num(areaCp.r_eur_m2_medio)) ?? {}),
       }
       : null,
     amostra: am
