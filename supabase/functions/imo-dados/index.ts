@@ -164,6 +164,47 @@ Deno.serve(async (req) => {
     return Response.json({ erro: "pedido_invalido" }, { status: 400, headers: cors(origem) });
   }
 
+  // =====================================================================
+  // ?cp=1 — que sítio é este código postal
+  // =====================================================================
+  // Responde antes de tudo o resto e sai. Não toca em benchmarks, não
+  // escreve nada, não gasta um login: é uma leitura de uma tabela de
+  // dados abertos dos CTT (migração 0114).
+  //
+  // Existe para o formulário deixar de perguntar o concelho. Quem escreve
+  // um código postal de Oeiras e escolhe «Lisboa» na lista recebe hoje
+  // uma resposta confiante à geografia errada — 6.144 €/m² de Lisboa
+  // aplicados a uma casa em Carnaxide.
+  //
+  // `zona` vem já decidida: a freguesia quando a sabemos, a designação
+  // postal quando não. Quem consome manda-a tal e qual no campo `zona` do
+  // pedido normal, sem regra própria.
+  if (new URL(req.url).searchParams.get("cp") === "1") {
+    const { data, error } = await db.rpc("imo_cp_consulta", {
+      p_cp7: String(corpo?.cp ?? corpo?.codigo_postal ?? "").slice(0, 20),
+    });
+    if (error) return Response.json({ erro: "consulta_falhou" }, { status: 500, headers: cors(origem) });
+    const r = Array.isArray(data) ? data[0] : data;
+    // Não encontrado NÃO é erro. Há códigos postais fora do ficheiro
+    // (apartados, grandes clientes) e a pessoa continua a poder escrever
+    // o concelho à mão — que é o que faz hoje.
+    if (!r) return Response.json({ encontrado: false }, { headers: cors(origem) });
+    return Response.json({
+      encontrado: true,
+      cp7: r.r_cp7,
+      concelho: r.r_concelho,
+      distrito: r.r_distrito,
+      localidade: r.r_localidade,
+      designacao: r.r_designacao,
+      zona: r.r_zona,
+      // Verdadeiro quando a zona é uma freguesia a sério e não a
+      // designação postal. Quem mostra isto a uma pessoa deve saber a
+      // diferença: dentro de Lisboa a designação é só «Lisboa».
+      zona_e_freguesia: !!r.r_freguesia,
+      ruas: r.r_ruas ?? [],
+    }, { headers: cors(origem) });
+  }
+
   const guardar = new URL(req.url).searchParams.get("guardar") === "1";
   const imovel = corpo?.imovel ?? {};
   const area = num(imovel.area);
