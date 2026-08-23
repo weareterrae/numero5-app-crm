@@ -335,6 +335,15 @@ Deno.serve(async (req) => {
         p25: b.p25, p75: b.p75, dispersao: b.dispersao,
         n_transacoes: b.n_transacoes,
         periodo: b.periodo, desconto: b.desconto,
+        // NATUREZA e ÁREA vão declaradas porque quem consome tem de
+        // decidir com elas, não apesar delas.
+        //
+        // O `ancoraSIR()` do site convertia SEMPRE com o price gap, por
+        // assumir que o SIR são preços pedidos. São de venda — e aplicar
+        // o gap a um preço de venda tira-lhe 21-27% sem dar erro nenhum.
+        // Sem este campo a função não tem como saber a diferença.
+        natureza: b.natureza ?? null,
+        area_base: b.area_base ?? null,
         publicavel: licenca.pode,
         atribuicao: licenca.atribuicao,
       }
