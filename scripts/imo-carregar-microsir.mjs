@@ -111,12 +111,20 @@ console.log(`gravadas:       ${r.gravadas}`);
 console.log(`sem valores:    ${r.sem_valores}`);
 console.log(`sem geografia:  ${r.sem_geografia}`);
 
+// OS AVISOS APARECEM SEMPRE.
+//
+// Estavam presos dentro do `if (sem_geografia > 0)`, e isso escondia tudo
+// o resto: numa carga de 142 zonas o carregador recusou indicadores
+// implausíveis e ninguém ficou a saber, porque nenhuma zona tinha
+// falhado a geografia. Um aviso que só se mostra quando OUTRA coisa
+// corre mal não é um aviso.
+for (const a of r.avisos ?? []) console.log(`  aviso: ${a}`);
+
 // Uma zona sem geografia é uma zona perdida em silêncio — o benchmark não
-// entra e ninguém dá por isso. Aparece sempre, e a saída é diferente de
-// zero para o agendador saber que houve trabalho por rever.
+// entra. A saída é diferente de zero para o agendador saber que houve
+// trabalho por rever.
 if (r.sem_geografia > 0) {
-  console.error("\nZonas sem geografia (não entraram):");
-  for (const a of r.avisos ?? []) console.error(`  ${a}`);
+  console.error(`\n${r.sem_geografia} zonas não encontraram geografia e não entraram.`);
   process.exit(2);
 }
 

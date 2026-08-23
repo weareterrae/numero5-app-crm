@@ -32,7 +32,7 @@ const sb = createClient(env.NEXT_PUBLIC_SUPABASE_URL!, env.SUPABASE_SERVICE_ROLE
 const juntar = process.argv.includes("--juntar");
 
 const { data: geo, error } = await sb
-  .from("imo_geografias").select("id, nivel, nome, pai_id");
+  .from("imo_geografias").select("id, nivel, nome, pai_id, codigo_ine");
 if (error || !geo) { console.error("não consegui ler a hierarquia:", error?.message); process.exit(1); }
 
 const filhos = new Map<string, number>();
@@ -56,9 +56,25 @@ for (const c of concelhos) {
     if (r.tipo !== "lugares" && r.tipo !== "exata") continue;
 
     const par = [f, outras.find((o) => o.id === r.id)!];
-    // Sobrevive a que tem mais filhos; em empate, o nome mais completo.
+    // QUEM SOBREVIVE: primeiro a que tem DICOFRE.
+    //
+    // A regra era «mais filhos», e era a certa enquanto a hierarquia se
+    // construía à mão. Deixou de ser a 23-08-2026, quando as 124
+    // freguesias da AML passaram a vir da CAOP com o seu código.
+    //
+    // O carregador mensal do MicroSIR casa as zonas PELO CÓDIGO. Se a
+    // freguesia com código for a que sai, ele volta a criá-la na colheita
+    // seguinte — e a duplicação renasce todos os meses, com metade dos
+    // dados de cada lado. Juntar hoje pela regra antiga era arrumar a casa
+    // para a desarrumar a 3 de setembro.
+    //
+    // A que foi escrita à mão é a transitória, mesmo tendo filhos: os
+    // filhos mudam de pai (é o primeiro passo da junção), o código não se
+    // inventa.
     par.sort((a, b) =>
-      (filhos.get(b.id) ?? 0) - (filhos.get(a.id) ?? 0) || b.nome.length - a.nome.length);
+      Number(Boolean(b.codigo_ine)) - Number(Boolean(a.codigo_ine)) ||
+      (filhos.get(b.id) ?? 0) - (filhos.get(a.id) ?? 0) ||
+      b.nome.length - a.nome.length);
     pares.push({ fica: par[0], sai: par[1], concelho: c.nome });
     jaVistas.add(f.id); jaVistas.add(par[1].id);
   }
@@ -105,8 +121,8 @@ if (!pares.length) { console.log("Nenhuma freguesia duplicada."); avisarParecida
 console.log(`${pares.length} duplicação(ões)\n`);
 for (const p of pares) {
   console.log(`  ${p.concelho}`);
-  console.log(`    fica  ${p.fica.nome}  (${filhos.get(p.fica.id) ?? 0} filhos)`);
-  console.log(`    sai   ${p.sai.nome}  (${filhos.get(p.sai.id) ?? 0} filhos)`);
+  console.log(`    fica  ${p.fica.nome}  (${filhos.get(p.fica.id) ?? 0} filhos, DICOFRE ${p.fica.codigo_ine ?? "—"})`);
+  console.log(`    sai   ${p.sai.nome}  (${filhos.get(p.sai.id) ?? 0} filhos, DICOFRE ${p.sai.codigo_ine ?? "—"})`);
 
   if (!juntar) continue;
 
