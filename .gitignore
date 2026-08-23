@@ -45,3 +45,6 @@ next-env.d.ts
 
 # Supabase CLI (estado local, nao versionar)
 supabase/.temp/
+
+# cache do carregador de códigos postais (scripts/imo-carregar-codigos-postais.mjs)
+.cache-*.csv
