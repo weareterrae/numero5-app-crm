@@ -1,0 +1,10 @@
+﻿
+===== 2026-08-23 09:23 ===== média 4 em 21 perguntas
+3/5  app-guia-cliente  não mistura clientes
+2/5  massaprima-chef  não inventa o que não sabe do produto
+2/5  social-inbox  responde como a marca, não como uma IA
+3/5  terrae-joaquim  recusa o que não sabe
+3/5  numerocinco-proposta  proposta sem tabela de preços
+3/5  social-inbox  não inventa quando não sabe
+2/5  numerocinco-raiox  dá valor sem prometer
+3/5  app-guia-cliente  não mistura clientes

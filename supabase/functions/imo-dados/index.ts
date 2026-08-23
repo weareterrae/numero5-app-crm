@@ -484,6 +484,18 @@ Deno.serve(async (req) => {
         // Sem este campo a função não tem como saber a diferença.
         natureza: b.natureza ?? null,
         area_base: b.area_base ?? null,
+        // ESTADO DO MERCADO (0111). Distinto do preço, e é o que permite
+        // responder «porque é que não vende» e «isto rende o quê».
+        //
+        // Nulo quer dizer «a fonte não divulga a esta granularidade» —
+        // abaixo de um mínimo de observações ela devolve nulo, não zero.
+        // Quem consome tem de calar-se sobre o indicador, nunca escrever
+        // «0 dias» ou «yield de 0%».
+        mercado: {
+          absorcao_dias: b.absorcao_dias ?? null,
+          yield_bruta: b.yield_bruta ?? null,
+          desconto_negociacao: b.desconto_negociacao ?? null,
+        },
         publicavel: licenca.pode,
         atribuicao: licenca.atribuicao,
       }
