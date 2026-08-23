@@ -506,6 +506,15 @@ Deno.serve(async (req) => {
         // escolher tem de receber os dois.
         eur_m2_novos: b.eur_m2_novos ?? null,
         eur_m2_usados: b.eur_m2_usados ?? null,
+        // QUE LINHA foi escolhida (0113). Vazio = «vale para todas», ou
+        // seja, a procura subiu por não haver nada mais específico.
+        //
+        // Sem isto, uma moradia T5 de 500 m² é comparada com a linha de
+        // todas as tipologias da freguesia — 9.910 transações que são,
+        // na esmagadora maioria, apartamentos — e o relatório sai com um
+        // veredicto confiante que ninguém tem como pôr em causa.
+        tipologia_benchmark: b.tipologia_benchmark ?? null,
+        tipo_benchmark: b.tipo_benchmark ?? null,
         publicavel: licenca.pode,
         atribuicao: licenca.atribuicao,
       }
