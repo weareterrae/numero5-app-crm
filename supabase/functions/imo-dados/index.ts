@@ -496,6 +496,16 @@ Deno.serve(async (req) => {
           yield_bruta: b.yield_bruta ?? null,
           desconto_negociacao: b.desconto_negociacao ?? null,
         },
+        // CONSTRUÇÃO NOVA vs USADO, em separado (0112).
+        //
+        // O `eur_m2` acima é uma mistura dominada por stock usado. O
+        // prémio do novo tem mediana de 33,9% sobre o usado e 25,1%
+        // sobre a mistura — medir um apartamento novo contra a mistura
+        // diz «25% acima do mercado» de um imóvel que está no mercado
+        // dele. Quem compara um imóvel concreto tem de escolher, e para
+        // escolher tem de receber os dois.
+        eur_m2_novos: b.eur_m2_novos ?? null,
+        eur_m2_usados: b.eur_m2_usados ?? null,
         publicavel: licenca.pode,
         atribuicao: licenca.atribuicao,
       }
