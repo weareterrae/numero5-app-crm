@@ -5,6 +5,7 @@ import { Simbolo } from "@/components/marca/Simbolo";
 import { Quinto } from "@/components/assistente/Quinto";
 import { ManterSessao } from "@/components/auth/ManterSessao";
 import { NavOperador } from "@/components/nav/NavOperador";
+import { NavMobile } from "@/components/nav/NavMobile";
 import { PesquisaGlobal } from "@/components/nav/PesquisaGlobal";
 import { EstadoBadge } from "@/components/estado/EstadoBadge";
 import { contarGuiasNovos } from "@/lib/db/guias";
@@ -40,14 +41,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <PesquisaGlobal />
           <NavOperador badges={{ "/guias": guiasNovos }} />
           <EstadoBadge />
-          <form action="/auth/sair" method="post" className="shrink-0">
+          <form action="/auth/sair" method="post" className="hidden shrink-0 md:block">
             <button className="text-xs font-bold text-soft hover:text-ink" type="submit">
               sair
             </button>
           </form>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-4 pt-6 pb-24">{children}</main>
+      <main className="mx-auto max-w-6xl px-4 pt-6 pb-28 md:pb-24">{children}</main>
+      <NavMobile badges={{ "/guias": guiasNovos }} />
       <Quinto />
     </div>
   );

@@ -79,7 +79,7 @@ export function Quinto() {
       <button
         onClick={() => setAberto(true)}
         aria-label="Falar com o Quinto"
-        className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full bg-ink px-4 py-3 shadow-lg transition hover:brightness-125"
+        className="fixed bottom-24 right-4 z-40 flex items-center gap-2 rounded-full bg-ink px-4 py-3 shadow-lg transition hover:brightness-125 sm:bottom-5 sm:right-5"
       >
         <Simbolo fundo="escuro" className="w-7" />
         <span className="text-sm font-bold text-cream">Quinto</span>
@@ -88,8 +88,8 @@ export function Quinto() {
   }
 
   return (
-    <div className="fixed inset-x-0 bottom-0 z-40 flex justify-end sm:inset-auto sm:bottom-5 sm:right-5">
-      <div className="flex h-[85dvh] w-full flex-col rounded-t-2xl border border-line bg-cream shadow-2xl sm:h-[560px] sm:w-96 sm:rounded-2xl">
+    <div className="fixed inset-x-0 bottom-16 z-40 flex justify-end sm:inset-auto sm:bottom-5 sm:right-5">
+      <div className="flex h-[70dvh] w-full flex-col rounded-2xl border border-line bg-cream shadow-2xl sm:h-[560px] sm:w-96">
         {/* Cabeçalho */}
         <header className="flex items-center gap-2.5 rounded-t-2xl bg-ink px-4 py-3">
           <Simbolo fundo="escuro" className="w-8" />

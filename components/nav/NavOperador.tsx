@@ -3,53 +3,11 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { NAV, ehGrupo, type Grupo } from "./nav-data";
 
-type Item = { href: string; label: string };
-type Grupo = { label: string; items: Item[] };
-type Entrada = Item | Grupo;
-
-const NAV: Entrada[] = [
-  { href: "/", label: "Cockpit" },
-  { href: "/dia", label: "O meu dia" },
-  { href: "/producao", label: "Produção" },
-  { href: "/radar", label: "Radar" },
-  {
-    label: "Comercial",
-    items: [
-      { href: "/clientes", label: "Clientes" },
-      { href: "/clientes/funil", label: "Funil" },
-      { href: "/guias", label: "Guias" },
-      { href: "/leads", label: "Leads" },
-      { href: "/leads/faturacao", label: "Assinaturas" },
-      { href: "/avencas", label: "Avenças" },
-    ],
-  },
-  {
-    label: "Marketing",
-    items: [
-      { href: "/anuncios", label: "Anúncios" },
-      { href: "/metricas", label: "Métricas" },
-    ],
-  },
-  {
-    label: "Financeiro",
-    items: [
-      { href: "/faturacao", label: "Faturação" },
-      { href: "/capacidade", label: "Capacidade" },
-      { href: "/definicoes/precos", label: "Preços" },
-    ],
-  },
-  {
-    label: "IA",
-    items: [
-      { href: "/ai-operations", label: "AI Operations" },
-      { href: "/estado", label: "Estado dos Sistemas" },
-    ],
-  },
-];
-
-const ehGrupo = (e: Entrada): e is Grupo => "items" in e;
-
+// Barra horizontal do operador — só a partir do tablet (md). No telemóvel a
+// navegação vive na barra inferior (NavMobile): esta barra em `flex-wrap`
+// não cabe em 375px sem partir o cabeçalho em várias linhas.
 export function NavOperador({ badges }: { badges?: Record<string, number> }) {
   const pathname = usePathname();
   const [aberto, setAberto] = useState<string | null>(null);
@@ -77,7 +35,7 @@ export function NavOperador({ badges }: { badges?: Record<string, number> }) {
   const pill = "block whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-bold transition";
 
   return (
-    <nav ref={ref} className="flex-1">
+    <nav ref={ref} className="hidden flex-1 md:block">
       <ul className="flex flex-wrap items-center gap-1">
         {NAV.map((e) => {
           if (!ehGrupo(e)) {
