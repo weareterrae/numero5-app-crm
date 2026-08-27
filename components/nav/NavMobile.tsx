@@ -143,6 +143,9 @@ export function NavMobile({ badges }: { badges?: Record<string, number> }) {
                   </div>
                 </div>
               ))}
+              <Link href="/instalar" className="block w-full rounded-xl bg-cream/60 px-3.5 py-2.5 text-left text-sm font-bold text-grey">
+                Instalar a app no telemóvel
+              </Link>
               <form action="/auth/sair" method="post">
                 <button type="submit" className="w-full rounded-xl bg-cream/60 px-3.5 py-2.5 text-left text-sm font-bold text-grey">
                   Sair
