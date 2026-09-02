@@ -1,0 +1,249 @@
+openapi: 3.1.0
+info:
+  title: Terrae · dados de mercado (imo-api)
+  version: "2026-09-02"
+  description: |
+    Benchmarks de transação por zona e tipologia (MicroSIR e SIR da Confidencial
+    Imobiliário, INE), série mensal, área de mercado por código postal, fontes e
+    licenças. Só agregados. Cada resposta traz um bloco `licenca` com a
+    atribuição obrigatória por fonte; qualquer valor publicado leva-a ao lado,
+    com as palavras exactas. Uso interno das ferramentas da Terrae.
+servers:
+  - url: https://rycgekqszxyudmchpqvs.supabase.co/functions/v1/imo-api
+security:
+  - chave: []
+components:
+  securitySchemes:
+    chave:
+      type: http
+      scheme: bearer
+      description: "Chave de ferramenta (imo_…), criada com scripts/imo-chave.mjs."
+  schemas:
+    Erro:
+      type: object
+      properties:
+        ok: { type: boolean, const: false }
+        erro: { type: string, description: "sem_chave, chave_invalida, origem_nao_autorizada, limite_minuto, limite_dia, faltam_parametros, zona_desconhecida, cp7_invalido, vendas_nao_permitidas, fila_nao_permitida, nao_encontrado, falha_interna" }
+        mensagem: { type: string }
+        terminal: { type: boolean, description: "true = não repetir o pedido tal como está" }
+        meta: { $ref: "#/components/schemas/Meta" }
+    Meta:
+      type: object
+      properties:
+        request_id: { type: string }
+        versao: { type: string }
+        ms: { type: integer }
+    Licenca:
+      type: object
+      description: "Por fonte: se pode ser publicada e a atribuição a escrever ao lado do valor."
+      properties:
+        fontes:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              publicavel: { type: boolean }
+              atribuicao: { type: [string, "null"] }
+              porque: { type: [string, "null"] }
+        regras:
+          type: array
+          items: { type: string }
+    Benchmark:
+      type: object
+      properties:
+        id: { type: string }
+        fonte: { type: string, description: "sir-micro, sir, ine" }
+        nivel: { type: string, description: "concelho, freguesia, microzona" }
+        zona: { type: string }
+        eur_m2: { type: [number, "null"] }
+        medida: { type: [string, "null"], description: "media ou mediana" }
+        p25: { type: [number, "null"] }
+        p75: { type: [number, "null"] }
+        dispersao: { type: [number, "null"] }
+        n_transacoes: { type: [integer, "null"] }
+        periodo: { type: [string, "null"], description: "«2026-08 · 24m» = janela de 24 meses até à colheita" }
+        natureza: { type: [string, "null"], description: "transacao = preço de venda" }
+        area_base: { type: [string, "null"], description: "bruta privativa" }
+        desconto: { type: [number, "null"], description: "price gap, negativo; sinal de mercado, nunca factor" }
+        mercado:
+          type: object
+          properties:
+            absorcao_dias: { type: [integer, "null"] }
+            yield_bruta: { type: [number, "null"], description: "fracção, 0.043 = 4,3%" }
+            desconto_negociacao: { type: [number, "null"] }
+        eur_m2_novos: { type: [number, "null"] }
+        eur_m2_usados: { type: [number, "null"] }
+        tipologia_benchmark: { type: string, description: "vazio = vale para todas" }
+        tipo_benchmark: { type: string }
+        referencia_generica: { type: boolean, description: "true = pediste uma tipologia/tipo e a linha escolhida é geral" }
+        cobertura_bbox: { type: [number, "null"], description: "abaixo de ~0,35 diz mais dos vizinhos do que da zona" }
+        n_observacoes: { type: [integer, "null"] }
+        colhido_em: { type: [string, "null"] }
+        janela_meses: { type: [integer, "null"] }
+        avisos_colheita: { type: array, items: { type: string } }
+paths:
+  /saude:
+    get:
+      operationId: saude
+      summary: A API está de pé (sem chave)
+      security: []
+      responses:
+        "200": { description: ok }
+  /fontes:
+    get:
+      operationId: fontes
+      summary: Fontes de dados, escalão, publicável, atribuição
+      responses:
+        "200": { description: ok }
+        "401": { description: sem chave ou chave inválida, content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+  /zonas:
+    get:
+      operationId: zonas
+      summary: Zonas da AML com dados e o último benchmark de cada uma
+      parameters:
+        - in: query
+          name: concelho
+          schema: { type: string }
+          description: "Ex.: Oeiras. Vazio = os 18 concelhos."
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  dados:
+                    type: object
+                    properties:
+                      concelho: { type: [string, "null"] }
+                      total: { type: integer }
+                      com_dados: { type: integer }
+                      zonas:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            geografia_id: { type: string }
+                            nivel: { type: string }
+                            zona: { type: string }
+                            concelho: { type: [string, "null"] }
+                            dicofre: { type: [string, "null"] }
+                            fonte: { type: [string, "null"] }
+                            periodo: { type: [string, "null"] }
+                            periodo_fim: { type: [string, "null"] }
+                            eur_m2: { type: [number, "null"] }
+                            p25: { type: [number, "null"] }
+                            p75: { type: [number, "null"] }
+                            n_transacoes: { type: [integer, "null"] }
+                            cobertura_bbox: { type: [number, "null"] }
+                            tipologias: { type: array, items: { type: string } }
+                  licenca: { $ref: "#/components/schemas/Licenca" }
+                  meta: { $ref: "#/components/schemas/Meta" }
+  /mercado:
+    get:
+      operationId: mercado
+      summary: O retrato de mercado de uma zona (benchmark, linha geral, série)
+      parameters:
+        - { in: query, name: zona, schema: { type: string }, description: "Freguesia, união de freguesias ou microzona. Vazio = o concelho." }
+        - { in: query, name: concelho, schema: { type: string }, description: "Ex.: Oeiras" }
+        - { in: query, name: tipo, schema: { type: string, enum: [apartamento, moradia, ""] } }
+        - { in: query, name: tipologia, schema: { type: string }, description: "T0 a T6; vazio = todas" }
+        - { in: query, name: vendas, schema: { type: string, enum: ["1"] }, description: "Vendas reais da Terrae (só chaves com permissão)" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  dados:
+                    type: object
+                    properties:
+                      pedido: { type: object }
+                      geografia: { type: object }
+                      benchmark: { oneOf: [ { $ref: "#/components/schemas/Benchmark" }, { type: "null" } ] }
+                      geral: { oneOf: [ { $ref: "#/components/schemas/Benchmark" }, { type: "null" } ] }
+                      serie:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            fonte: { type: string }
+                            periodo: { type: string }
+                            periodo_fim: { type: [string, "null"] }
+                            eur_m2: { type: number }
+                            p25: { type: [number, "null"] }
+                            p75: { type: [number, "null"] }
+                            n_transacoes: { type: [integer, "null"] }
+                      vendas_terrae: { type: array, items: { type: object } }
+                      nota: { type: [string, "null"] }
+                  licenca: { $ref: "#/components/schemas/Licenca" }
+                  meta: { $ref: "#/components/schemas/Meta" }
+        "404": { description: zona desconhecida, content: { application/json: { schema: { $ref: "#/components/schemas/Erro" } } } }
+  /serie:
+    get:
+      operationId: serie
+      summary: A série do €/m² ao nível exacto pedido, por fonte
+      parameters:
+        - { in: query, name: zona, schema: { type: string } }
+        - { in: query, name: concelho, schema: { type: string } }
+        - { in: query, name: tipo, schema: { type: string, enum: [apartamento, moradia, ""] } }
+        - { in: query, name: tipologia, schema: { type: string } }
+      responses:
+        "200": { description: ok }
+        "404": { description: zona desconhecida }
+  /codigo-postal:
+    get:
+      operationId: codigoPostal
+      summary: Sítio, área local e mercado da zona de um código postal
+      parameters:
+        - { in: query, name: cp7, required: true, schema: { type: string }, description: "7 dígitos, ex.: 2790-008" }
+      responses:
+        "200":
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  dados:
+                    type: object
+                    properties:
+                      cp7: { type: string }
+                      sitio: { type: [object, "null"] }
+                      geografia: { type: [object, "null"] }
+                      area_local:
+                        type: object
+                        description: "estado ok (raio_m, amostra, eur_m2, p25, p75, colhido_em, valida_ate, escada) ou pendente/erro/sem_area/caducada/nao_pedido com nota"
+                      mercado_zona: { oneOf: [ { $ref: "#/components/schemas/Benchmark" }, { type: "null" } ] }
+                      nota: { type: [string, "null"] }
+                  licenca: { $ref: "#/components/schemas/Licenca" }
+                  meta: { $ref: "#/components/schemas/Meta" }
+        "400": { description: cp7 inválido }
+  /fila:
+    get:
+      operationId: filaEstado
+      summary: Estado da fila de códigos postais do MicroSIR
+      responses:
+        "200": { description: ok }
+    post:
+      operationId: enfileirar
+      summary: Pôr um código postal na fila (chaves com permissão)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cp7]
+              properties:
+                cp7: { type: string, example: "2790-008" }
+      responses:
+        "200": { description: já tinha área }
+        "202": { description: ficou pendente; a corrida diária colhe-o }
+        "403": { description: a chave não pode enfileirar }
