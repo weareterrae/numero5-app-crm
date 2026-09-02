@@ -23,7 +23,7 @@ components:
       type: object
       properties:
         ok: { type: boolean, const: false }
-        erro: { type: string, description: "sem_chave, chave_invalida, origem_nao_autorizada, limite_minuto, limite_dia, faltam_parametros, zona_desconhecida, cp7_invalido, vendas_nao_permitidas, fila_nao_permitida, nao_encontrado, falha_interna" }
+        erro: { type: string, description: "sem_chave, chave_invalida, origem_nao_autorizada, limite_minuto, limite_dia, limite_fila_dia, faltam_parametros, zona_desconhecida, cp7_invalido, cp7_desconhecido, vendas_nao_permitidas, fila_nao_permitida, nao_encontrado, falha_interna" }
         mensagem: { type: string }
         terminal: { type: boolean, description: "true = não repetir o pedido tal como está" }
         meta: { $ref: "#/components/schemas/Meta" }
@@ -76,6 +76,7 @@ components:
         tipologia_benchmark: { type: string, description: "vazio = vale para todas" }
         tipo_benchmark: { type: string }
         referencia_generica: { type: boolean, description: "true = pediste uma tipologia/tipo e a linha escolhida é geral" }
+        derivado: { type: boolean, description: "true = valor de concelho calculado pela Terrae a partir das zonas do SIR; não é uma publicação da IMOESTATÍSTICA" }
         cobertura_bbox: { type: [number, "null"], description: "abaixo de ~0,35 diz mais dos vizinhos do que da zona" }
         n_observacoes: { type: [integer, "null"] }
         colhido_em: { type: [string, "null"] }

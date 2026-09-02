@@ -89,10 +89,14 @@ async function preencherCoordenadas() {
     if (eU) { console.error(`  ${cp7}: não gravei as coordenadas: ${eU.message}`); continue; }
     preenchidos++;
   }
-  if (semFonte.length) {
+  // Sem fonte, conta como tentativa falhada: ao fim de três, sai do lote
+  // (imo_cp_fila e esta função só olham para tentativas < 3). Deixá-lo
+  // «pendente» era ocupar um lugar na fila para sempre.
+  for (const cp7 of semFonte) {
+    const { data: linha } = await sb.from("imo_cp_areas").select("tentativas").eq("cp7", cp7).maybeSingle();
     await sb.from("imo_cp_areas")
-      .update({ ultimo_erro: "sem coordenadas no GISCO 2024" })
-      .in("cp7", semFonte).is("lat", null);
+      .update({ estado: "erro", tentativas: (linha?.tentativas ?? 0) + 1, ultimo_erro: "sem coordenadas no GISCO 2024" })
+      .eq("cp7", cp7).is("lat", null);
   }
   return { pedidos: sem.length, preenchidos, semFonte };
 }

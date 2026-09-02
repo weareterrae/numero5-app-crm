@@ -68,6 +68,32 @@ type Saida = {
 
 type Registo = Record<string, unknown>;
 
+/** Abaixo disto uma área local não se serve: é o piso do motor e da licença. */
+const AMOSTRA_MINIMA = 30;
+/** Códigos postais NOVOS que uma chave pode pôr na fila por dia. */
+const FILA_MAX_DIA = 20;
+
+/**
+ * A escada como sai para fora. Cada degrau diz o raio e se chegou; a
+ * contagem só se mostra a partir do mínimo. «3 transações a 300 m de
+ * um ponto» é o género de número de onde se reconstrói uma operação, e a
+ * cláusula 2.c) não o permite.
+ */
+function escadaPublica(escada: unknown): unknown {
+  if (!Array.isArray(escada)) return escada ?? null;
+  return escada.map((d) => {
+    if (!d || typeof d !== "object") return d;
+    const degrau = { ...(d as Registo) };
+    for (const k of ["amostra", "n", "sample_count", "count"]) {
+      if (typeof degrau[k] === "number" && (degrau[k] as number) < AMOSTRA_MINIMA) {
+        degrau[k] = null;
+        degrau.abaixo_do_minimo = true;
+      }
+    }
+    return degrau;
+  });
+}
+
 const REGRAS = [
   "Só agregados. Nunca reconstruir uma transação ou um imóvel individual a partir destes números.",
   "A atribuição de cada fonte tem de aparecer, com as palavras exactas, junto de qualquer valor publicado.",
@@ -152,7 +178,10 @@ function emSegundoPlano(p: PromiseLike<unknown>) {
 async function licencas(fontes: Array<string | null | undefined>) {
   const out: Record<string, { publicavel: boolean; atribuicao: string | null; porque: string | null }> = {};
   for (const f of new Set(fontes.filter((x): x is string => !!x))) {
-    const { data } = await db.rpc("imo_pode_mostrar", { p_fonte: f });
+    const { data, error } = await db.rpc("imo_pode_mostrar", { p_fonte: f });
+    // Falha fechada: sem resposta da tabela de fontes, não é publicável.
+    // Mas fica escrito, para não passar por «a fonte não deixa».
+    if (error) console.error(`imo-api: imo_pode_mostrar(${f}) falhou: ${error.message}`);
     const l = Array.isArray(data) ? data[0] : data;
     out[f] = { publicavel: !!l?.pode, atribuicao: l?.atribuicao ?? null, porque: l?.porque ?? null };
   }
@@ -200,6 +229,10 @@ function formaBenchmark(b: Registo, extra: Registo | null, pedido: { tipo: strin
     tipologia_benchmark: tipologiaB,
     tipo_benchmark: tipoB,
     referencia_generica: (pedido.tipologia !== "" && tipologiaB === "") || (pedido.tipo !== "" && tipoB === ""),
+    // Uma linha de concelho DERIVADA pela Terrae (mediana das zonas do
+    // SIR em PDF) não é uma publicação da IMOESTATÍSTICA. Vai marcada,
+    // para ninguém a citar como se fosse.
+    derivado: !!extra?.derivado,
     cobertura_bbox: num(extra?.cobertura_bbox),
     n_observacoes: (extra?.n_observacoes as number | undefined) ?? null,
     colhido_em: (extra?.colhido_em as string | undefined) ?? null,
@@ -225,7 +258,8 @@ async function serieDe(geoId: string, tipo: string, tipologia: string, fonte?: s
     .order("fonte_id", { ascending: true })
     .order("periodo_fim", { ascending: true });
   if (fonte) q = q.eq("fonte_id", fonte);
-  const { data } = await q;
+  const { data, error } = await q;
+  if (error) throw new Error(`serie: ${error.message}`);
   return (data ?? [])
     // Um derivado no meio de uma série de reais é uma mudança de método,
     // não de mercado. Fora.
@@ -243,9 +277,16 @@ async function serieDe(geoId: string, tipo: string, tipologia: string, fonte?: s
 }
 
 async function geografiaDe(zona: string, concelho: string | null) {
-  const { data: geoId } = await db.rpc("imo_geo_por_nome", { p_zona: zona || null, p_concelho: concelho });
+  // Sem concelho, a zona pode SER um concelho («Oeiras»). imo_geo_por_nome
+  // só o reconhece pelo p_concelho: sem ele procurava uma freguesia cujo
+  // nome contivesse «Oeiras» e devolvia «Oeiras e São Julião da Barra…»
+  // como se fosse o concelho inteiro. Passa-se a zona também como
+  // concelho; se não for um, a função ignora-o e segue como antes.
+  const { data: geoId, error } = await db.rpc("imo_geo_por_nome", { p_zona: zona || null, p_concelho: concelho ?? zona ?? null });
+  if (error) throw new Error(`imo_geo_por_nome: ${error.message}`);
   if (!geoId) return null;
-  const { data: g } = await db.from("imo_geografias").select("id, nivel, nome").eq("id", geoId).maybeSingle();
+  const { data: g, error: eG } = await db.from("imo_geografias").select("id, nivel, nome").eq("id", geoId).maybeSingle();
+  if (eG) throw new Error(`imo_geografias: ${eG.message}`);
   return g ? { id: g.id as string, nivel: g.nivel as string, zona: g.nome as string } : { id: geoId as string, nivel: null, zona: null };
 }
 
@@ -352,15 +393,24 @@ async function mercado(p: URLSearchParams, f: Ferramenta): Promise<Saida> {
     return { status: 404, corpo: erroCorpo("zona_desconhecida", `Não conheço «${pedido.zona}»${pedido.concelho ? ` em ${pedido.concelho}` : ""}. Vê GET /zonas?concelho=… para os nomes que existem.`) };
   }
 
-  const [{ data: bench }, { data: geral }] = await Promise.all([
+  const [rBench, rGeral] = await Promise.all([
     db.rpc("imo_benchmark", { p_geografia: geo.id, p_tipo: pedido.tipo, p_tipologia: pedido.tipologia }),
     db.rpc("imo_benchmark", { p_geografia: geo.id, p_tipo: "", p_tipologia: "" }),
   ]);
-  const b = (Array.isArray(bench) ? bench[0] : null) as Registo | null;
-  const bg = (Array.isArray(geral) ? geral[0] : null) as Registo | null;
+  // Um erro da base é uma avaria nossa, não «zona sem dados». Sobe ao
+  // catch e sai como 500 sem cache; engoli-lo dava um 200 «sem benchmark»
+  // guardado uma hora.
+  if (rBench.error) throw new Error(`imo_benchmark: ${rBench.error.message}`);
+  if (rGeral.error) throw new Error(`imo_benchmark(geral): ${rGeral.error.message}`);
+  const b = (Array.isArray(rBench.data) ? rBench.data[0] : null) as Registo | null;
+  const bg = (Array.isArray(rGeral.data) ? rGeral.data[0] : null) as Registo | null;
 
   const [extra, extraGeral] = await Promise.all([extraDe(b?.benchmark_id), bg && bg.benchmark_id !== b?.benchmark_id ? extraDe(bg.benchmark_id) : Promise.resolve(null)]);
-  const serie = b ? await serieDe(String(b.geografia_id), String(b.tipo_imovel ?? ""), String(b.tipologia ?? ""), String(b.fonte_id)) : [];
+  // A série da LINHA ESCOLHIDA. A RPC diz qual foi em tipo_benchmark e
+  // tipologia_benchmark (0113); não devolve tipo_imovel nem tipologia, e
+  // ler esses dava sempre a série da linha geral por baixo de um
+  // benchmark de T3.
+  const serie = b ? await serieDe(String(b.geografia_id), String(b.tipo_benchmark ?? ""), String(b.tipologia_benchmark ?? ""), String(b.fonte_id)) : [];
 
   let vendas: unknown[] | undefined;
   if (p.get("vendas") === "1") {
@@ -396,7 +446,11 @@ async function mercado(p: URLSearchParams, f: Ferramenta): Promise<Saida> {
           bg.fonte_id === b.fonte_id && bg.periodo === b.periodo && bg.geografia_id === b.geografia_id),
         serie,
         ...(vendas !== undefined ? { vendas_terrae: vendas } : {}),
-        nota: b ? null : "Sem benchmark de transação para esta zona, mesmo a subir na hierarquia. O motor do site usa o INE neste caso.",
+        nota: !b
+          ? "Sem benchmark de transação para esta zona, mesmo a subir na hierarquia. O motor do site usa o INE neste caso."
+          : extra?.derivado
+          ? "Valor DERIVADO pela Terrae (mediana das zonas publicadas pelo SIR), não uma publicação da IMOESTATÍSTICA. Cita-se como estimativa da Terrae."
+          : null,
       },
       licenca: await blocoLicenca([b?.fonte_id as string, bg?.fonte_id as string]),
     },
@@ -441,12 +495,16 @@ async function codigoPostal(cpBruto: unknown, f: Ferramenta): Promise<Saida> {
   const cp = cp7De(cpBruto);
   if (!cp) return { status: 400, corpo: erroCorpo("cp7_invalido", "Indica um código postal de sete dígitos, ex: ?cp7=2790-008") };
 
-  const [{ data: consulta }, { data: a }] = await Promise.all([
+  const [rConsulta, rArea] = await Promise.all([
     db.rpc("imo_cp_consulta", { p_cp7: cp }),
     db.from("imo_cp_areas")
       .select("cp7, estado, raio_m, amostra, meses, eur_m2_medio, eur_m2_p25, eur_m2_p75, escada, colhido_em, valida_ate, tentativas, ultimo_erro")
       .eq("cp7", cp).maybeSingle(),
   ]);
+  if (rConsulta.error) throw new Error(`imo_cp_consulta: ${rConsulta.error.message}`);
+  if (rArea.error) throw new Error(`imo_cp_areas: ${rArea.error.message}`);
+  const consulta = rConsulta.data;
+  const a = rArea.data;
   const s = (Array.isArray(consulta) ? consulta[0] : consulta) as Registo | null;
   const sitio = s
     ? {
@@ -461,7 +519,10 @@ async function codigoPostal(cpBruto: unknown, f: Ferramenta): Promise<Saida> {
   // A área local: os 300 a 2 000 m à volta deste código postal, quando já
   // foi colhida e ainda está dentro da validade (90 dias).
   let areaLocal: Registo;
-  const valida = a?.estado === "ok" && (!a.valida_ate || new Date(a.valida_ate as string) > new Date());
+  // Só «ok», dentro da validade (90 dias) e com a amostra mínima que a
+  // licença e o motor exigem. Abaixo de 30 a área não se serve, seja
+  // qual for o estado gravado.
+  const valida = a?.estado === "ok" && (!a.valida_ate || new Date(a.valida_ate as string) > new Date()) && Number(a.amostra) >= AMOSTRA_MINIMA;
   if (a && valida) {
     areaLocal = {
       estado: "ok", fonte: "sir-micro",
@@ -469,15 +530,24 @@ async function codigoPostal(cpBruto: unknown, f: Ferramenta): Promise<Saida> {
       eur_m2: num(a.eur_m2_medio), p25: num(a.eur_m2_p25), p75: num(a.eur_m2_p75),
       colhido_em: a.colhido_em, valida_ate: a.valida_ate,
       natureza: "transacao", area_base: "bruta privativa",
-      escada: a.escada,
+      escada: escadaPublica(a.escada),
     };
   } else if (a) {
-    const estado = a.estado === "ok" ? "caducada" : a.estado;
+    const esgotado = a.estado === "erro" && Number(a.tentativas) >= 3;
+    const estado = a.estado === "ok"
+      ? (Number(a.amostra) >= AMOSTRA_MINIMA ? "caducada" : "amostra_insuficiente")
+      : esgotado ? "esgotado" : a.estado;
+    const notas: Record<string, string> = {
+      pendente: "Está na fila. A corrida diária do MicroSIR colhe-o com um único login; volta amanhã.",
+      erro: "Falhou numa corrida e volta à fila na próxima (até 3 tentativas).",
+      esgotado: "Esgotou as 3 tentativas e não volta à fila sem intervenção. Usa o mercado da zona.",
+      sem_area: "Nem a 2 km havia 30 transações. Usa o mercado da zona.",
+      caducada: "A área caducou (validade de 90 dias). POST /fila renova-a; até lá usa o mercado da zona.",
+      amostra_insuficiente: "A área colhida tem menos de 30 transações e não se serve. Usa o mercado da zona.",
+    };
     areaLocal = {
       estado, tentativas: a.tentativas, ultimo_erro: a.ultimo_erro ?? null,
-      nota: estado === "sem_area"
-        ? "Nem a 2 km havia 30 transações. Usa o mercado da zona."
-        : "Está na fila. A corrida diária do MicroSIR colhe-o com um único login; volta amanhã.",
+      nota: notas[estado] ?? "Sem área servível. Usa o mercado da zona.",
     };
   } else {
     areaLocal = {
@@ -495,7 +565,8 @@ async function codigoPostal(cpBruto: unknown, f: Ferramenta): Promise<Saida> {
   if (sitio) {
     geo = await geografiaDe(String(sitio.zona), String(sitio.concelho));
     if (geo) {
-      const { data: bench } = await db.rpc("imo_benchmark", { p_geografia: geo.id, p_tipo: "", p_tipologia: "" });
+      const { data: bench, error } = await db.rpc("imo_benchmark", { p_geografia: geo.id, p_tipo: "", p_tipologia: "" });
+      if (error) throw new Error(`imo_benchmark: ${error.message}`);
       const b = (Array.isArray(bench) ? bench[0] : null) as Registo | null;
       if (b) mercadoZona = formaBenchmark(b, await extraDe(b.benchmark_id), { tipo: "", tipologia: "" });
     }
@@ -524,18 +595,32 @@ async function codigoPostal(cpBruto: unknown, f: Ferramenta): Promise<Saida> {
 // GET /fila
 // ---------------------------------------------------------------------
 async function filaEstado(): Promise<Saida> {
-  const [{ data: linhas }, { data: ultimos }] = await Promise.all([
-    db.from("imo_cp_areas").select("estado, lat, valida_ate").limit(5000),
+  // Contagens no servidor. Ler as linhas todas e contar aqui parecia
+  // simples, mas o PostgREST corta em 1 000 linhas e a contagem mentia a
+  // partir daí.
+  const contar = (filtro: (q: ReturnType<typeof db.from>) => unknown) => {
+    const q = db.from("imo_cp_areas");
+    return (filtro(q) as unknown as PromiseLike<{ count: number | null; error: { message: string } | null }>);
+  };
+  const agora = new Date().toISOString();
+  const estados = ["pendente", "ok", "sem_area", "erro"] as const;
+  const [porEstado, semCoord, caduc, ultimos] = await Promise.all([
+    Promise.all(estados.map((e) => contar((q) => q.select("cp7", { count: "exact", head: true }).eq("estado", e)))),
+    contar((q) => q.select("cp7", { count: "exact", head: true }).in("estado", ["pendente", "erro"]).is("lat", null)),
+    contar((q) => q.select("cp7", { count: "exact", head: true }).eq("estado", "ok").lt("valida_ate", agora)),
     db.from("imo_cp_areas").select("cp7, raio_m, amostra, colhido_em").eq("estado", "ok")
       .order("colhido_em", { ascending: false }).limit(5),
   ]);
-  const contagem: Record<string, number> = { pendente: 0, ok: 0, sem_area: 0, erro: 0 };
-  let semCoordenadas = 0, caducadas = 0;
-  for (const l of linhas ?? []) {
-    contagem[l.estado as string] = (contagem[l.estado as string] ?? 0) + 1;
-    if ((l.estado === "pendente" || l.estado === "erro") && l.lat == null) semCoordenadas++;
-    if (l.estado === "ok" && l.valida_ate && new Date(l.valida_ate as string) < new Date()) caducadas++;
-  }
+  const contagem: Record<string, number> = {};
+  estados.forEach((e, i) => {
+    if (porEstado[i].error) throw new Error(`imo_cp_areas: ${porEstado[i].error!.message}`);
+    contagem[e] = porEstado[i].count ?? 0;
+  });
+  if (semCoord.error) throw new Error(`imo_cp_areas: ${semCoord.error.message}`);
+  if (caduc.error) throw new Error(`imo_cp_areas: ${caduc.error.message}`);
+  if (ultimos.error) throw new Error(`imo_cp_areas: ${ultimos.error.message}`);
+  const semCoordenadas = semCoord.count ?? 0;
+  const caducadas = caduc.count ?? 0;
   return {
     status: 200,
     cache: "no-store",
@@ -545,7 +630,7 @@ async function filaEstado(): Promise<Saida> {
         contagem,
         pendentes_sem_coordenadas: semCoordenadas,
         ok_caducadas: caducadas,
-        ultimos_colhidos: ultimos ?? [],
+        ultimos_colhidos: ultimos.data ?? [],
         corrida: "diária, 09:00 Europe/Lisbon, até 40 códigos postais por corrida, um login no MicroSIR",
       },
       licenca: { regras: REGRAS },
@@ -557,27 +642,54 @@ async function filaEstado(): Promise<Saida> {
 // POST /fila {"cp7":"…"}
 // ---------------------------------------------------------------------
 async function enfileirar(corpo: Registo, f: Ferramenta): Promise<Saida> {
-  if (!f.permite_enfileirar) {
-    return { status: 403, corpo: erroCorpo("fila_nao_permitida", "Esta chave não pode pôr códigos postais na fila.", true) };
-  }
   const cp = cp7De(corpo?.cp7 ?? corpo?.cp ?? corpo?.codigo_postal);
   if (!cp) return { status: 400, corpo: erroCorpo("cp7_invalido", "Indica {\"cp7\":\"2790-008\"}.") };
 
-  const { data: consulta } = await db.rpc("imo_cp_consulta", { p_cp7: cp });
+  // O ficheiro dos CTT é a lista fechada do que existe. Um código postal
+  // que lá não esteja não vai para a fila: ocupava um lugar na corrida
+  // diária para sempre, sem coordenadas e sem sítio.
+  const { data: consulta, error: eC } = await db.rpc("imo_cp_consulta", { p_cp7: cp });
+  if (eC) throw new Error(`imo_cp_consulta: ${eC.message}`);
   const s = (Array.isArray(consulta) ? consulta[0] : consulta) as Registo | null;
-  let geoId: string | null = null;
-  if (s) {
-    const geo = await geografiaDe(String((s.r_freguesia as string | null) || s.r_designacao), String(s.r_concelho));
-    geoId = geo?.id ?? null;
+  if (!s) return { status: 404, corpo: erroCorpo("cp7_desconhecido", `O código postal ${cp} não está no ficheiro dos CTT. Não vai para a fila.`, true) };
+
+  // Já existe? Só «pendente», «erro» com tentativas por gastar e «ok»
+  // caducada voltam à fila. «sem_area» e «erro» esgotado são resultados,
+  // não esperas: a corrida diária nunca os apanha, e dizer «volta amanhã»
+  // era uma promessa falsa.
+  const { data: antes, error: eA } = await db.from("imo_cp_areas")
+    .select("estado, tentativas, raio_m, amostra, eur_m2_medio, colhido_em, valida_ate").eq("cp7", cp).maybeSingle();
+  if (eA) throw new Error(`imo_cp_areas: ${eA.message}`);
+  if (antes?.estado === "sem_area") {
+    return { status: 200, cache: "no-store", corpo: { ok: true, dados: { cp7: cp, estado: "sem_area", nota: "Nem a 2 km havia 30 transações. Não volta à fila; usa o mercado da zona." }, licenca: { regras: REGRAS } } };
   }
+  if (antes?.estado === "erro" && Number(antes.tentativas) >= 3) {
+    return { status: 200, cache: "no-store", corpo: { ok: true, dados: { cp7: cp, estado: "esgotado", tentativas: antes.tentativas, nota: "Esgotou as 3 tentativas e não volta à fila sem intervenção do Sandro." }, licenca: { regras: REGRAS } } };
+  }
+
+  // Quantos códigos postais NOVOS esta chave já pôs na fila hoje. É a
+  // corrida diária que paga cada um (até 40 por dia para toda a casa), por
+  // isso o tecto por chave é pequeno e não se confunde com o limite geral.
+  const novo = !antes;
+  if (novo) {
+    const { data: n, error: eN } = await db.rpc("ai_rate_bump", { p_scope: "key", p_scope_key: `imo:fila:${f.id}`, p_window_seconds: 86400 });
+    if (eN) console.error(`imo-api: contador da fila falhou: ${eN.message}`);
+    if ((n as number | null ?? 0) > FILA_MAX_DIA) {
+      return { status: 429, corpo: erroCorpo("limite_fila_dia", `Esta chave já pôs ${FILA_MAX_DIA} códigos postais novos na fila hoje.`, true) };
+    }
+  }
+
+  const geo = await geografiaDe(String((s.r_freguesia as string | null) || s.r_designacao), String(s.r_concelho));
   // A mesma função que o site usa: insere «pendente» se não existir,
-  // devolve a área se já estiver colhida. As coordenadas vêm depois, da
-  // cache do GISCO, na corrida diária (scripts/imo-cp-fila.mjs).
-  const { error } = await db.rpc("imo_cp_area", { p_cp7: cp, p_lat: null, p_lng: null, p_geografia: geoId });
+  // reenfileira uma «ok» caducada, devolve a área se já estiver colhida.
+  // As coordenadas vêm depois, da cache do GISCO, na corrida diária
+  // (scripts/imo-cp-fila.mjs).
+  const { error } = await db.rpc("imo_cp_area", { p_cp7: cp, p_lat: null, p_lng: null, p_geografia: geo?.id ?? null });
   if (error) throw new Error(`imo_cp_area: ${error.message}`);
 
-  const { data: a } = await db.from("imo_cp_areas").select("estado, raio_m, amostra, eur_m2_medio, colhido_em, valida_ate").eq("cp7", cp).maybeSingle();
-  const pronto = a?.estado === "ok";
+  const { data: a, error: eD } = await db.from("imo_cp_areas").select("estado, raio_m, amostra, eur_m2_medio, colhido_em, valida_ate").eq("cp7", cp).maybeSingle();
+  if (eD) throw new Error(`imo_cp_areas: ${eD.message}`);
+  const pronto = a?.estado === "ok" && Number(a.amostra) >= AMOSTRA_MINIMA;
   return {
     status: pronto ? 200 : 202,
     cache: "no-store",
@@ -701,7 +813,10 @@ Deno.serve(async (req) => {
     } else if (req.method === "GET" && caminho === "/fila") saida = await filaEstado();
     else if (req.method === "POST" && caminho === "/fila") {
       const tamanho = Number(req.headers.get("content-length") ?? 0);
-      if (tamanho > 4096) saida = { status: 413, corpo: erroCorpo("corpo_grande", "O corpo só precisa do cp7.") };
+      // A permissão decide-se antes de ler o corpo: um 403 não precisa de
+      // ler nada.
+      if (!f.permite_enfileirar) saida = { status: 403, corpo: erroCorpo("fila_nao_permitida", "Esta chave não pode pôr códigos postais na fila.", true) };
+      else if (tamanho > 4096) saida = { status: 413, corpo: erroCorpo("corpo_grande", "O corpo só precisa do cp7.") };
       else {
         const corpo = await req.json().catch(() => ({})) as Registo;
         if (corpo?.cp7) parametros.cp7 = String(corpo.cp7).slice(0, 20);

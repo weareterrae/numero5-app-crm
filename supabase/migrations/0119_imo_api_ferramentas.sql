@@ -192,6 +192,11 @@ language sql stable security definer set search_path = public as $$
      where f.escalao = 1
        and b.tipo_imovel = '' and b.tipologia = ''
        and coalesce(b.eur_m2_mediano, b.eur_m2_medio) is not null
+       -- Uma linha de concelho DERIVADA pela Terrae (mediana das zonas
+       -- do PDF do SIR, extra.derivado) não é uma publicação da
+       -- IMOESTATÍSTICA e não pode sair com a atribuição dela. Fica de
+       -- fora: a zona aparece sem valores, que é a verdade.
+       and coalesce((b.extra ->> 'derivado')::boolean, false) = false
      order by b.geografia_id, b.periodo_fim desc nulls last, b.n_transacoes desc nulls last
   )
   select geo.id, geo.nivel, geo.nome, geo.concelho, geo.codigo_ine,
@@ -210,8 +215,14 @@ language sql stable security definer set search_path = public as $$
    order by geo.concelho, geo.nivel, geo.nome
 $$;
 
-revoke all on function imo_api_registar(uuid, text, text, jsonb, text, integer, integer) from public, anon;
-revoke all on function imo_api_zonas(text) from public, anon;
+-- TAMBÉM DE authenticated. No Supabase, uma função criada em public
+-- recebe EXECUTE para anon, authenticated e service_role pelos default
+-- privileges; revogar de public não retira a entrada explícita de
+-- authenticated (as 0081 e 0083 já o fazem assim). Sem isto, qualquer
+-- conta da app, incluindo clientes externos, chamava
+-- rest/v1/rpc/imo_api_zonas sem chave, sem limite e sem registo.
+revoke all on function imo_api_registar(uuid, text, text, jsonb, text, integer, integer) from public, anon, authenticated;
+revoke all on function imo_api_zonas(text) from public, anon, authenticated;
 grant execute on function imo_api_registar(uuid, text, text, jsonb, text, integer, integer) to service_role;
 grant execute on function imo_api_zonas(text) to service_role;
 

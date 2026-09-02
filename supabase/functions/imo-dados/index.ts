@@ -457,11 +457,17 @@ Deno.serve(async (req) => {
   // ter gráfico. O histórico acumula-se a cada importação.
   let historico: Array<{ periodo: string; eur_m2: number; amostra: number | null }> = [];
   if (b) {
+    // A LINHA ESCOLHIDA, não a geral. A RPC (0113) diz qual foi em
+    // tipo_benchmark e tipologia_benchmark; não devolve tipo_imovel nem
+    // tipologia. Lia-se esses, vinham undefined, e o histórico por baixo
+    // de um benchmark de T3 era sempre o da mistura de todas as
+    // tipologias: um salto no gráfico que era mudança de linha, não de
+    // mercado. Apanhado na revisão da imo-api a 2 de Setembro de 2026.
     const { data: serie } = await db.from("imo_benchmarks")
       .select("periodo, eur_m2_medio, eur_m2_mediano, n_transacoes, extra")
       .eq("geografia_id", b.geografia_id)
-      .eq("tipo_imovel", b.tipo_imovel ?? "")
-      .eq("tipologia", b.tipologia ?? "")
+      .eq("tipo_imovel", b.tipo_benchmark ?? "")
+      .eq("tipologia", b.tipologia_benchmark ?? "")
       .eq("fonte_id", b.fonte_id)
       .order("periodo", { ascending: true });
 

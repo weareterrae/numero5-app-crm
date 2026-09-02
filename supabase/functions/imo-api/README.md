@@ -100,16 +100,26 @@ transação. Uma série que muda de zona a meio mente sobre o mercado.
 - `sitio`: concelho, distrito, localidade, designação postal, `zona`
   (freguesia quando a sabemos), `ruas` (ficheiro aberto dos CTT).
 - `area_local`: `estado` `ok` com `raio_m` (meia-largura do quadrado),
-  `amostra`, `eur_m2`, `p25`, `p75`, `colhido_em`, `valida_ate`,
-  `escada`; ou `pendente` / `erro` / `sem_area` / `caducada` /
-  `nao_pedido`, com uma nota que diz o que fazer.
+  `amostra` (sempre 30 ou mais), `eur_m2`, `p25`, `p75`, `colhido_em`,
+  `valida_ate`, `escada` (contagens abaixo de 30 vêm a nulo); ou
+  `pendente` / `erro` / `esgotado` (3 tentativas) / `sem_area` /
+  `caducada` (90 dias) / `amostra_insuficiente` / `nao_pedido`, cada um
+  com uma nota que diz o que fazer e se volta à fila.
 - `mercado_zona`: o benchmark geral da zona do código postal.
 
 ### `GET /fila` e `POST /fila {"cp7":"2790-008"}`
 
 O estado da fila (contagem por estado, pendentes sem coordenadas, últimos
 colhidos) e, com permissão, pôr um código postal na fila. `202` quando
-fica pendente, `200` com a área se já existia.
+fica pendente, `200` com a área se já existia, `200` com `sem_area` ou
+`esgotado` quando é um resultado e não uma espera, `404 cp7_desconhecido`
+se não está no ficheiro dos CTT. Cada chave pode pôr 20 códigos postais
+novos por dia (`429 limite_fila_dia`): é a corrida diária que os paga.
+
+Em `/mercado` e `/zonas`, `derivado: true` marca um valor de concelho
+calculado pela Terrae a partir das zonas do SIR; cita-se como estimativa
+da Terrae, não como publicação da IMOESTATÍSTICA. Em `/zonas` essas
+linhas ficam de fora.
 
 ## Limites e registo
 
