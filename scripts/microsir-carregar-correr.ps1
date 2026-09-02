@@ -92,7 +92,7 @@ try {
 # pergunta a base de dados nos dias em que ninguem pediu avaliacoes.
 try {
   $f = CorrerNode "scripts\imo-cp-fila.mjs" "40"
-  $resumoFila = Resumir $f.Saida "com area:|com área:|Fila vazia|na fila|falhou|FALHOU|Falta" 2
+  $resumoFila = Resumir $f.Saida "com area:|com área:|coordenadas:|Fila vazia|na fila|falhou|FALHOU|Falta|sem fonte" 2
   if ($f.Codigo -eq 0) {
     Escrever "fila  $resumoFila"
   } else {

@@ -112,11 +112,12 @@ async function datasetDaUltimaVarredura() {
   );
 }
 
+async function main() {
 const registos = await obterRegistos();
 
 if (registos.length === 0) {
   console.error("Dataset vazio. Não carrego nada.");
-  process.exit(1);
+  process.exitCode = 1; return;
 }
 
 // O FORMATO tem de ser o de uma varredura: registos de zona, com `geo` e
@@ -130,7 +131,7 @@ if (comGeografia < registos.length * 0.9) {
     `Só ${comGeografia} de ${registos.length} registos têm geografia e bbox. ` +
     "Isto não é uma varredura da AML (parece uma fila de pontos) — não carrego.",
   );
-  process.exit(1);
+  process.exitCode = 1; return;
 }
 
 // Uma verificação antes de escrever: se a colheita vier maioritariamente
@@ -144,14 +145,14 @@ if (comValores < registos.length * 0.5) {
     `Só ${comValores} de ${registos.length} registos têm valores. ` +
     "Isto não parece uma colheita boa — não carrego. Veja a corrida no Apify.",
   );
-  process.exit(1);
+  process.exitCode = 1; return;
 }
 
 const { data, error } = await sb.rpc("imo_sir_micro_carregar", { p_payload: registos });
 
 if (error) {
   console.error("Falhou:", error.message);
-  process.exit(1);
+  process.exitCode = 1; return;
 }
 
 const r = Array.isArray(data) ? data[0] : data;
@@ -174,7 +175,10 @@ for (const a of r.avisos ?? []) console.log(`  aviso: ${a}`);
 // trabalho por rever.
 if (r.sem_geografia > 0) {
   console.error(`\n${r.sem_geografia} zonas não encontraram geografia e não entraram.`);
-  process.exit(2);
+  process.exitCode = 2; return;
 }
 
 console.log("\nCarregado.");
+}
+
+await main().catch((e) => { console.error(e?.message ?? String(e)); process.exitCode = 1; });
