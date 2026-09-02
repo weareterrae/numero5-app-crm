@@ -60,15 +60,7 @@ async function obterRegistos() {
   let datasetId = arg;
 
   if (!datasetId) {
-    // A última corrida BEM SUCEDIDA, não a última. Uma corrida falhada
-    // deixa um dataset meio cheio, e carregá-lo apagaria zonas boas com
-    // metade dos dados.
-    const { data } = await apify(`acts/${ACTOR}/runs/last?status=SUCCEEDED`);
-    if (!data?.defaultDatasetId) {
-      throw new Error("Não encontrei nenhuma corrida bem sucedida do Actor.");
-    }
-    datasetId = data.defaultDatasetId;
-    console.log(`Última corrida boa: ${data.id} (${data.finishedAt})`);
+    datasetId = await datasetDaUltimaVarredura();
   }
 
   const itens = await apify(`datasets/${datasetId}/items?format=json&clean=true`);
@@ -77,10 +69,67 @@ async function obterRegistos() {
   return itens;
 }
 
+/**
+ * A última VARREDURA bem sucedida — não a última corrida bem sucedida.
+ *
+ * O mesmo Actor corre em dois modos com dois formatos de saída: a
+ * varredura da AML (target aml*, um registo por zona, com `geo` e `bbox`)
+ * e a fila de códigos postais (target pontos, um registo por CP7, sem
+ * geografia). Este script só sabe carregar o primeiro.
+ *
+ * Durante nove dias foi buscar «a última corrida boa» e apanhou uma fila
+ * de três pontos que correu vinte minutos depois da varredura de 23-08.
+ * Os três registos tinham €/m², passavam a verificação de «metade com
+ * valores», e iam ao carregador como se fossem zonas — que os recusava.
+ * O registo diário dizia só «ERRO», e a fila, que corre a seguir no mesmo
+ * trabalho, ficou parada com ele.
+ *
+ * Por isso escolhe-se pelo INPUT da corrida, que é o único sítio onde o
+ * modo está escrito, e não pela ordem no tempo.
+ */
+async function datasetDaUltimaVarredura() {
+  const { data } = await apify(`acts/${ACTOR}/runs?status=SUCCEEDED&desc=true&limit=30`);
+  const corridas = data?.items ?? [];
+  if (!corridas.length) throw new Error("Não encontrei nenhuma corrida bem sucedida do Actor.");
+
+  for (const corrida of corridas) {
+    let input = null;
+    try {
+      input = await apify(`key-value-stores/${corrida.defaultKeyValueStoreId}/records/INPUT`);
+    } catch {
+      // Sem INPUT legível não se sabe o modo — salta-se, não se adivinha.
+      continue;
+    }
+    const alvo = String(input?.target ?? "aml");
+    if (alvo.startsWith("aml")) {
+      console.log(`Última varredura boa: ${corrida.id} (${corrida.finishedAt}) · target=${alvo}`);
+      return corrida.defaultDatasetId;
+    }
+  }
+  throw new Error(
+    `Nenhuma das últimas ${corridas.length} corridas bem sucedidas é uma varredura da AML (target aml*). ` +
+    "Só há corridas de pontos/zona única — não há nada para carregar.",
+  );
+}
+
 const registos = await obterRegistos();
 
 if (registos.length === 0) {
   console.error("Dataset vazio. Não carrego nada.");
+  process.exit(1);
+}
+
+// O FORMATO tem de ser o de uma varredura: registos de zona, com `geo` e
+// `bbox`. Um dataset da fila de pontos (registos por CP7, sem geografia)
+// também tem €/m² e passava a verificação de valores abaixo — foi assim
+// que o carregador andou nove dias a tentar carregar três códigos postais
+// como se fossem 142 zonas. Recusa-se aqui, com a razão escrita.
+const comGeografia = registos.filter((r) => r?.geo && r?.bbox).length;
+if (comGeografia < registos.length * 0.9) {
+  console.error(
+    `Só ${comGeografia} de ${registos.length} registos têm geografia e bbox. ` +
+    "Isto não é uma varredura da AML (parece uma fila de pontos) — não carrego.",
+  );
   process.exit(1);
 }
 
