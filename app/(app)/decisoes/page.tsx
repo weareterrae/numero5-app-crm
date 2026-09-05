@@ -46,8 +46,7 @@ export default async function DecisoesPage() {
   const nomeDe = (c: Decisao["clientes"]) =>
     (Array.isArray(c) ? c[0]?.nome_marca : c?.nome_marca) ?? "Cliente";
 
-  const hoje = new Date().toISOString().slice(0, 10);
-  const em30 = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
+  const { hoje, em30 } = limites();
   const aRever = todas.filter((d) => d.estado === "aberta" && d.data_revisao <= em30);
   const abertas = todas.filter((d) => d.estado === "aberta" && d.data_revisao > em30);
   const feitas = todas.filter((d) => d.estado !== "aberta");
@@ -107,6 +106,14 @@ export default async function DecisoesPage() {
       </section>
     </div>
   );
+}
+
+/** Datas de corte: hoje e daqui a 30 dias (fora do render, para a regra de pureza). */
+function limites() {
+  const agora = new Date();
+  const hoje = agora.toISOString().slice(0, 10);
+  const em30 = new Date(agora.getTime() + 30 * 864e5).toISOString().slice(0, 10);
+  return { hoje, em30 };
 }
 
 function Kpi({ valor, rotulo, destaque }: { valor: string; rotulo: string; destaque?: boolean }) {
