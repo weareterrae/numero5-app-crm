@@ -24,6 +24,7 @@ export const NAV: Entrada[] = [
     items: [
       { href: "/anuncios", label: "Anúncios" },
       { href: "/metricas", label: "Métricas" },
+      { href: "/decisoes", label: "Decisões" },
     ],
   },
   {
