@@ -37,10 +37,16 @@ function Escrever($texto) {
 # stdout dentro do cmd.exe, por isso nunca chega ao PowerShell como erro.
 function CorrerNode($script, $argumentos) {
   $ErrorActionPreference = "Continue"
+  # O PowerShell descodifica o que vem do cmd.exe com a sua propria pagina de
+  # codigos (850), e o node escreve UTF-8: «Ultima» ficava «├Ültima» no
+  # registo. Le-se como UTF-8 enquanto o node corre, e repoe-se no fim.
+  $codificacao = [Console]::OutputEncoding
   try {
+    [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
     $saida = & cmd.exe /c "node `"$script`" $argumentos 2>&1" | Out-String
     $codigo = $LASTEXITCODE
   } finally {
+    [Console]::OutputEncoding = $codificacao
     $ErrorActionPreference = "Stop"
   }
   return @{ Codigo = $codigo; Saida = $saida }
