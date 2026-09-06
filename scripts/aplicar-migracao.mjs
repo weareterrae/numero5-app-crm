@@ -46,21 +46,29 @@ async function consulta(query) {
   return corpo;
 }
 
-if (versao && !forcar) {
-  const ja = await consulta(`select version from schema_migrations where version = '${versao}'`);
-  if (Array.isArray(ja) && ja.length) {
-    console.error(`A versão ${versao} já consta em schema_migrations. Para aplicar na mesma: --forcar`);
-    process.exit(1);
+// Sem process.exit(): no Windows, sair à força logo a seguir a um fetch
+// rebenta com uma asserção do libuv (async.c). Define-se o código e
+// deixa-se o processo acabar sozinho.
+async function main() {
+  if (versao && !forcar) {
+    const ja = await consulta(`select version from schema_migrations where version = '${versao}'`);
+    if (Array.isArray(ja) && ja.length) {
+      console.error(`A versão ${versao} já consta em schema_migrations. Para aplicar na mesma: --forcar`);
+      process.exitCode = 1;
+      return;
+    }
+  }
+
+  console.log(`${basename(ficheiro)}: ${sql.length} bytes · a aplicar em ${REF}`);
+  const resultado = await consulta(sql);
+  console.log("resposta:", JSON.stringify(resultado).slice(0, 300));
+
+  if (versao) {
+    const agora = await consulta(`select version from schema_migrations where version = '${versao}'`);
+    console.log(Array.isArray(agora) && agora.length
+      ? `schema_migrations: ${versao} registada`
+      : `AVISO: ${versao} não ficou em schema_migrations (a migração termina com o insert?)`);
   }
 }
 
-console.log(`${basename(ficheiro)}: ${sql.length} bytes · a aplicar em ${REF}`);
-const resultado = await consulta(sql);
-console.log("resposta:", JSON.stringify(resultado).slice(0, 300));
-
-if (versao) {
-  const agora = await consulta(`select version from schema_migrations where version = '${versao}'`);
-  console.log(Array.isArray(agora) && agora.length
-    ? `schema_migrations: ${versao} registada`
-    : `AVISO: ${versao} não ficou em schema_migrations (a migração termina com o insert?)`);
-}
+await main().catch((e) => { console.error(e?.message ?? String(e)); process.exitCode = 1; });
