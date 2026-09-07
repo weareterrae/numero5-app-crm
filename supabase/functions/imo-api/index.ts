@@ -538,7 +538,7 @@ async function codigoPostal(cpBruto: unknown, f: Ferramenta): Promise<Saida> {
       ? (Number(a.amostra) >= AMOSTRA_MINIMA ? "caducada" : "amostra_insuficiente")
       : esgotado ? "esgotado" : a.estado;
     const notas: Record<string, string> = {
-      pendente: "Está na fila. A corrida diária do MicroSIR colhe-o com um único login; volta amanhã.",
+      pendente: "Está na fila. As corridas das 09:00 e das 21:00 colhem-no com um único login; pedidos de avaliações passam à frente do aquecimento.",
       erro: "Falhou numa corrida e volta à fila na próxima (até 3 tentativas).",
       esgotado: "Esgotou as 3 tentativas e não volta à fila sem intervenção. Usa o mercado da zona.",
       sem_area: "Nem a 2 km havia 30 transações. Usa o mercado da zona.",
@@ -631,7 +631,7 @@ async function filaEstado(): Promise<Saida> {
         pendentes_sem_coordenadas: semCoordenadas,
         ok_caducadas: caducadas,
         ultimos_colhidos: ultimos.data ?? [],
-        corrida: "diária, 09:00 Europe/Lisbon, até 40 códigos postais por corrida, um login no MicroSIR",
+        corrida: "09:00 e 21:00 Europe/Lisbon, até 60 códigos postais por corrida, avaliações antes do aquecimento, um login no MicroSIR",
       },
       licenca: { regras: REGRAS },
     },

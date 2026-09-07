@@ -69,7 +69,8 @@ async function main() {
 
   // Os que já estão na fila ou já têm área ficam de fora, mas contam para
   // o espaçamento: não vale a pena pedir um CP7 a 40 m de um já colhido.
-  const { data: jaTem } = await sb.from("imo_cp_areas").select("cp7, lat, lng").in("cp7", candidatos.map((c) => c.cp7));
+  const { data: jaTem, error: eJa } = await sb.from("imo_cp_areas").select("cp7, lat, lng").in("cp7", candidatos.map((c) => c.cp7));
+  if (eJa) { console.error(`não consegui ler os já existentes: ${eJa.message}`); process.exitCode = 1; return; }
   const existentes = new Set((jaTem ?? []).map((r) => r.cp7));
   const escolhidos = (jaTem ?? []).filter((r) => r.lat != null).map((r) => ({ lat: Number(r.lat), lng: Number(r.lng) }));
   const novos = [];

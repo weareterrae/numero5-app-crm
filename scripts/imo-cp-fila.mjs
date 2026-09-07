@@ -140,11 +140,11 @@ async function main() {
 
   if (!r.ok) {
     const txt = (await r.text()).slice(0, 300);
-    // Conta a tentativa mesmo quando falha: sem isso, um ponto que faz a
-    // corrida rebentar volta à fila para sempre e bloqueia os outros.
-    await sb.from("imo_cp_areas")
-      .update({ estado: "erro", tentativas: 1, ultimo_erro: `corrida HTTP ${r.status}` })
-      .in("cp7", fila.map((f) => f.cp7)).eq("estado", "pendente");
+    // Conta a tentativa a TODAS as linhas do lote (pendentes e já em erro),
+    // incrementando: sem isso, um ponto que faz a corrida rebentar volta à
+    // fila para sempre e bloqueia os outros (0126).
+    const { error: eF } = await sb.rpc("imo_cp_fila_falhou", { p_cp7s: fila.map((f) => f.cp7), p_erro: `corrida HTTP ${r.status}` });
+    if (eF) console.error(`  (não consegui contar a tentativa: ${eF.message})`);
     return falhar(`A corrida falhou: HTTP ${r.status} ${txt}`);
   }
 
@@ -159,10 +159,11 @@ async function main() {
   const g = Array.isArray(data) ? data[0] : data;
   console.log(`\ncom área: ${g.gravadas} · sem área: ${g.sem_area} · erros: ${g.erros}`);
 
+  const falhou = (i) => !Array.isArray(i.escada) || !i.escada.length || typeof i.escada[i.escada.length - 1]?.amostra !== "number";
   for (const i of itens) {
     const e = i.escolhido;
     console.log(
-      `  ${i.cp7}  ${e ? `${String(e.raio_m).padStart(4)} m · n=${String(e.amostra).padStart(4)} · ${Math.round(i.price_m2?.average ?? 0)} €/m²` : "sem área"}`,
+      `  ${i.cp7}  ${e ? `${String(e.raio_m).padStart(4)} m · n=${String(e.amostra).padStart(4)} · ${Math.round(i.price_m2?.average ?? 0)} €/m²` : (falhou(i) ? `FALHOU: ${(i.warnings ?? [])[0] ?? "sem degrau medido"}` : "sem área")}`,
     );
   }
 
