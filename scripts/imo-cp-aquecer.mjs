@@ -83,8 +83,10 @@ async function main() {
   console.log(`  já na fila ou com área: ${existentes.size} · a mais de ${espacamento} m de outro: ${novos.length} · máximo agora: ${maximo}`);
   if (soVer) return;
 
+  // origem 'aquecimento': a fila serve primeiro o que veio de avaliações
+  // reais (0125); isto vai atrás.
   const lote = novos.slice(0, maximo).map((c) => ({
-    cp7: c.cp7, lat: c.lat, lng: c.lng, coordenadas_em: new Date().toISOString(), estado: "pendente",
+    cp7: c.cp7, lat: c.lat, lng: c.lng, coordenadas_em: new Date().toISOString(), estado: "pendente", origem: "aquecimento",
   }));
   if (!lote.length) { console.log("Nada a enfileirar."); return; }
   for (let i = 0; i < lote.length; i += 500) {
