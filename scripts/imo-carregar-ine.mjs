@@ -91,7 +91,40 @@ async function main() {
         const kc = chave(conc);
         if (!porConcelho[kc]) continue;             // fora da AML
         geo = fregPorChave[`${kc}|${chave(x.geodsg)}`] ?? null;
-        if (!geo) { semGeo.add(`${conc} · ${x.geodsg}`); continue; }
+        if (!geo) {
+          // UNIÕES DE FREGUESIAS. O INE publica «União das freguesias de
+          // Queluz e Belas»; a nossa hierarquia (a do SIR) tem Queluz e
+          // Belas separadas. O valor da união é o melhor que o INE tem
+          // para cada parte: grava-se uma linha por parte, com a união em
+          // extra.uniao_ine para nunca passar por medição própria da
+          // freguesia. Sintra (3 uniões) e Seixal (1) a 7 Set 2026.
+          const partes = String(x.geodsg).replace(/^Uni[ãa]o das freguesias d[eao]s? /i, "").split(/,| e /).map(chave).filter(Boolean);
+          const achadas = [];
+          for (const parte of partes) {
+            let f = fregPorChave[`${kc}|${parte}`] ?? null;
+            if (!f) {
+              // «Aldeia de Paio Pires» vs «Paio Pires»: uma contém a outra.
+              const cands = Object.entries(fregPorChave).filter(([k]) => k.startsWith(`${kc}|`))
+                .map(([k, g]) => ({ k: k.split("|")[1], g }))
+                .filter(({ k }) => k.length >= 5 && parte.length >= 5 && (parte.includes(k) || k.includes(parte)));
+              if (cands.length === 1) f = cands[0].g;
+            }
+            if (f && !achadas.includes(f)) achadas.push(f);
+          }
+          if (!achadas.length) { semGeo.add(`${conc} · ${x.geodsg}`); continue; }
+          for (const f of achadas) {
+            linhas.push({
+              fonte_id: "ine", geografia_id: f.id, tipo_imovel: "", tipologia: "",
+              periodo: p.periodo, periodo_fim: p.fim,
+              eur_m2_mediano: val, n_transacoes: 33,
+              extra: { natureza: "transacao", area_base: "bruta privativa", n_minimo_publicacao: true,
+                       indicador: VARCD, categoria: "Total", trimestre_label: label,
+                       uniao_ine: x.geodsg, nota: "valor publicado pelo INE para a união de freguesias, aplicado a esta parte",
+                       atribuicao: "Instituto Nacional de Estatística" },
+            });
+          }
+          continue;
+        }
       } else continue;
       if (!geo) continue;
       linhas.push({

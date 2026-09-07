@@ -15,6 +15,15 @@
 import { useState } from "react";
 
 type Aviso = { campo: string; texto: string };
+type Candidata = {
+  id: string; avaliado_em: string; modo: string | null; cp7: string | null;
+  valor_base: number | null; valor_min: number | null; valor_max: number | null;
+  area: number | null; tipologia: string | null;
+};
+type Backtest = {
+  avaliacao_id: string; modo: string | null; avaliado_em: string; valor_base: number | null;
+  erro_percentual: number | null; dentro_intervalo: boolean | null; dias: number | null; erro: string | null;
+};
 type Previsao = {
   ok: boolean;
   gravado?: boolean;
@@ -23,9 +32,15 @@ type Previsao = {
   avisos?: Aviso[];
   erros?: Aviso[];
   duplicada?: boolean;
+  // As avaliações do site que esta venda confronta (fecho do ciclo do
+  // backtest): mostradas antes de gravar, e com o erro depois.
+  avaliacoes_candidatas?: Candidata[];
+  backtests?: Backtest[];
 };
 
 const eur = (n: number) => n.toLocaleString("pt-PT") + " €";
+const dataCurta = (iso: string) => new Date(iso).toLocaleDateString("pt-PT");
+const modoNome = (m: string | null) => (m === "rapido" ? "estimativa imediata" : m === "profundo" ? "relatório completo" : "avaliação");
 
 export function FormularioVenda() {
   const [dados, setDados] = useState<Record<string, string>>({
@@ -129,12 +144,34 @@ function Resultado({ r, ocupado, aoGravar, gravada }: {
   r: Previsao; ocupado: boolean; aoGravar: () => void; gravada: boolean;
 }) {
   if (gravada) {
+    const bts = r.backtests ?? [];
     return (
-      <div className="rounded-xl border-2 border-emerald-600 bg-emerald-50 p-5">
-        <p className="font-bold text-emerald-900">Venda registada.</p>
-        <p className="mt-1 text-sm text-emerald-800">
-          Entra já nas próximas avaliações desta zona{r.onde ? ` (${r.onde})` : ""}.
-        </p>
+      <div className="rounded-xl border-2 border-emerald-600 bg-emerald-50 p-5 space-y-3">
+        <div>
+          <p className="font-bold text-emerald-900">Venda registada.</p>
+          <p className="mt-1 text-sm text-emerald-800">
+            Entra já nas próximas avaliações desta zona{r.onde ? ` (${r.onde})` : ""}.
+          </p>
+        </div>
+        {bts.length > 0 && (
+          <div className="rounded-lg bg-white/70 p-3 text-sm text-emerald-900">
+            <p className="font-bold">
+              Fechou o ciclo de {bts.length} {bts.length === 1 ? "avaliação" : "avaliações"} do site:
+            </p>
+            <ul className="mt-1.5 space-y-1">
+              {bts.map((b) => (
+                <li key={b.avaliacao_id}>
+                  · {dataCurta(b.avaliado_em)}, {modoNome(b.modo)}
+                  {b.valor_base != null ? `: ${eur(b.valor_base)}` : ""}
+                  {b.erro ? ` (não registado: ${b.erro})`
+                    : b.erro_percentual != null
+                      ? `, erro ${b.erro_percentual > 0 ? "+" : ""}${b.erro_percentual.toLocaleString("pt-PT", { maximumFractionDigits: 1 })}%${b.dentro_intervalo ? ", dentro do intervalo" : ", fora do intervalo"}`
+                      : ""}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     );
   }
@@ -182,6 +219,26 @@ function Resultado({ r, ocupado, aoGravar, gravada }: {
         <ul className="space-y-1.5 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
           {(r.avisos ?? []).map((a, i) => <li key={i}>· {a.texto}</li>)}
         </ul>
+      )}
+
+      {(r.avaliacoes_candidatas ?? []).length > 0 && (
+        <div className="rounded-lg bg-sky-50 p-3 text-sm text-sky-900">
+          <p className="font-bold">
+            Ao gravar, esta venda confronta {r.avaliacoes_candidatas!.length === 1 ? "1 avaliação" : `${r.avaliacoes_candidatas!.length} avaliações`} do site com o preço real:
+          </p>
+          <ul className="mt-1.5 space-y-1">
+            {r.avaliacoes_candidatas!.map((c) => (
+              <li key={c.id}>
+                · {dataCurta(c.avaliado_em)}, {modoNome(c.modo)}{c.tipologia ? `, ${c.tipologia}` : ""}{c.area ? ` de ${c.area} m²` : ""}{c.cp7 ? ` (${c.cp7})` : ""}
+                {c.valor_base != null ? `: ${eur(c.valor_base)}` : ""}
+                {c.valor_min != null && c.valor_max != null ? ` [${eur(c.valor_min)} a ${eur(c.valor_max)}]` : ""}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1.5 text-xs text-sky-800">
+            Mesma zona, mesma tipologia, área com menos de 4% de diferença. Se alguma não for este imóvel, não graves e afina a zona ou a área.
+          </p>
+        </div>
       )}
 
       <button
