@@ -34,8 +34,8 @@ $accao = New-ScheduledTaskAction `
 # 09:00: a colheita do dia 3 comeca as 04:00 e demora 4 minutos. Cinco
 # horas de folga chegam para qualquer atraso do lado deles.
 $diario = New-ScheduledTaskTrigger -Daily -At "09:00"
-# 21:00: segunda corrida da fila dos codigos postais (ate 40 por corrida,
-# um login cada). Com duas corridas por dia a fila anda 80 por dia e um
+# 21:00: segunda corrida da fila dos codigos postais (ate 60 por corrida,
+# um login cada). Com duas corridas por dia a fila anda 120 por dia e um
 # codigo postal pedido de manha tem area a noite. Acrescentada a 7 de
 # Setembro de 2026 com o pre-aquecimento das freguesias mais pedidas.
 $noite = New-ScheduledTaskTrigger -Daily -At "21:00"

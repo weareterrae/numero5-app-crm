@@ -553,7 +553,7 @@ async function codigoPostal(cpBruto: unknown, f: Ferramenta): Promise<Saida> {
     areaLocal = {
       estado: "nao_pedido",
       nota: f.permite_enfileirar
-        ? "Ainda não foi pedido. POST /fila com {\"cp7\"} põe-no na fila; a corrida diária colhe-o."
+        ? "Ainda não foi pedido. POST /fila com {\"cp7\"} põe-no na fila; as corridas das 09:00 e das 21:00 colhem-no."
         : "Ainda não foi pedido. Uma avaliação no site, ou uma chave com permissão de fila, pede-o.",
     };
   }
@@ -668,7 +668,7 @@ async function enfileirar(corpo: Registo, f: Ferramenta): Promise<Saida> {
   }
 
   // Quantos códigos postais NOVOS esta chave já pôs na fila hoje. É a
-  // corrida diária que paga cada um (até 40 por dia para toda a casa), por
+  // corridas que pagam cada um (até 120 por dia para toda a casa), por
   // isso o tecto por chave é pequeno e não se confunde com o limite geral.
   const novo = !antes;
   if (novo) {
@@ -702,7 +702,7 @@ async function enfileirar(corpo: Registo, f: Ferramenta): Promise<Saida> {
         ...(pronto ? { raio_m: a!.raio_m, amostra: a!.amostra, eur_m2: num(a!.eur_m2_medio), colhido_em: a!.colhido_em, valida_ate: a!.valida_ate } : {}),
         nota: pronto
           ? "Já tinha área. GET /codigo-postal?cp7=… dá o resto."
-          : "Na fila. A corrida diária (09:00) colhe-o; GET /codigo-postal?cp7=… mostra quando estiver.",
+          : "Na fila. As corridas das 09:00 e das 21:00 colhem-no; GET /codigo-postal?cp7=… mostra quando estiver.",
       },
       licenca: await blocoLicenca([pronto ? "sir-micro" : null]),
     },
