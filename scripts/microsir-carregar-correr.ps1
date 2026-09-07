@@ -111,4 +111,26 @@ try {
   Escrever "fila ERRO  $($_.Exception.Message)"
 }
 
+# ---------------------------------------------------------------------
+# A LISTA DA COLHEITA MENSAL
+#
+# A colheita mensal deixou de varrer as 142 zonas da AML e passou a pedir
+# so as que a Terrae usa de facto (7 Set 2026). Esta lista sai dos dados,
+# nao de um ficheiro escrito a mao: uma avaliacao numa freguesia nova
+# poe-na na lista aqui, e no dia 3 do mes seguinte ela ja e colhida.
+#
+# Custa uma pergunta a base de dados. So escreve no agendamento quando a
+# lista muda de facto.
+try {
+  $z = CorrerNode "scripts\imo-zonas-mensais.mjs" ""
+  $resumoZonas = Resumir $z.Saida "zonas para a colheita|Agendamento actualizado|nao mudou|Lista vazia|falhou" 2
+  if ($z.Codigo -eq 0) {
+    Escrever "zonas  $resumoZonas"
+  } else {
+    Escrever "zonas AVISO (codigo $($z.Codigo))  $resumoZonas"
+  }
+} catch {
+  Escrever "zonas ERRO  $($_.Exception.Message)"
+}
+
 if ($falhou) { exit 1 }
