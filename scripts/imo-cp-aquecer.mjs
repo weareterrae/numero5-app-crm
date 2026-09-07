@@ -47,6 +47,25 @@ function distanciaM(a, b) {
 }
 
 async function main() {
+  // SUSPENSO A 7 DE SETEMBRO DE 2026.
+  //
+  // Nesse dia a Confidencial Imobiliário contactou a Terrae por causa de
+  // acessos à conta do MicroSIR, e o pré-aquecimento tinha acabado de
+  // fazer a colheita saltar de três a vinte e um códigos postais por dia
+  // para 120. O âmbito nunca saiu da AML, mas encher a fila enquanto a
+  // conversa está aberta é indefensável.
+  //
+  // A migração 0127 tirou o aquecimento da fila; isto impede que alguém
+  // volte a enchê-la sem saber porquê. Para retomar, depois de fechada a
+  // conversa: correr com --retomar e repor o default em imo_cp_fila.
+  if (!args.includes("--retomar") && !soVer) {
+    console.error("O pré-aquecimento está SUSPENSO desde 7 Set 2026 (conversa com a Confidencial Imobiliário).");
+    console.error("As avaliações reais continuam a ser servidas normalmente; só o pedido por antecipação está parado.");
+    console.error("Para ver o que aconteceria, sem enfileirar nada: --ver");
+    console.error("Para retomar mesmo, depois de fechada a conversa: --retomar (e repor o default em imo_cp_fila, migração 0127).");
+    process.exitCode = 1;
+    return;
+  }
   if (!nome) { console.error('Indica a zona. Ex: node scripts/imo-cp-aquecer.mjs "Carnaxide e Queijas" 300'); process.exitCode = 1; return; }
 
   // Os CP7 da zona, com coordenadas. A freguesia na tabela dos CTT é a do
