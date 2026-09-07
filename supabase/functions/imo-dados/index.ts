@@ -62,8 +62,8 @@ function ajusteTipologia(
   // tipologia — a proporção seria 1 e o «ajuste» seria decorativo.
   if (especifico.benchmark_id === geral.benchmark_id) return null;
 
-  const esp = num(especifico.eur_m2);
-  const ger = num(geral.eur_m2);
+  const esp = num(especifico.eur_m2) ?? 0;
+  const ger = num(geral.eur_m2) ?? 0;
   if (!(esp > 0) || !(ger > 0)) return null;
 
   const racio = esp / ger;
@@ -280,11 +280,22 @@ Deno.serve(async (req) => {
     if (!(a.valor_base > 0)) {
       return Response.json({ erro: "sem_valor" }, { status: 400, headers: cors(origem) });
     }
+    // A CHAVE PARA O BACKTEST (0124): código postal, event_id e modo. Sem
+    // eles, 0 das 30 primeiras avaliações se conseguia ligar a uma venda.
+    const cpDigitos = String(imovel.cp ?? imovel.codigo_postal ?? "").replace(/\D/g, "");
+    const cp7 = cpDigitos.length === 7 ? `${cpDigitos.slice(0, 4)}-${cpDigitos.slice(4)}` : null;
+    const modo = a.modo === "rapido" || a.modo === "profundo" ? a.modo : null;
     const { data: novo, error } = await db.from("imo_avaliacoes").insert({
       referencia: a.referencia ?? null,
       motor_versao: String(a.motor_versao ?? "desconhecida"),
       geografia_id: geoId,
       imovel: imovel,
+      cp7,
+      event_id: a.event_id ? String(a.event_id).slice(0, 80) : null,
+      modo,
+      // O cálculo inteiro do núcleo, para replay sem modelo. Só objectos;
+      // um corpo malformado não entra como texto.
+      calculo: a.calculo && typeof a.calculo === "object" ? a.calculo : null,
       amostra_id: a.amostra_id ?? null,
       benchmark_id: a.benchmark_id ?? null,
       benchmark_nivel: a.benchmark_nivel ?? null,
@@ -420,6 +431,73 @@ Deno.serve(async (req) => {
     });
     bGeral = Array.isArray(g) ? g[0] ?? null : null;
   }
+
+  // ---- A MESMA TIPOLOGIA AO NÍVEL DO CONCELHO (fase 1, 7 Set 2026) ----
+  //
+  // Em 35% das combinações freguesia × tipologia a linha da tipologia tem
+  // entre 8 e 199 transações. O site recusava-a (piso de 200) e caía no
+  // INE de 2025, quando a mesma freguesia tinha uma linha geral com
+  // milhares e o concelho tinha a tipologia com milhares. Devolvem-se os
+  // dois como alternativas declaradas: quem calcula escolhe, com a
+  // amostra à vista, em vez de saltar para uma fonte de há nove meses.
+  let bConcelho: Record<string, unknown> | null = null;
+  let bConcelhoGeral: Record<string, unknown> | null = null;
+  if (b && geoId && b.nivel !== "concelho" && (imovel.tipologia || imovel.tipo)) {
+    let idConcelho: string | null = null;
+    let cursor: string | null = geoId as string;
+    for (let i = 0; i < 4 && cursor; i++) {
+      const r = await db.from("imo_geografias").select("id, nivel, pai_id").eq("id", cursor).maybeSingle();
+      const g = r.data as { id: string; nivel: string; pai_id: string | null } | null;
+      if (!g) break;
+      if (g.nivel === "concelho") { idConcelho = g.id; break; }
+      cursor = g.pai_id;
+    }
+    if (idConcelho && idConcelho !== b.geografia_id) {
+      const [{ data: c }, { data: cg }] = await Promise.all([
+        db.rpc("imo_benchmark", { p_geografia: idConcelho, p_tipo: imovel.tipo ?? "", p_tipologia: imovel.tipologia ?? "" }),
+        db.rpc("imo_benchmark", { p_geografia: idConcelho, p_tipo: "", p_tipologia: "" }),
+      ]);
+      const cc = Array.isArray(c) ? c[0] ?? null : null;
+      // Só interessa se for de facto a tipologia (não a mistura do concelho).
+      if (cc && (cc.tipologia_benchmark || cc.tipo_benchmark)) bConcelho = cc;
+      // E a mistura do concelho, para a proporção tipologia/mistura poder
+      // ser calculada onde há amostra (pooled), e aplicada à freguesia.
+      bConcelhoGeral = Array.isArray(cg) ? cg[0] ?? null : null;
+    }
+  }
+
+  // Os sinais de qualidade que estão em `extra` e ninguém lia: cobertura
+  // da bbox (abaixo de ~0,35 o número diz mais dos vizinhos do que da
+  // zona; Costa da Caparica 0,14) e observações da colheita.
+  const idsExtra = [b?.benchmark_id, bGeral?.benchmark_id, bConcelho?.benchmark_id, bConcelhoGeral?.benchmark_id].filter(Boolean) as string[];
+  const extras: Record<string, Record<string, unknown>> = {};
+  if (idsExtra.length) {
+    const { data: ex } = await db.from("imo_benchmarks").select("id, extra").in("id", idsExtra);
+    for (const e of ex ?? []) extras[e.id as string] = (e.extra as Record<string, unknown>) ?? {};
+  }
+  const qualidadeDe = (x: Record<string, unknown> | null) => {
+    if (!x) return null;
+    const e = extras[x.benchmark_id as string] ?? {};
+    return {
+      cobertura_bbox: num(e.cobertura_bbox),
+      n_observacoes: (e.n_observacoes as number | undefined) ?? null,
+      colhido_em: (e.colhido_em as string | undefined) ?? null,
+      derivado: !!e.derivado,
+    };
+  };
+  // Forma compacta das alternativas: o que o motor precisa para escolher.
+  const alternativa = (x: Record<string, unknown> | null) =>
+    x
+      ? {
+        id: x.benchmark_id, fonte: x.fonte_id, nivel: x.nivel, zona: x.nome,
+        eur_m2: x.eur_m2, medida: x.medida, p25: x.p25, p75: x.p75, dispersao: x.dispersao,
+        n_transacoes: x.n_transacoes, periodo: x.periodo, natureza: x.natureza ?? null,
+        area_base: x.area_base ?? null, desconto: x.desconto ?? null,
+        eur_m2_novos: x.eur_m2_novos ?? null, eur_m2_usados: x.eur_m2_usados ?? null,
+        tipologia_benchmark: x.tipologia_benchmark ?? "", tipo_benchmark: x.tipo_benchmark ?? "",
+        qualidade: qualidadeDe(x),
+      }
+      : null;
 
   // Pode este benchmark aparecer no relatório do cliente, e com que
   // atribuição? A resposta vem da tabela de fontes, não de uma regra
@@ -569,10 +647,21 @@ Deno.serve(async (req) => {
         // veredicto confiante que ninguém tem como pôr em causa.
         tipologia_benchmark: b.tipologia_benchmark ?? null,
         tipo_benchmark: b.tipo_benchmark ?? null,
+        // Sinais de qualidade da colheita (fase 1): cobertura da bbox,
+        // observações, data, e se é uma linha derivada pela Terrae.
+        qualidade: qualidadeDe(b),
         publicavel: licenca.pode,
         atribuicao: licenca.atribuicao,
       }
       : null,
+    // AS ALTERNATIVAS (fase 1, 7 Set 2026). A linha geral da mesma zona e
+    // a mesma tipologia ao nível do concelho, para o motor decidir com a
+    // amostra à vista em vez de recusar e cair no INE. Mesma fonte e
+    // período que o benchmark quando existem; o motor confirma antes de
+    // fazer proporções entre eles.
+    benchmark_geral: bGeral && bGeral.benchmark_id !== b?.benchmark_id ? alternativa(bGeral) : null,
+    benchmark_concelho: alternativa(bConcelho),
+    benchmark_concelho_geral: bConcelhoGeral && bConcelhoGeral.benchmark_id !== bConcelho?.benchmark_id ? alternativa(bConcelhoGeral) : null,
     // A área de mercado à volta DESTA casa, quando já foi colhida.
     //
     // Vai à parte do benchmark de propósito: são coisas diferentes e quem
@@ -596,6 +685,12 @@ Deno.serve(async (req) => {
         escada: areaCp.r_escada,
         natureza: "transacao",
         area_base: "bruta privativa",
+        // DE ONDE VEIO (0124): 'proprio' = deste código postal; 'vizinho' =
+        // de um CP7 já colhido a menos de 150 m, com a distância. Quem lê
+        // tem de saber que a área não é a do próprio código postal.
+        origem: (areaCp.r_origem as string | undefined) ?? "proprio",
+        cp7_origem: (areaCp.r_cp7_origem as string | undefined) ?? areaCp.r_cp7,
+        distancia_m: (areaCp.r_distancia_m as number | undefined) ?? 0,
         publicavel: licenca.pode,
         atribuicao: licenca.atribuicao,
         // ---- AJUSTE DE TIPOLOGIA ------------------------------------
@@ -615,7 +710,7 @@ Deno.serve(async (req) => {
         // a proporção é entre dois sítios diferentes e não quer dizer
         // nada.
         ...(() => {
-          const local = num(areaCp!.r_eur_m2_medio);
+          const local = num(areaCp!.r_eur_m2_medio) ?? 0;
           const aj = ajusteTipologia(b, bGeral, local);
           return { ...(aj ?? {}), ...comparavel(b, bGeral, local, aj) };
         })(),

@@ -34,6 +34,11 @@ $accao = New-ScheduledTaskAction `
 # 09:00: a colheita do dia 3 comeca as 04:00 e demora 4 minutos. Cinco
 # horas de folga chegam para qualquer atraso do lado deles.
 $diario = New-ScheduledTaskTrigger -Daily -At "09:00"
+# 21:00: segunda corrida da fila dos codigos postais (ate 40 por corrida,
+# um login cada). Com duas corridas por dia a fila anda 80 por dia e um
+# codigo postal pedido de manha tem area a noite. Acrescentada a 7 de
+# Setembro de 2026 com o pre-aquecimento das freguesias mais pedidas.
+$noite = New-ScheduledTaskTrigger -Daily -At "21:00"
 $aoEntrar = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
 
 $opcoes = New-ScheduledTaskSettingsSet `
@@ -43,11 +48,11 @@ $opcoes = New-ScheduledTaskSettingsSet `
   -MultipleInstances IgnoreNew
 
 Register-ScheduledTask -TaskName $NOME -Force `
-  -Action $accao -Trigger $diario, $aoEntrar -Settings $opcoes `
+  -Action $accao -Trigger $diario, $noite, $aoEntrar -Settings $opcoes `
   -Description "Traz a ultima colheita boa do Actor microsir para imo_benchmarks. Ver scripts/imo-carregar-microsir.mjs" | Out-Null
 
 Write-Host "Tarefa registada: $NOME"
-Write-Host "  diariamente as 09:00, e ao iniciar sessao"
+Write-Host "  diariamente as 09:00 e as 21:00, e ao iniciar sessao"
 Write-Host "  colheita no Apify: dia 3 de cada mes as 04:00"
 Write-Host "  registo em: scripts\_registo-microsir.txt"
 Write-Host ""

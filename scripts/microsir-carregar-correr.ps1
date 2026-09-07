@@ -94,10 +94,13 @@ try {
 # independentes, e a avaliacao seguinte precisa da area fina quer a
 # varredura mensal tenha entrado quer nao.
 #
+# 60 por corrida e o teto do Actor (cortesia: cada ponto sao ate 6 pedidos).
+# Duas corridas por dia dao 120, o suficiente para o pre-aquecimento das
+# freguesias mais pedidas andar (scriptsimo-cp-aquecer.mjs).
 # O script nao corre nada se a fila estiver vazia, por isso isto custa uma
 # pergunta a base de dados nos dias em que ninguem pediu avaliacoes.
 try {
-  $f = CorrerNode "scripts\imo-cp-fila.mjs" "40"
+  $f = CorrerNode "scripts\imo-cp-fila.mjs" "60"
   $resumoFila = Resumir $f.Saida "com area:|com área:|coordenadas:|Fila vazia|na fila|falhou|FALHOU|Falta|sem fonte" 2
   if ($f.Codigo -eq 0) {
     Escrever "fila  $resumoFila"
