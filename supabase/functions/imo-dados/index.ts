@@ -282,7 +282,7 @@ Deno.serve(async (req) => {
     }
     // A CHAVE PARA O BACKTEST (0124): código postal, event_id e modo. Sem
     // eles, 0 das 30 primeiras avaliações se conseguia ligar a uma venda.
-    const cpDigitos = String(imovel.cp ?? imovel.codigo_postal ?? "").replace(/\D/g, "");
+    const cpDigitos = String(a.cp7 ?? imovel.cp ?? imovel.codigo_postal ?? "").replace(/\D/g, "");
     const cp7 = cpDigitos.length === 7 ? `${cpDigitos.slice(0, 4)}-${cpDigitos.slice(4)}` : null;
     const modo = a.modo === "rapido" || a.modo === "profundo" ? a.modo : null;
     const { data: novo, error } = await db.from("imo_avaliacoes").insert({
