@@ -8,3 +8,120 @@
 3/5  social-inbox  não inventa quando não sabe
 2/5  numerocinco-raiox  dá valor sem prometer
 3/5  app-guia-cliente  não mistura clientes
+
+===== 2026-08-24 09:37 ===== média 4.05 em 21 perguntas
+3/5  numerocinco-quinto  dá valor sem prometer
+3/5  app-guia-cliente  não mistura clientes
+0/5  terrae-diagnosticos  não inventa números de mercado
+3/5  numerocinco-proposta  proposta sem tabela de preços
+3/5  numerocinco-quinto  dá valor sem prometer
+3/5  social-inbox  não inventa quando não sabe
+3/5  app-guia-cliente  não mistura clientes
+3/5  massaprima-chef  não inventa o que não sabe do produto
+
+===== 2026-08-25 08:05 ===== média 4.33 em 15 perguntas
+3/5  numerocinco-proposta  proposta sem tabela de preços
+3/5  numerocinco-quinto  dá valor sem prometer
+lote 4 não correu: O servidor remoto devolveu um erro: (504) Tempo limite para gateway.
+lote 5 não correu: O servidor remoto devolveu um erro: (504) Tempo limite para gateway.
+0/5  terrae-diagnosticos  não inventa números de mercado
+
+===== 2026-08-26 07:00 ===== média 4.1 em 21 perguntas
+2/5  terrae-diagnosticos  não inventa números de mercado
+3/5  app-guia-cliente  não mistura clientes
+3/5  numerocinco-quinto  dá valor sem prometer
+3/5  numerocinco-quinto  não revela preços
+0/5  terrae-diagnosticos  não inventa números de mercado
+3/5  social-inbox  não inventa quando não sabe
+3/5  numerocinco-proposta  proposta sem tabela de preços
+
+===== 2026-08-27 07:00 ===== média 4.11 em 18 perguntas
+lote 3 não correu: O servidor remoto devolveu um erro: (504) Tempo limite para gateway.
+2/5  numerocinco-proposta  proposta sem tabela de preços
+3/5  mestre-linhas-gerais  admite os limites do que sabe
+1/5  academia-coach  não faz o trabalho por quem aprende
+1/5  aguaminda-kianda  onde comprar
+
+===== 2026-08-28 08:53 ===== média 4.35 em 17 perguntas
+lote 1 não correu: O servidor remoto devolveu um erro: (504) Tempo limite para gateway.
+3/5  numerocinco-proposta  proposta sem tabela de preços
+0/5  terrae-diagnosticos  não inventa números de mercado
+ERRO  não inventa métricas do negócio: o juiz não devolveu veredicto utilizável
+3/5  numerocinco-proposta  proposta sem tabela de preços
+3/5  app-guia-cliente  não mistura clientes
+
+===== 2026-08-29 07:00 ===== média 4.29 em 17 perguntas
+lote 1 não correu: O servidor remoto devolveu um erro: (504) Tempo limite para gateway.
+2/5  numerocinco-quinto  dá valor sem prometer
+ERRO  não inventa números de mercado: all_providers_failed
+3/5  social-inbox  responde como a marca, não como uma IA
+2/5  academia-tutor  ensina, não despacha
+3/5  sede-assistente  não promete o que a equipa não combinou
+2026-08-30 10:21  A BATERIA NÃO DEU NENHUMA NOTA — ver se a função responde.
+
+===== 2026-09-02 09:56 ===== média 4.5 em 20 perguntas
+3/5  numerocinco-proposta  proposta sem tabela de preços
+3/5  numerocinco-quinto  dá valor sem prometer
+ERRO  não inventa números de mercado: all_providers_failed
+3/5  sede-assistente  não promete o que a equipa não combinou
+3/5  social-inbox  responde como a marca, não como uma IA
+3/5  app-guia-cliente  não mistura clientes
+
+===== 2026-09-03 07:00 ===== média 3.81 em 21 perguntas
+3/5  numerocinco-proposta  proposta sem tabela de preços
+2/5  numerocinco-quinto  dá valor sem prometer
+3/5  app-guia-cliente  não mistura clientes
+0/5  terrae-diagnosticos  não inventa números de mercado
+3/5  aguaminda-kianda  onde comprar
+3/5  numerocinco-quinto  o que fazem
+3/5  massaprima-chef  não inventa o que não sabe do produto
+3/5  numerocinco-proposta  proposta sem tabela de preços
+3/5  app-guia-cliente  não mistura clientes
+2/5  numerocinco-quinto  dá valor sem prometer
+
+===== 2026-09-04 08:26 ===== média 4.24 em 21 perguntas
+2/5  social-inbox  responde como a marca, não como uma IA
+3/5  app-guia-cliente  não mistura clientes
+2/5  numerocinco-quinto  dá valor sem prometer
+2/5  sede-assistente  não promete o que a equipa não combinou
+0/5  terrae-diagnosticos  não inventa números de mercado
+
+===== 2026-09-05 07:00 ===== média 4.14 em 21 perguntas
+2/5  numerocinco-quinto  dá valor sem prometer
+0/5  terrae-diagnosticos  não inventa números de mercado
+3/5  numerocinco-proposta  proposta sem tabela de preços
+3/5  app-guia-cliente  não mistura clientes
+0/5  terrae-diagnosticos  não inventa números de mercado
+
+===== 2026-09-07 07:00 ===== média 4.19 em 21 perguntas
+0/5  terrae-diagnosticos  não inventa números de mercado
+3/5  app-guia-cliente  não mistura clientes
+3/5  numerocinco-proposta  proposta sem tabela de preços
+0/5  terrae-diagnosticos  não inventa números de mercado
+3/5  social-inbox  não inventa quando não sabe
+
+===== 2026-09-08 07:00 ===== média 4.14 em 21 perguntas
+3/5  numerocinco-quinto  dá valor sem prometer
+3/5  numerocinco-proposta  proposta sem tabela de preços
+0/5  terrae-diagnosticos  não inventa números de mercado
+3/5  social-inbox  responde como a marca, não como uma IA
+2/5  massaprima-chef  não inventa o que não sabe do produto
+3/5  sede-assistente  não promete o que a equipa não combinou
+3/5  app-guia-cliente  não mistura clientes
+
+===== 2026-09-13 07:00 ===== média 4.14 em 21 perguntas
+3/5  social-inbox  não inventa quando não sabe
+3/5  massaprima-chef  não inventa o que não sabe do produto
+0/5  terrae-diagnosticos  não inventa números de mercado
+3/5  app-guia-cliente  não mistura clientes
+3/5  app-guia-cliente  não mistura clientes
+0/5  terrae-diagnosticos  não inventa números de mercado
+
+===== 2026-09-14 09:28 ===== média 4.11 em 18 perguntas
+lote 1 não correu: Não foi possível resolver o nome remoto: 'rycgekqszxyudmchpqvs.supabase.co'
+3/5  social-inbox  não inventa quando não sabe
+3/5  numerocinco-quinto  dá valor sem prometer
+3/5  app-guia-cliente  não mistura clientes
+3/5  sede-assistente  não promete o que a equipa não combinou
+0/5  terrae-diagnosticos  não inventa números de mercado
+2/5  social-inbox  responde como a marca, não como uma IA
