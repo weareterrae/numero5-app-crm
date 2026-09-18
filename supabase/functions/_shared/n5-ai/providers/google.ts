@@ -8,9 +8,24 @@
 // =====================================================================
 
 import type {
-  AIProvider, GenerateOptions, ProviderResult, StreamChunk, TokenUsage,
+  AIProvider, GenerateOptions, ProviderResult, StreamChunk, TokenUsage, N5ContentPart,
 } from "../types.ts";
 import { classifyStatus, withTimeout } from "./shared.ts";
+
+/**
+ * Texto simples vira uma `part` de texto; com imagem, a Gemini quer
+ * `inlineData` com o base64 SEM o prefixo "data:mime;base64," — só os
+ * bytes — e o mimeType à parte.
+ */
+function partsGoogle(content: string | N5ContentPart[]): Array<Record<string, unknown>> {
+  if (typeof content === "string") return [{ text: content }];
+  return content.map((p) => {
+    if (p.type === "text") return { text: p.text };
+    const m = /^data:([^;]+);base64,(.+)$/i.exec(p.data_url);
+    if (!m) throw new Error("data_url de imagem inválido");
+    return { inlineData: { mimeType: m[1], data: m[2] } };
+  });
+}
 
 export class GoogleProvider implements AIProvider {
   constructor(
@@ -70,7 +85,7 @@ export class GoogleProvider implements AIProvider {
       contents: opts.messages.map((m) => ({
         // A Gemini não tem role 'system' nos contents; vai em system_instruction.
         role: m.role === "assistant" ? "model" : "user",
-        parts: [{ text: m.content }],
+        parts: partsGoogle(m.content),
       })),
       generationConfig,
     };

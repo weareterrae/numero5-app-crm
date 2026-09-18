@@ -7,11 +7,22 @@
 // =====================================================================
 
 import type {
-  AIProvider, GenerateOptions, ProviderResult, StreamChunk, TokenUsage,
+  AIProvider, GenerateOptions, ProviderResult, StreamChunk, TokenUsage, N5ContentPart,
 } from "../types.ts";
 import { classifyStatus, withTimeout } from "./shared.ts";
 
 const API_VERSION = "2023-06-01";
+
+/** Texto simples fica como string; com imagem vira o array de blocos da Anthropic. */
+function conteudoAnthropic(content: string | N5ContentPart[]): unknown {
+  if (typeof content === "string") return content;
+  return content.map((p) => {
+    if (p.type === "text") return { type: "text", text: p.text };
+    const m = /^data:([^;]+);base64,(.+)$/i.exec(p.data_url);
+    if (!m) throw new Error("data_url de imagem inválido");
+    return { type: "image", source: { type: "base64", media_type: m[1], data: m[2] } };
+  });
+}
 
 export class AnthropicProvider implements AIProvider {
   constructor(
@@ -35,7 +46,7 @@ export class AnthropicProvider implements AIProvider {
       ...(opts.system ? { system: opts.system } : {}),
       messages: opts.messages
         .filter((m) => m.role !== "system")
-        .map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content })),
+        .map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: conteudoAnthropic(m.content) })),
       max_tokens: opts.maxOutputTokens ?? 1024,
       temperature: opts.temperature ?? 0.7,
       stream,
