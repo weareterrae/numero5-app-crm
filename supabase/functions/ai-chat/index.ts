@@ -25,7 +25,14 @@ import type { ChatRequest } from "../_shared/n5-ai/types.ts";
 // Nota de custo: NÃO encarece nada. O site já pagava esses 18 mil tokens ao
 // Gemini em cada mensagem — pelo gateway paga o mesmo e ganha fallback entre
 // fornecedores. Quem baixa mesmo a conta é o prompt caching, a seguir.
-const MAX_BODY = 256 * 1024;
+//
+// 24 MB, a partir de 19/09/2026: imagens em base64 (a QB lê licenças e
+// contratos fotografados). Uma foto de telemóvel decente vai a 3-5 MB; em
+// base64 incha ~33%. Com o teto de MAX_IMAGENS_POR_PEDIDO (4, em
+// gateway.ts) cabem folgadas. JSON.parse de um corpo destes continua a ser
+// cópia de memória, não é isso que gasta os 2s de CPU — o que gasta é
+// chamar o fornecedor, e isso já tem o seu próprio timeout à parte.
+const MAX_BODY = 24 * 1024 * 1024;
 
 /**
  * Lê a claim `role` do JWT — sem verificar assinatura, de propósito.

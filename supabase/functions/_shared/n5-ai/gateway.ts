@@ -14,13 +14,27 @@
 // =====================================================================
 
 import type {
-  AssistantRow, ChatRequest, ModelRow, N5Message, RequestClass, StreamEvent, AttemptRecord,
-  TokenUsage,
+  AssistantRow, ChatRequest, ModelRow, N5Message, N5ContentPart, RequestClass, StreamEvent,
+  AttemptRecord, TokenUsage,
 } from "./types.ts";
 import { Registry, originAllowed, type DbClient } from "./registry.ts";
 import { Router, ROUTING_VERSION } from "./router.ts";
 import { Budgets, PostgresRateLimiter, hashIp, type RateRule } from "./budgets.ts";
 import { estimateCost } from "./providers/shared.ts";
+
+/** Só o texto de uma mensagem — para contar caracteres, classificar, etc. */
+function textoDe(content: string | N5ContentPart[]): string {
+  if (typeof content === "string") return content;
+  return content.filter((p): p is { type: "text"; text: string } => p.type === "text").map((p) => p.text).join("\n");
+}
+
+/** Traz alguma imagem? Decide se este pedido precisa de um modelo com visão. */
+function temImagem(content: string | N5ContentPart[]): boolean {
+  return Array.isArray(content) && content.some((p) => p.type === "image");
+}
+
+/** No máximo isto de imagens por pedido — cada uma custa tokens a sério nos três fornecedores. */
+const MAX_IMAGENS_POR_PEDIDO = 4;
 
 /** Timeout por tentativa. Curto de propósito: falhar depressa e passar
  *  ao modelo seguinte é melhor do que pendurar o visitante 50s — foi
@@ -262,6 +276,29 @@ export class Gateway {
       cadeia = comPesquisa.map((c) => ({ ...c, grounding: true }));
     }
 
+    // Imagens: só se o assistente estiver marcado para isso (permite_imagem)
+    // — mesmo padrão do JSON e do system dinâmico, quem controla o custo é o
+    // registo, não o chamador. E a cadeia encolhe aos modelos com visão: a
+    // coluna supports_vision já existia em ai_models mas nunca tinha sido
+    // ligada a nada (achado a 19/09/2026, ao ligar a QB).
+    const pedidoTemImagem = req.messages.some((m) => temImagem(m.content));
+    if (pedidoTemImagem) {
+      if (!(assistant as any).permite_imagem) {
+        return this.erroSSE(requestId, "imagem_nao_permitida",
+          "Este assistente nao aceita imagens.");
+      }
+      const nImagens = req.messages.reduce((n, m) => n + (Array.isArray(m.content) ? m.content.filter((p) => p.type === "image").length : 0), 0);
+      if (nImagens > MAX_IMAGENS_POR_PEDIDO) {
+        return this.erroSSE(requestId, "demasiadas_imagens", `No máximo ${MAX_IMAGENS_POR_PEDIDO} imagens por pedido.`);
+      }
+      const comVisao = cadeia.filter((c) => (c.model as any).supports_vision);
+      if (comVisao.length === 0) {
+        this.incidenteAsync("MODEL_UNHEALTHY", "crit", "Pediu-se imagem e nenhum modelo da cadeia a suporta", assistant);
+        return this.erroSSE(requestId, "no_model", "Sem modelo com visão disponível.");
+      }
+      cadeia = comVisao;
+    }
+
     if (cadeia.length === 0) {
       this.incidenteAsync("MODEL_UNHEALTHY", "crit", "Sem modelos disponíveis para routing", assistant);
       return this.erroSSE(requestId, "no_model", "Sem modelo disponível.");
@@ -463,7 +500,9 @@ export class Gateway {
     const comPesquisa = a.cadeia.filter((c) => (c.model as any).supports_grounding);
     if (!comPesquisa.length) return null;
 
-    const pergunta = [...a.mensagens].reverse().find((m) => m.role === "user")?.content;
+    // Investigação/pesquisa é só texto — imagem + grounding não é um caso
+    // que exista hoje, e textoDe() torna isso seguro em vez de proibido.
+    const pergunta = textoDe([...a.mensagens].reverse().find((m) => m.role === "user")?.content ?? "");
     if (!pergunta) return null;
 
     // O system da investigação é deliberadamente CURTO e sem uma palavra
@@ -965,7 +1004,7 @@ export class Gateway {
   /** P0: classificação barata por heurística. Sem LLM a decidir. */
   private classify(req: ChatRequest): RequestClass {
     if (req.hint_class && req.hint_class !== "STATIC") return req.hint_class;
-    const ultima = [...req.messages].reverse().find((m) => m.role === "user")?.content ?? "";
+    const ultima = textoDe([...req.messages].reverse().find((m) => m.role === "user")?.content ?? "");
     const n = ultima.trim().length;
     if (n <= 30) return "SIMPLE";
     if (n > 600) return "COMPLEX";
@@ -975,11 +1014,16 @@ export class Gateway {
   /** Corta o histórico ao âmbito configurado do assistente. */
   private trim(msgs: N5Message[], a: AssistantRow): N5Message[] {
     return msgs
-      .filter((m) => m && typeof m.content === "string" && m.content.trim())
+      .filter((m) => m && (typeof m.content === "string" ? m.content.trim() : Array.isArray(m.content) && m.content.length > 0))
       .slice(-a.max_messages)
       .map((m) => ({
         role: m.role === "assistant" ? "assistant" : "user",
-        content: m.content.slice(0, a.max_chars_message),
+        // Corta só o TEXTO ao teto do assistente; as imagens passam inteiras
+        // (o teto delas é o número de imagens, ver MAX_IMAGENS_POR_PEDIDO, e
+        // o tamanho do corpo do pedido, ver MAX_BODY no wrapper do runtime).
+        content: typeof m.content === "string"
+          ? m.content.slice(0, a.max_chars_message)
+          : m.content.map((p) => p.type === "text" ? { ...p, text: p.text.slice(0, a.max_chars_message) } : p),
       }));
   }
 

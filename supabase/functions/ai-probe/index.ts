@@ -45,6 +45,21 @@ async function incidente(tipo: string, sev: string, modelo: any, titulo: string,
   });
 }
 
+/**
+ * Fecha os MODEL_UNHEALTHY e CIRCUIT_OPEN em aberto deste modelo quando a
+ * sonda volta a passar. Sem isto, uma falha PASSAGEIRA de rede (timeout,
+ * blip) fica aberta para sempre — ninguém a fecha à mão porque já nem é
+ * verdade — e o email de alerta (`ai-alertas`) reenvia-a a cada 30 min só
+ * porque a lista de "por resolver" nunca muda de tamanho. Medido a
+ * 26/08/2026: 73 MODEL_UNHEALTHY + 22 CIRCUIT_OPEN presos desde 22/08, e a
+ * sonda invocada à mão respondeu ok=true nos 8/8 modelos.
+ */
+async function resolverSeRecuperado(modelo: any) {
+  await db.from("ai_incidents")
+    .update({ resolvido: true, resolvido_em: new Date().toISOString() })
+    .in("tipo", ["MODEL_UNHEALTHY", "CIRCUIT_OPEN"]).eq("model_id", modelo.id).eq("resolvido", false);
+}
+
 Deno.serve(async () => {
   const t0 = Date.now();
   const { data: provs } = await db.from("ai_providers").select("*").eq("enabled", true);
@@ -62,6 +77,12 @@ Deno.serve(async () => {
       resultados.push({ modelo: m.provider_model_id, saltado: `sem ${p.api_key_env}` });
       continue;
     }
+
+    // Falha anterior consecutiva, ANTES de registar esta — decide se é ruído
+    // passageiro (uma probe isolada) ou já a segunda a fio (vale a pena avisar).
+    const { data: anterior } = await db.from("ai_probes").select("ok")
+      .eq("model_id", m.id).order("created_at", { ascending: false }).limit(1).maybeSingle();
+    const falhouAnterior = anterior?.ok === false;
 
     let ok = false, latencia = 0, status = 0;
     try {
@@ -98,14 +119,21 @@ Deno.serve(async () => {
     }
     await db.from("ai_models").update(patch).eq("id", m.id);
 
-    if (!ok) {
+    if (ok) await resolverSeRecuperado(m);
+
+    // Só duas falhas seguidas (≈15-30 min) abrem incidente — um blip isolado
+    // (timeout de rede, ruído do lado da Google/OpenAI) resolve-se sozinho na
+    // sonda seguinte e nunca chega a e-mail. 8 modelos a cada 15 min geram
+    // blips isolados com regularidade; o que interessa sinalizar é o que
+    // persiste.
+    if (!ok && falhouAnterior) {
       await incidente(
         "MODEL_UNHEALTHY", status === 404 ? "crit" : "warn", m,
         `Probe falhou: ${m.display_name}`,
         { status, provider: m.provider_id, modelo: m.provider_model_id },
       );
     }
-    resultados.push({ modelo: m.provider_model_id, ok, status, latencia });
+    resultados.push({ modelo: m.provider_model_id, ok, status, latencia, falhaIsolada: !ok && !falhouAnterior });
   }
 
   // higiene: janelas antigas não servem para nada

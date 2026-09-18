@@ -9,10 +9,26 @@
 // reescrever o produto.
 // =====================================================================
 
-/** Mensagem no formato canónico do N5. Os adaptadores traduzem daqui. */
+/**
+ * Uma imagem embutida em base64 (data URL completo: "data:image/png;base64,...").
+ * Sem PDF de propósito — cada fornecedor trata-o de forma diferente (alguns
+ * nem aceitam) e isto teria de virar decisão por fornecedor no meio do
+ * adaptador. Quem precisar de ler PDF continua a converter para imagem antes
+ * de chamar o gateway.
+ */
+export type N5ContentPart =
+  | { type: "text"; text: string }
+  | { type: "image"; data_url: string };
+
+/**
+ * Mensagem no formato canónico do N5. Os adaptadores traduzem daqui.
+ * `content` é string no caso comum (texto). Passa a array de partes só
+ * quando a mensagem traz imagem — e só é aceite se `permite_imagem` estiver
+ * ligado no assistente (ver gateway.ts).
+ */
 export type N5Message = {
   role: "user" | "assistant" | "system";
-  content: string;
+  content: string | N5ContentPart[];
 };
 
 /** Classes de pedido. O router escolhe o modelo a partir disto. */
@@ -141,6 +157,7 @@ export type ModelRow = {
   status: "ACTIVE" | "DEGRADED" | "DISABLED" | "DEPRECATED" | "RETIRED";
   enabled: boolean;
   supports_streaming: boolean;
+  supports_vision: boolean;
   context_window: number | null;
   input_cost: number | null;
   output_cost: number | null;
@@ -150,6 +167,15 @@ export type ModelRow = {
   circuit_state: "CLOSED" | "OPEN" | "HALF_OPEN";
   circuit_opened_at: string | null;
   circuit_cooldown_seconds: number;
+  /**
+   * Estas três faltavam aqui (pré-existente, achado a 19/09/2026 ao correr
+   * `deno test`) — existem na tabela `ai_models` e o `router.ts` já as usa,
+   * só que através de `model.x` sem tipo, o que só não rebentava porque
+   * ninguém tinha corrido o type-check deste módulo.
+   */
+  circuit_window_seconds: number;
+  circuit_min_samples: number;
+  circuit_error_threshold: number;
 };
 
 export type AssistantRow = {
@@ -167,6 +193,8 @@ export type AssistantRow = {
   max_chars_message: number;
   max_output_tokens: number;
   temperature: number;
+  /** Aceita imagens nas mensagens (ver N5ContentPart). Por omissão, não. */
+  permite_imagem?: boolean;
 };
 
 // ---------------------------------------------------------------------

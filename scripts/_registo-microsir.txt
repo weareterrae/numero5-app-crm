@@ -1,1 +1,86 @@
 ﻿2026-08-23 09:24:01  ok    Dataset lcMsaEfSJkpTOaHGB: 142 registos | gravadas:       733 | sem geografia:  0
+2026-08-24 09:37:17  ERRO  
+2026-08-25 09:00:03  ERRO  
+2026-08-26 09:00:03  ERRO  
+2026-08-26 23:27:10  ERRO  
+2026-08-27 09:00:04  ERRO  
+2026-08-27 22:34:47  ERRO  
+2026-08-28 09:00:03  ERRO  
+2026-08-29 09:00:04  ERRO  
+2026-08-30 10:21:30  ERRO  node:internal/modules/run_main:107
+2026-08-30 19:54:03  ERRO  
+2026-08-31 02:16:17  ERRO  
+2026-08-31 09:23:57  ERRO  
+2026-09-01 22:55:43  ERRO  
+2026-09-02 09:56:27  ERRO  
+2026-09-02 20:58:49  ok    Última varredura boa: N3gcoJgPncn4TVK8Z (2026-08-23T02:46:30.139Z) · target=aml | Dataset lcMsaEfSJkpTOaHGB: 142 registos | gravadas:       733 | sem geografia:  0
+2026-09-02 20:58:50  fila AVISO (codigo -1073740791)  Fila vazia. Não corro nada.
+2026-09-03 09:23:36  ok    ├Ültima varredura boa: VQ40HvLYcvy0l6bme (2026-09-03T03:12:48.644Z) ┬À target=aml | Dataset KQxp62D5N6jSuNnkB: 142 registos | gravadas:       728 | sem geografia:  0
+2026-09-03 09:23:37  fila  coordenadas: 0 de 1 preenchidas ┬À sem fonte: 2940-245 | Fila vazia. N├úo corro nada.
+2026-09-03 16:21:24  ok    ├Ültima varredura boa: VQ40HvLYcvy0l6bme (2026-09-03T03:12:48.644Z) ┬À target=aml | Dataset KQxp62D5N6jSuNnkB: 142 registos | gravadas:       728 | sem geografia:  0
+2026-09-03 16:22:38  fila  coordenadas: 1 de 2 preenchidas ┬À sem fonte: 2940-245 | 1 c├│digos postais na fila
+2026-09-04 09:00:07  ok    ├Ültima varredura boa: VQ40HvLYcvy0l6bme (2026-09-03T03:12:48.644Z) ┬À target=aml | Dataset KQxp62D5N6jSuNnkB: 142 registos | gravadas:       728 | sem geografia:  0
+2026-09-04 09:01:35  fila  coordenadas: 1 de 1 preenchidas | 1 c├│digos postais na fila
+2026-09-05 09:00:05  ok    ├Ültima varredura boa: VQ40HvLYcvy0l6bme (2026-09-03T03:12:48.644Z) ┬À target=aml | Dataset KQxp62D5N6jSuNnkB: 142 registos | gravadas:       728 | sem geografia:  0
+2026-09-05 09:01:20  fila  coordenadas: 3 de 3 preenchidas | 3 c├│digos postais na fila
+2026-09-06 10:58:39  ok    ├Ültima varredura boa: VQ40HvLYcvy0l6bme (2026-09-03T03:12:48.644Z) ┬À target=aml | Dataset KQxp62D5N6jSuNnkB: 142 registos | gravadas:       728 | sem geografia:  0
+2026-09-06 10:58:40  fila  Fila vazia. N├úo corro nada.
+2026-09-06 16:28:50  ok    ├Ültima varredura boa: VQ40HvLYcvy0l6bme (2026-09-03T03:12:48.644Z) ┬À target=aml | Dataset KQxp62D5N6jSuNnkB: 142 registos | gravadas:       728 | sem geografia:  0
+2026-09-06 16:28:55  fila  Fila vazia. N├úo corro nada.
+2026-09-07 00:14:32  ok    ├Ültima varredura boa: VQ40HvLYcvy0l6bme (2026-09-03T03:12:48.644Z) ┬À target=aml | Dataset KQxp62D5N6jSuNnkB: 142 registos | gravadas:       728 | sem geografia:  0
+2026-09-07 00:14:33  fila  Fila vazia. N├úo corro nada.
+2026-09-07 00:15:42  ok    Última varredura boa: VQ40HvLYcvy0l6bme (2026-09-03T03:12:48.644Z) · target=aml | Dataset KQxp62D5N6jSuNnkB: 142 registos | gravadas:       728 | sem geografia:  0
+2026-09-07 00:15:43  fila  Fila vazia. Não corro nada.
+2026-09-07 09:00:04  ok    Última varredura boa: VQ40HvLYcvy0l6bme (2026-09-03T03:12:48.644Z) · target=aml | Dataset KQxp62D5N6jSuNnkB: 142 registos | gravadas:       728 | sem geografia:  0
+2026-09-07 09:03:03  fila  60 códigos postais na fila
+2026-09-07 21:00:06  ok    Última varredura boa: VQ40HvLYcvy0l6bme (2026-09-03T03:12:48.644Z) · target=aml | Dataset KQxp62D5N6jSuNnkB: 142 registos | gravadas:       728 | sem geografia:  0
+2026-09-07 21:00:07  fila  Fila vazia. Não corro nada.
+2026-09-07 21:00:11  zonas  22 zonas para a colheita mensal:
+2026-09-08 09:00:07  ok    Última varredura boa: VQ40HvLYcvy0l6bme (2026-09-03T03:12:48.644Z) · target=aml | Dataset KQxp62D5N6jSuNnkB: 142 registos | gravadas:       728 | sem geografia:  0
+2026-09-08 09:00:08  fila  Fila vazia. Não corro nada.
+2026-09-08 09:00:11  zonas  22 zonas para a colheita mensal:
+2026-09-08 21:00:06  ok    Última varredura boa: VQ40HvLYcvy0l6bme (2026-09-03T03:12:48.644Z) · target=aml | Dataset KQxp62D5N6jSuNnkB: 142 registos | gravadas:       728 | sem geografia:  0
+2026-09-08 21:00:07  fila AVISO (codigo 1)  2 códigos postais na fila | A corrida falhou: HTTP 403 {
+2026-09-08 21:00:11  zonas  24 zonas para a colheita mensal: | Agendamento actualizado com 24 zonas.
+2026-09-09 10:00:05  ok    Última varredura boa: VQ40HvLYcvy0l6bme (2026-09-03T03:12:48.644Z) · target=aml | Dataset KQxp62D5N6jSuNnkB: 142 registos | gravadas:       728 | sem geografia:  0
+2026-09-09 10:00:07  fila AVISO (codigo 1)  coordenadas: 0 de 1 preenchidas · sem fonte: 1750-530 | 4 códigos postais na fila | A corrida falhou: HTTP 403 {
+2026-09-09 10:00:12  zonas  27 zonas para a colheita mensal: | Agendamento actualizado com 27 zonas.
+2026-09-09 21:00:07  ok    Última varredura boa: VQ40HvLYcvy0l6bme (2026-09-03T03:12:48.644Z) · target=aml | Dataset KQxp62D5N6jSuNnkB: 142 registos | gravadas:       728 | sem geografia:  0
+2026-09-09 21:00:09  fila AVISO (codigo 1)  coordenadas: 0 de 2 preenchidas · sem fonte: 1750-530, 2790-000 | 6 códigos postais na fila | A corrida falhou: HTTP 403 {
+2026-09-09 21:00:13  zonas  28 zonas para a colheita mensal: | Agendamento actualizado com 28 zonas.
+2026-09-10 21:00:08  ok    Última varredura boa: VQ40HvLYcvy0l6bme (2026-09-03T03:12:48.644Z) · target=aml | Dataset KQxp62D5N6jSuNnkB: 142 registos | gravadas:       728 | sem geografia:  0
+2026-09-10 21:00:32  fila AVISO (codigo 1)  coordenadas: 0 de 2 preenchidas · sem fonte: 2790-000, 1750-530 | 4 códigos postais na fila | A corrida falhou: HTTP 400 {
+2026-09-10 21:00:38  zonas  28 zonas para a colheita mensal:
+2026-09-11 09:01:08  ok    Última varredura boa: VQ40HvLYcvy0l6bme (2026-09-03T03:12:48.644Z) · target=aml | Dataset KQxp62D5N6jSuNnkB: 142 registos | gravadas:       728 | sem geografia:  0
+2026-09-11 09:01:42  fila AVISO (codigo 1)  coordenadas: 0 de 1 preenchidas · sem fonte: 2790-000 | 2 códigos postais na fila | A corrida falhou: HTTP 400 {
+2026-09-11 09:02:28  zonas  28 zonas para a colheita mensal:
+2026-09-11 21:00:06  ok    Última varredura boa: VQ40HvLYcvy0l6bme (2026-09-03T03:12:48.644Z) · target=aml | Dataset KQxp62D5N6jSuNnkB: 142 registos | gravadas:       728 | sem geografia:  0
+2026-09-11 21:00:07  fila  Fila vazia. Não corro nada.
+2026-09-11 21:00:12  zonas  28 zonas para a colheita mensal:
+2026-09-12 09:00:13  ok    Última varredura boa: VQ40HvLYcvy0l6bme (2026-09-03T03:12:48.644Z) · target=aml | Dataset KQxp62D5N6jSuNnkB: 142 registos | gravadas:       728 | sem geografia:  0
+2026-09-12 09:00:37  fila AVISO (codigo 1)  1 códigos postais na fila | A corrida falhou: HTTP 400 {
+2026-09-12 09:00:41  zonas  28 zonas para a colheita mensal:
+2026-09-12 18:16:14  ok    Última varredura boa: VQ40HvLYcvy0l6bme (2026-09-03T03:12:48.644Z) · target=aml | Dataset KQxp62D5N6jSuNnkB: 142 registos | gravadas:       728 | sem geografia:  0
+2026-09-12 18:16:42  fila AVISO (codigo 1)  1 códigos postais na fila | A corrida falhou: HTTP 400 {
+2026-09-12 18:17:26  zonas  28 zonas para a colheita mensal:
+2026-09-13 00:21:18  ok    Última varredura boa: VQ40HvLYcvy0l6bme (2026-09-03T03:12:48.644Z) · target=aml | Dataset KQxp62D5N6jSuNnkB: 142 registos | gravadas:       728 | sem geografia:  0
+2026-09-13 00:21:46  fila AVISO (codigo 1)  1 códigos postais na fila | A corrida falhou: HTTP 400 {
+2026-09-13 00:21:50  zonas  28 zonas para a colheita mensal:
+2026-09-13 09:00:05  ok    Última varredura boa: VQ40HvLYcvy0l6bme (2026-09-03T03:12:48.644Z) · target=aml | Dataset KQxp62D5N6jSuNnkB: 142 registos | gravadas:       728 | sem geografia:  0
+2026-09-13 09:00:06  fila  Fila vazia. Não corro nada.
+2026-09-13 09:00:11  zonas  28 zonas para a colheita mensal:
+2026-09-14 09:29:01  ok    Última varredura boa: VQ40HvLYcvy0l6bme (2026-09-03T03:12:48.644Z) · target=aml | Dataset KQxp62D5N6jSuNnkB: 142 registos | gravadas:       728 | sem geografia:  0
+2026-09-14 09:29:23  fila AVISO (codigo 1)  1 códigos postais na fila | A corrida falhou: HTTP 400 {
+2026-09-14 09:29:28  zonas  30 zonas para a colheita mensal: | Agendamento actualizado com 30 zonas.
+2026-09-14 21:00:06  ok    Última varredura boa: VQ40HvLYcvy0l6bme (2026-09-03T03:12:48.644Z) · target=aml | Dataset KQxp62D5N6jSuNnkB: 142 registos | gravadas:       728 | sem geografia:  0
+2026-09-14 21:00:46  fila AVISO (codigo 1)  1 códigos postais na fila | A corrida falhou: HTTP 400 {
+2026-09-14 21:00:50  zonas  30 zonas para a colheita mensal:
+2026-09-15 09:03:32  ERRO (codigo 1)  fetch failed
+2026-09-15 09:03:39  fila AVISO (codigo 1)  não consegui ler os pendentes sem coordenadas: TypeError: fetch failed
+2026-09-15 09:03:47  zonas AVISO (codigo 1)  TypeError: fetch failed
+2026-09-15 19:12:28  ok    Última varredura boa: VQ40HvLYcvy0l6bme (2026-09-03T03:12:48.644Z) · target=aml | Dataset KQxp62D5N6jSuNnkB: 142 registos | gravadas:       728 | sem geografia:  0
+2026-09-15 19:12:51  fila AVISO (codigo 1)  2 códigos postais na fila | A corrida falhou: HTTP 400 {
+2026-09-15 19:12:55  zonas  31 zonas para a colheita mensal: | Agendamento actualizado com 31 zonas.
+2026-09-15 21:00:08  ok    Última varredura boa: VQ40HvLYcvy0l6bme (2026-09-03T03:12:48.644Z) · target=aml | Dataset KQxp62D5N6jSuNnkB: 142 registos | gravadas:       728 | sem geografia:  0
+2026-09-15 21:00:43  fila AVISO (codigo 1)  1 códigos postais na fila | A corrida falhou: HTTP 400 {
+2026-09-15 21:00:48  zonas  31 zonas para a colheita mensal:

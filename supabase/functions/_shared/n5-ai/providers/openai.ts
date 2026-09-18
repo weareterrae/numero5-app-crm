@@ -15,9 +15,17 @@
 // =====================================================================
 
 import type {
-  AIProvider, GenerateOptions, ProviderResult, StreamChunk, TokenUsage,
+  AIProvider, GenerateOptions, ProviderResult, StreamChunk, TokenUsage, N5ContentPart,
 } from "../types.ts";
 import { classifyStatus, withTimeout } from "./shared.ts";
+
+/** Texto simples fica como string; com imagem vira o array multimodal da OpenAI. */
+function conteudoOpenAI(content: string | N5ContentPart[]): unknown {
+  if (typeof content === "string") return content;
+  return content.map((p) => p.type === "image"
+    ? { type: "image_url", image_url: { url: p.data_url } }
+    : { type: "text", text: p.text });
+}
 
 export class OpenAIProvider implements AIProvider {
   constructor(
@@ -36,7 +44,7 @@ export class OpenAIProvider implements AIProvider {
   private body(opts: GenerateOptions, stream: boolean) {
     const messages = [];
     if (opts.system) messages.push({ role: "system", content: opts.system });
-    for (const m of opts.messages) messages.push({ role: m.role, content: m.content });
+    for (const m of opts.messages) messages.push({ role: m.role, content: conteudoOpenAI(m.content) });
     const body: Record<string, unknown> = {
       model: opts.model,
       messages,
