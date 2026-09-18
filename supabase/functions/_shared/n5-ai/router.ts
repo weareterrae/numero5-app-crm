@@ -57,6 +57,20 @@ function healthRank(m: ModelRow): number {
   }
 }
 
+/** Um incidente por modelo por hora — não encher a tabela de ruído (mesma regra do ai-probe). */
+async function incidenteDedupe(
+  db: DbClient, tipo: string, sev: string, model: ModelRow, titulo: string, detalhe: unknown,
+): Promise<void> {
+  const desde = new Date(Date.now() - 3600_000).toISOString();
+  const { data: recente } = await db.from("ai_incidents").select("id")
+    .eq("tipo", tipo).eq("model_id", model.id).gte("created_at", desde).limit(1).maybeSingle();
+  if (recente) return;
+  await db.from("ai_incidents").insert({
+    tipo, severidade: sev, model_id: model.id, provider_id: model.provider_id,
+    titulo, detalhe,
+  });
+}
+
 export class Router {
   constructor(private readonly db: DbClient, private readonly registry: Registry) {}
 
@@ -204,15 +218,14 @@ export class Router {
             health_status: "UNHEALTHY",
             last_health_check: agora.toISOString(),
           }).eq("id", model.id);
-          await this.db.from("ai_incidents").insert({
-            tipo: "CIRCUIT_OPEN", severidade: "crit", model_id: model.id,
-            provider_id: model.provider_id,
-            titulo: `Disjuntor aberto: ${model.display_name}`,
-            detalhe: {
+          await incidenteDedupe(
+            this.db, "CIRCUIT_OPEN", "crit", model,
+            `Disjuntor aberto: ${model.display_name}`,
+            {
               taxa_erro: taxa, amostras: req, erros: err, ultimo_status: status,
               motivo: porRepeticao && !porTaxa ? "tres erros na janela" : "taxa de erro",
             },
-          });
+          );
         }
       }
     } catch {
