@@ -145,3 +145,48 @@ export function originAllowed(assistant: AssistantRow, origin: string | null, re
     return false;
   });
 }
+
+// =====================================================================
+// A chave dos assistentes de servidor (QB Digital OS, 21/09/2026)
+// ---------------------------------------------------------------------
+// A allowlist de origem acima protege os assistentes que um BROWSER
+// chama: um site alheio não consegue pôr o nosso domínio no cabeçalho
+// Origin. Um SERVIDOR consegue: o cabeçalho é só texto, e quem souber o
+// nome do assistente fala por ele. Os assistentes da QB são chamados do
+// servidor da QB, aceitam o system de quem chama, e até 21/09 não tinham
+// tecto de gasto: eram uma IA paga pelo Sandro à disposição de quem
+// adivinhasse «qb-joaquim».
+//
+// Um assistente com `chave_hash` só responde a quem trouxer a chave no
+// cabeçalho x-n5-chave. Guarda-se o SHA-256 da chave, nunca a chave: quem
+// ler a base não fica com ela. Sem `chave_hash`, nada muda, e é o caso de
+// todos os assistentes chamados por um browser, que não podem guardar
+// segredo nenhum.
+// =====================================================================
+
+/** SHA-256 em hexadecimal (64 caracteres). WebCrypto: corre em Deno e em Node. */
+export async function sha256Hex(texto: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(texto));
+  return Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Compara dois textos sem parar na primeira diferença. Um `===` sai mais cedo
+ * quanto mais cedo os textos divergem, e isso mede-se de fora: dá para
+ * adivinhar um segredo carácter a carácter pelo tempo de resposta.
+ */
+export function iguaisEmTempoConstante(a: string, b: string): boolean {
+  const x = new TextEncoder().encode(a);
+  const y = new TextEncoder().encode(b);
+  let dif = x.length ^ y.length;
+  const n = Math.max(x.length, y.length);
+  for (let i = 0; i < n; i++) dif |= (x[i] ?? 0) ^ (y[i] ?? 0);
+  return dif === 0;
+}
+
+/** A chave trazida bate com o resumo guardado? Chave vazia nunca bate. */
+export async function chaveConfere(chave: string | null | undefined, hashGuardado: string): Promise<boolean> {
+  const c = (chave ?? "").trim();
+  if (!c || !hashGuardado) return false;
+  return iguaisEmTempoConstante(await sha256Hex(c), hashGuardado.trim().toLowerCase());
+}

@@ -12,6 +12,7 @@
 
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { Gateway } from "../_shared/n5-ai/gateway.ts";
+import { iguaisEmTempoConstante } from "../_shared/n5-ai/registry.ts";
 import type { ChatRequest } from "../_shared/n5-ai/types.ts";
 
 // Teto do corpo. Começou em 64 KB e a Massa Prima bateu nele: o system dela
@@ -35,24 +36,22 @@ import type { ChatRequest } from "../_shared/n5-ai/types.ts";
 const MAX_BODY = 24 * 1024 * 1024;
 
 /**
- * Lê a claim `role` do JWT — sem verificar assinatura, de propósito.
+ * É a chave de serviço DESTE projecto? Comparação exacta, em tempo constante.
  *
- * Não é autenticação: quem chega aqui já passou pelo `verify_jwt` da própria
- * Edge Function, que valida a assinatura antes de o nosso código correr. Isto
- * só distingue QUEM é, entre pedidos já válidos.
+ * Até 21/09/2026 isto lia a claim `role` do JWT sem verificar a assinatura, e o
+ * comentário avisava que só era seguro com o `verify_jwt` da função ligado. Estava
+ * desligado (tem de estar: os sites chamam sem JWT nenhum), e portanto qualquer
+ * pessoa podia fabricar um token com role=service_role e atravessar a fatia de
+ * rollout de um assistente ainda a 0%.
  *
- * Hoje só serve o ensaio (atravessar a fatia de rollout). Qualquer poder que
- * venha a depender disto deve ser revisto à luz desta nota — se um dia esta
- * função for chamada num sítio sem verificação a montante, a leitura passa a
- * ser uma afirmação do chamador, não um facto.
+ * Os três sítios que usam o ensaio (scripts/ensaiar-terrae.mjs,
+ * scripts/ensaiar-avaliacao.mjs e a função ai-qualidade) mandam todos a
+ * SUPABASE_SERVICE_ROLE_KEY deste projecto, por isso continuam a passar.
  */
 function ehServiceRole(auth: string | null): boolean {
-  const t = (auth ?? "").replace(/^Bearer\s+/i, "").trim().split(".");
-  if (t.length !== 3) return false;
-  try {
-    const b = t[1].replace(/-/g, "+").replace(/_/g, "/");
-    return JSON.parse(atob(b + "=".repeat((4 - b.length % 4) % 4)))?.role === "service_role";
-  } catch { return false; }
+  const token = (auth ?? "").replace(/^Bearer\s+/i, "").trim();
+  const chave = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  return !!token && !!chave && iguaisEmTempoConstante(token, chave);
 }
 
 // O gateway fala com a BD como serviço: a autorização por tenant já foi
@@ -131,6 +130,7 @@ Deno.serve(async (req) => {
     referer: req.headers.get("referer"),
     ip: req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
     isServiceRole: ehServiceRole(req.headers.get("authorization")),
+    chave: req.headers.get("x-n5-chave"),
   });
 
   // Junta o CORS ao stream que o core produziu.

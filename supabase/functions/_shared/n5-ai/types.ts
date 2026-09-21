@@ -195,6 +195,12 @@ export type AssistantRow = {
   temperature: number;
   /** Aceita imagens nas mensagens (ver N5ContentPart). Por omissão, não. */
   permite_imagem?: boolean;
+  /**
+   * SHA-256 (hex) da chave que o chamador tem de trazer em x-n5-chave. Só para
+   * assistentes chamados de um SERVIDOR (ver chaveConfere em registry.ts).
+   * Vazio = sem chave, como sempre foi.
+   */
+  chave_hash?: string | null;
 };
 
 // ---------------------------------------------------------------------
@@ -297,6 +303,12 @@ export type AttemptRecord = {
   kind: string;
   latency_ms: number;
   error_code?: string;
+  /**
+   * O que o fornecedor disse, cortado a 200 caracteres. De 16 a 21/09/2026 a
+   * OpenAI respondeu 429 a tudo e o registo só tinha «429»: não se sabia se
+   * era falta de saldo, limite de velocidade ou outra coisa.
+   */
+  error_message?: string;
 };
 
 export type RequestLog = {

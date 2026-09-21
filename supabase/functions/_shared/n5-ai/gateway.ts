@@ -17,7 +17,7 @@ import type {
   AssistantRow, ChatRequest, ModelRow, N5Message, N5ContentPart, RequestClass, StreamEvent,
   AttemptRecord, TokenUsage,
 } from "./types.ts";
-import { Registry, originAllowed, type DbClient } from "./registry.ts";
+import { Registry, originAllowed, type DbClient, chaveConfere } from "./registry.ts";
 import { Router, ROUTING_VERSION } from "./router.ts";
 import { Budgets, PostgresRateLimiter, hashIp, type RateRule } from "./budgets.ts";
 import { estimateCost } from "./providers/shared.ts";
@@ -104,6 +104,11 @@ export type RequestContext = {
    * deve continuar a depender dela, e nunca de um cabeçalho declarado.
    */
   isServiceRole?: boolean;
+  /**
+   * O que veio no cabeçalho x-n5-chave. Só conta para os assistentes que têm
+   * `chave_hash` (ver chaveConfere em registry.ts); para os outros é ignorado.
+   */
+  chave?: string | null;
 };
 
 export class Gateway {
@@ -136,6 +141,21 @@ export class Gateway {
       return this.erroSSE(requestId, "registry_error", String(e));
     }
     if (!assistant) return this.erroSSE(requestId, "unknown_assistant", "Assistente não encontrado.");
+
+    // ---- 1b. chave (só nos assistentes chamados de um servidor, 21/09/2026)
+    // Um servidor escreve o Origin que quiser; a allowlist de origem não o
+    // trava. Quem tem `chave_hash` exige a chave; quem não tem fica igual.
+    const autenticado = !!assistant.chave_hash && await chaveConfere(ctx.chave, assistant.chave_hash);
+    if (assistant.chave_hash && !autenticado) {
+      this.logAsync({
+        request_id: requestId, trace_id: traceId, org_id: assistant.org_id,
+        assistant_id: assistant.id, status: "blocked", error_code: "chave_invalida",
+        requested_class: "STANDARD", routing_reason: "n/a", routing_version: ROUTING_VERSION,
+        fallback_used: false, attempt_chain: [], streamed: false,
+        gateway_ms: Date.now() - t0,
+      });
+      return this.erroSSE(requestId, "chave_invalida", "Chave em falta ou inválida.");
+    }
 
     // ---- 2. origem (allowlist do registo, nunca o que o browser diz ser)
     if (!originAllowed(assistant, ctx.origin, ctx.referer)) {
@@ -186,7 +206,10 @@ export class Gateway {
     const regras: RateRule[] = [
       { scope: "assistant", key: assistant.id, limit: 600, windowSeconds: 60 },
     ];
-    if (ctx.ip) {
+    // Com chave, o limite por IP sai: o pedido vem de um servidor, e todos os
+    // pedidos desse servidor partilham meia dúzia de IPs (a QB inteira, no
+    // Netlify). Os limites por assistente e por sessão continuam.
+    if (ctx.ip && !autenticado) {
       regras.unshift({ scope: "ip", key: await hashIp(ctx.ip, salt), limit: 20, windowSeconds: 60 });
     }
     if (req.session_id) {
@@ -868,6 +891,7 @@ export class Gateway {
               provider_id: model.provider_id, provider_model_id: model.provider_model_id,
               role, status: final.status, kind: final.kind,
               latency_ms: Date.now() - tTent, error_code: final.errorCode,
+              ...(!final.ok && final.errorMessage ? { error_message: final.errorMessage.slice(0, 200) } : {}),
             });
             self.deps.background(
               self.router.record(model, final.ok, final.status, Date.now() - tTent, ttft),
@@ -904,7 +928,7 @@ export class Gateway {
             tentativas.push({
               provider_id: model.provider_id, provider_model_id: model.provider_model_id,
               role, status: 0, kind: "transient", latency_ms: Date.now() - tTent,
-              error_code: "exception",
+              error_code: "exception", error_message: String(e).slice(0, 200),
             });
             self.deps.background(self.router.record(model, false, 0));
           }

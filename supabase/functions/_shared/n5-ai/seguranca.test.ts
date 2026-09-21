@@ -7,7 +7,7 @@
 // =====================================================================
 
 import { describe, it, expect } from "vitest";
-import { originAllowed } from "./registry.ts";
+import { originAllowed, chaveConfere, sha256Hex, iguaisEmTempoConstante } from "./registry.ts";
 import type { AssistantRow } from "./types.ts";
 
 function assistente(dominios: string[]): AssistantRow {
@@ -83,5 +83,49 @@ describe("originAllowed — allowlist de domínios", () => {
     expect(originAllowed(comCuringa, "https://abc-123.netlify.app", null)).toBe(true);
     // mas não um domínio que só imita
     expect(originAllowed(comCuringa, "https://netlify.app.intruso.com", null)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------
+// A chave dos assistentes chamados de um servidor (21/09/2026)
+// ---------------------------------------------------------------------
+describe("chaveConfere: assistentes com chave só respondem a quem a traz", () => {
+  it("a chave certa passa; a base só guarda o SHA-256 dela", async () => {
+    const hash = await sha256Hex("segredo-da-qb");
+    expect(hash).toHaveLength(64);
+    expect(await chaveConfere("segredo-da-qb", hash)).toBe(true);
+  });
+
+  it("a chave errada, vazia ou ausente não passa", async () => {
+    const hash = await sha256Hex("segredo-da-qb");
+    expect(await chaveConfere("segredo-da-qB", hash)).toBe(false);
+    expect(await chaveConfere("", hash)).toBe(false);
+    expect(await chaveConfere("   ", hash)).toBe(false);
+    expect(await chaveConfere(null, hash)).toBe(false);
+    expect(await chaveConfere(undefined, hash)).toBe(false);
+  });
+
+  it("trazer o próprio hash no lugar da chave não passa", async () => {
+    const hash = await sha256Hex("segredo-da-qb");
+    expect(await chaveConfere(hash, hash)).toBe(false);
+  });
+
+  it("tolera espaços à volta e maiúsculas no hash guardado", async () => {
+    const hash = await sha256Hex("segredo-da-qb");
+    expect(await chaveConfere("  segredo-da-qb  ", ` ${hash.toUpperCase()} `)).toBe(true);
+  });
+
+  it("sem hash guardado nunca passa (quem chama é que decide não exigir)", async () => {
+    expect(await chaveConfere("qualquer", "")).toBe(false);
+  });
+});
+
+describe("iguaisEmTempoConstante", () => {
+  it("compara pelo conteúdo, incluindo tamanhos diferentes", () => {
+    expect(iguaisEmTempoConstante("abc", "abc")).toBe(true);
+    expect(iguaisEmTempoConstante("abc", "abd")).toBe(false);
+    expect(iguaisEmTempoConstante("abc", "abcd")).toBe(false);
+    expect(iguaisEmTempoConstante("", "")).toBe(true);
+    expect(iguaisEmTempoConstante("é", "e")).toBe(false);
   });
 });
